@@ -50,6 +50,26 @@ test('有 synth 但永不 onend：估时兜底收束', async () => {
   assert.ok(dt >= 500 && dt < 2000, `耗时异常: ${dt}`);
 });
 
+test('有 synth 但永不 onstart（移动端哑火）：1.2s 看门狗取消放行，不堵队列（回归）', async () => {
+  const synth = { speak() {}, cancel() {} };
+  const s = new Speech(synth, t => ({ text: t }));
+  const t0 = Date.now();
+  await s.speak('Open the door!', { rate: 1 });   // 长句：旧实现要等满 5×380+400≈2.3s
+  const dt = Date.now() - t0;
+  assert.ok(dt >= 1000 && dt < 2200, `看门狗耗时异常: ${dt}`);
+});
+
+test('warmup：静音预热不抛错、有 synth 即触发 speak', async () => {
+  let spoke = 0;
+  const synth = { speak(u) { spoke++; if (u.onend) setTimeout(() => u.onend(), 10); } };
+  const s = new Speech(synth, t => ({ text: t, volume: 1 }));
+  s.warmup();
+  assert.equal(spoke, 1);
+  const s2 = new Speech(null, null);
+  s2.warmup();                                     // 无 synth：静默通过
+  assert.ok(true);
+});
+
 test('Sfx：假 AudioContext 上创建振荡器并排包络', () => {
   const made = [];
   const node = () => {

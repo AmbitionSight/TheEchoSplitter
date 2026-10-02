@@ -247,7 +247,7 @@ function start(content) {
   };
   scanVoices();
   if (speech.ready) speechSynthesis.addEventListener('voiceschanged', scanVoices);
-  addEventListener('pointerdown', () => sfx.ctx?.resume(), { once: true });
+  addEventListener('pointerdown', () => { sfx.ctx?.resume(); speech.warmup(); }, { once: true });
 
   let speechChain = Promise.resolve();
   function speak(text, who = 'uncle', slow = false) {

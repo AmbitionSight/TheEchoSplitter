@@ -160,7 +160,7 @@ function start(content) {
   const scan = () => { if (speech.ready) voices = pickVoices(speechSynthesis.getVoices()); };
   scan();
   if (speech.ready) speechSynthesis.addEventListener('voiceschanged', scan);
-  addEventListener('pointerdown', () => sfx.ctx?.resume(), { once: true });
+  addEventListener('pointerdown', () => { sfx.ctx?.resume(); speech.warmup(); }, { once: true });
 
   let chain = Promise.resolve();
   function speak(text, who = 'door', slow = false) {
