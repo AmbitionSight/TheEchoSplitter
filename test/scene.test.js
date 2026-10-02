@@ -55,3 +55,11 @@ test('磁吸：46px 内进入磁吸态并最终判定拾取', () => {
   for (let i = 0; i < 60 && !picked; i++) picked = magnetStep(s, player, 0.016);
   assert.ok(picked);
 });
+
+test('磁吸：大 dt（0.05）也不越过玩家导致永久振荡（回归）', () => {
+  const s = { ipa: 'l', x: 20, y: 0, vx: 0, vy: 0, state: 'idle', t: 0 };
+  const player = { x: 0, y: 0 };
+  let picked = false;
+  for (let i = 0; i < 60 && !picked; i++) picked = magnetStep(s, player, 0.05);
+  assert.ok(picked);
+});
