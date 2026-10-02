@@ -173,13 +173,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
 
   return {
     refresh,
-    show() { root.classList.remove('hidden'); document.getElementById('bag').classList.remove('hidden'); },
-    pulseBag(total) {
-      const bag = document.getElementById('bag');
-      document.getElementById('bag-count').textContent = String(total);
-      document.getElementById('bag-icon').innerHTML =
-        `<img src="${iconURL('gem')}" style="width:26px;height:26px" alt="">`;
-      bag.classList.remove('pulse'); void bag.offsetWidth; bag.classList.add('pulse');
-    }
+    show() { root.classList.remove('hidden'); },
+    pulseBag() { /* v2：右下计数袋已移除（物品栏自带堆叠计数） */ }
   };
 }
