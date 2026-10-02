@@ -10,7 +10,7 @@ export function createActors() {
   return {
     player: { x: 560, y: 600, facing: 1, walkT: 0, moving: false, hatOn: false },
     npc: { x: 400, y: 430, facing: 1, mouth: 0, gesture: 'idle', gestureT: 0, gestureDur: 0 },
-    cat: { x: 560, y: 560, earT: 0, meowT: 0 }
+    cat: { x: 505, y: 632, earT: 0, meowT: 0 }
   };
 }
 

@@ -9,12 +9,12 @@ export const LAYOUT = {
     { id: 'hatstand', x: 980, y: 520, r: 34 },
     { id: 'npc', x: 400, y: 430, r: 38 },
     { id: 'sprout', x: 330, y: 570, r: 28 },
-    { id: 'cat', x: 560, y: 560, r: 24 }
+    { id: 'cat', x: 505, y: 632, r: 24 }
   ],
   targets: {
     npc: { x: 400, y: 430, r: 60 }, well: { x: 210, y: 470, r: 56 },
     brazier: { x: 480, y: 480, r: 52 }, sprout: { x: 330, y: 570, r: 46 },
-    cat: { x: 560, y: 560, r: 50 }, hatstand: { x: 980, y: 520, r: 52 },
+    cat: { x: 505, y: 632, r: 50 }, hatstand: { x: 980, y: 520, r: 52 },
     switch: { x: 660, y: 282, r: 120 }, bench: { x: 640, y: 556, r: 85 },
     door: { x: 1145, y: 430, r: 95 }
   },
