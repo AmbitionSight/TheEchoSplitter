@@ -404,7 +404,7 @@ function start(content) {
   function doE() {
     sfx.click();
     const t = eTarget;
-    if (t.kind === 'stone') run(gameEvent(game, 'PICKUP', t.ipa));
+    if (t.kind === 'stone') { takeStone(t.stone ?? nearestStone(t.ipa)); }
     else if (t.id === 'bench') run(gameEvent(game, 'BANK'));
     else if (t.id === 'door') {
       if (game.hand?.kind === 'item') run(gameEvent(game, 'USE', { word: game.hand.word, target: 'door' }));
@@ -421,7 +421,7 @@ function start(content) {
     for (const s of stones) {
       if (s.to) continue;
       if (s.state !== 'idle' && s.state !== 'settle') continue;
-      consider(Math.hypot(p.x - s.x, p.y - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, r: 56 });
+      consider(Math.hypot(p.x - s.x, p.y - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, r: 56, stone: s });
     }
     for (const id of ['npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout', 'switch', 'bench', 'door']) {
       const t = LAYOUT.targets[id];
@@ -496,10 +496,8 @@ function start(content) {
         const done = pendingInteract;
         if (arrived || Math.hypot(p.x - t.x, p.y - t.y) < 110) {
           walkTarget = null; pendingInteract = null;
-          if (done.kind === 'stone') {
-            const s = nearestStone(done.ipa);
-            if (s) { run(gameEvent(game, 'PICKUP', s.ipa)); }
-          } else {
+          if (done.kind === 'stone') takeStone(nearestStone(done.ipa));
+          else {
             eTarget = { kind: 'obj', id: done.id }; doE();
           }
         }
@@ -548,6 +546,13 @@ function start(content) {
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  function takeStone(s) {               // E 拾取：地面石离场 + 事件机入手
+    if (!s) return;
+    const i = stones.indexOf(s);
+    if (i >= 0) stones.splice(i, 1);
+    run(gameEvent(game, 'PICKUP', s.ipa));
+  }
 
   function nearestStone(ipa) {
     const p = actors.player;
