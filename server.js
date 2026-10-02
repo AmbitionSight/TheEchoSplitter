@@ -22,10 +22,10 @@ function authorized(req) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-export function createServer() {
+export function createServer({ auth = true } = {}) {
   return http.createServer(async (req, res) => {
     try {
-      if (!authorized(req)) {
+      if (auth && !authorized(req)) {
         res.writeHead(401, {
           'WWW-Authenticate': 'Basic realm="EchoStone", charset="UTF-8"',
           'Content-Type': 'text/plain; charset=utf-8'
@@ -61,9 +61,9 @@ function lanIPs() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const PORT = Number(process.env.PORT || 3001);
-  createServer().listen(PORT, '0.0.0.0', () => {
-    console.log(`回响之石（内网部署，Basic 认证）`);
-    console.log(`  本机:   http://localhost:${PORT}`);
+  const AUTH = process.env.AUTH !== '0';                    // AUTH=0 关闭认证（本机 3000 用）
+  createServer({ auth: AUTH }).listen(PORT, '0.0.0.0', () => {
+    console.log(`回响之石  端口 ${PORT}  认证: ${AUTH ? '开（PanPan）' : '关'}`);
     for (const ip of lanIPs()) console.log(`  内网:   http://${ip}:${PORT}`);
   });
 }
