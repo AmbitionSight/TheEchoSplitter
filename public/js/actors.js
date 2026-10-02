@@ -1,4 +1,4 @@
-import { PAL } from './art.js';
+import { PAL, drawIcon } from './art.js';
 
 function thick(x, w = 4.5) { x.lineWidth = w; x.strokeStyle = PAL.ink; x.lineJoin = 'round'; x.lineCap = 'round'; }
 function shadow(x, cx, cy, rx) {
@@ -63,6 +63,16 @@ export function drawPlayer(x, p, t) {
     x.beginPath(); x.ellipse(5, -62, 22, 7, 0, 0, 7); x.fill(); x.stroke();
     x.beginPath(); x.moveTo(-7, -61); x.quadraticCurveTo(5, -82, 17, -61); x.closePath(); x.fill(); x.stroke();
     x.fillStyle = PAL.hatD; x.fillRect(-5, -67, 24, 4);
+  }
+  // 手持（v2：音素石或词具拿在手上）
+  if (p.held) {
+    x.fillStyle = p.heldVowel ? '#ffd166' : '#6fb7ff';
+    x.beginPath(); x.arc(17, -30, 9, 0, 7); x.fill();
+    x.lineWidth = 2.5; x.strokeStyle = PAL.ink; x.stroke();
+    x.fillStyle = PAL.ink; x.font = 'bold 8px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(p.held, 17, -30);
+  } else if (p.heldIcon) {
+    drawIcon(x, p.heldIcon, 17, -32, 30);
   }
   x.restore();
 }

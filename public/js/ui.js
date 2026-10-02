@@ -1,4 +1,5 @@
 import { iconURL } from './art.js';
+import { isVowel } from './hotbar.js';
 
 export function createUI({ content }) {
   const el = id => document.getElementById(id);
@@ -46,5 +47,30 @@ export function createUI({ content }) {
   el('btn-notes').addEventListener('click', () => el('notes').classList.remove('hidden'));
   el('notes-close').addEventListener('click', () => el('notes').classList.add('hidden'));
   el('btn-walk').addEventListener('click', () => el('summary').classList.add('hidden'));
-  return { setHint, toast, reveal, summary };
+
+  // —— 左上简笔小人面板（v2：头像 + 手持槽）——
+  const fig = el('avatar-fig');
+  if (fig) {
+    const fx = fig.getContext('2d');
+    fx.strokeStyle = '#F5F5F7'; fx.lineWidth = 3; fx.lineCap = 'round';
+    fx.beginPath(); fx.arc(28, 18, 9, 0, 7); fx.stroke();                  // 头
+    fx.beginPath(); fx.moveTo(28, 27); fx.lineTo(28, 46); fx.stroke();     // 身
+    fx.beginPath(); fx.moveTo(28, 34); fx.lineTo(18, 42); fx.stroke();     // 左臂
+    fx.beginPath(); fx.moveTo(28, 34); fx.lineTo(40, 30); fx.stroke();     // 右臂（持物）
+    fx.beginPath(); fx.moveTo(28, 46); fx.lineTo(20, 58); fx.stroke();     // 左腿
+    fx.beginPath(); fx.moveTo(28, 46); fx.lineTo(36, 58); fx.stroke();     // 右腿
+  }
+  function updateHand(hand) {
+    const slot = el('hand-slot');
+    if (!slot) return;
+    if (!hand) { slot.textContent = ''; slot.innerHTML = ''; slot.className = 'hand-slot'; return; }
+    if (hand.kind === 'stone') {
+      slot.innerHTML = `<span class="glyph">${hand.ipa}</span>`;
+      slot.className = 'hand-slot stone-' + (isVowel(hand.ipa) ? 'v' : 'c');
+    } else {
+      slot.innerHTML = `<img src="${iconURL(content.words[hand.word].icon)}" alt="">`;
+      slot.className = 'hand-slot item';
+    }
+  }
+  return { setHint, toast, reveal, summary, updateHand };
 }

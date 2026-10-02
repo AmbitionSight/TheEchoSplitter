@@ -24,35 +24,27 @@
     <p class="tap">点击继续</p>
   </div>
 
+  <div id="hud-avatar" class="glass hidden">
+    <canvas id="avatar-fig" width="56" height="64" aria-hidden="true"></canvas>
+    <div id="hand-slot" class="hand-slot"></div>
+  </div>
+
   <div id="hintbar" class="glass hidden"><span id="hint-text"></span></div>
 
   <div id="bag" class="glass hidden"><span id="bag-icon"></span><b id="bag-count">0</b></div>
 
   <div id="hotbar" class="glass hidden">
-    <div id="craft-row" class="hidden">
-      <div class="slot" data-slot="0"></div>
-      <div class="slot" data-slot="1"></div>
-      <div class="slot" data-slot="2"></div>
-      <div class="slot" data-slot="3"></div>
-    </div>
     <div id="bar-row">
       <div id="stone-cells"></div>
       <span class="bar-sep"></span>
       <div id="item-cells"></div>
-      <button id="craft-toggle" class="rune-btn" title="合成">ᚱ</button>
-    </div>
-  </div>
-
-  <div id="journal" class="screen hidden">
-    <div class="journal-head glass">
-      <div class="seg">
-        <button class="seg-btn active" data-tab="words">词语</button>
-        <button class="seg-btn" data-tab="runes">声音符文 <i id="rune-count">0/48</i></button>
+      <div id="craft-row">
+        <div class="slot" data-slot="0"></div>
+        <div class="slot" data-slot="1"></div>
+        <div class="slot" data-slot="2"></div>
+        <div class="slot" data-slot="3"></div>
       </div>
-      <button id="journal-close" class="btn ghost small">合上（B / Esc）</button>
     </div>
-    <div id="journal-words" class="journal-body"></div>
-    <div id="journal-runes" class="journal-body hidden"></div>
   </div>
 
   <div id="reveal" class="screen center glass hidden">
@@ -79,16 +71,16 @@
     <h2>设计说明</h2>
     <div class="notes-body">
       <p>这个游戏不教英语，也不翻译。</p>
-      <p>每个英语词只以「声音 + 情境」出现：碰一碰物件，它的音素会结晶成石头掉出来；把石头捡进口袋、在工具栏里拼回成一个词，这个词就变成一件道具——light 真的带来光，water 真的浇活枯苗，open 真的打开石门。词义由世界的反应定义，不由中文解释。</p>
-      <p>音素从不被「教」，只被你发现：元音石是黄色的，辅音石是蓝色的，48 个声音各有一枚卢文符文，捡到就点亮。你在无意中读完了整张英语音系表。</p>
-      <p>第一章只有六个词。门后还有很多房间。</p>
+      <p>每个英语词只以「声音 + 情境」出现：碰一碰物件，它的音素会结晶成石头掉出来；把石头捡起来、搬到桌上、拼回成一个词，这个词就变成一件道具——拼出开的声音，就能打开灯与门。词义由世界的反应定义，不由中文解释。</p>
+      <p>音素从不被「教」，只被你发现：元音石是黄色的，辅音石是蓝色的，48 个声音各有一枚卢文符文。你在无意中读完了整张英语音系表。</p>
+      <p>第一章只有两个词。门后还有很多房间。</p>
     </div>
     <button id="notes-close" class="btn primary">回到石室</button>
   </div>
 
   <div id="toast" class="glass hidden"></div>
 </div>
-<script type="module" src="js/main.js"></script>
 <div id="drag-ghost" class="hidden"></div>
+<script type="module" src="js/main.js"></script>
 </body>
 </html>

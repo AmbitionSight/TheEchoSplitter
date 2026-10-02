@@ -1,16 +1,8 @@
-// —— 回响之石 第一章：内容加载 + 事件机 + boot 主循环全接线 ——
+// —— 回响之石 第一章 v2：E 键手持交互（hello 教学 + open 开关主线）——
 import { INLINE_CONTENT } from './content-fallback.js';
 import { createInventory, addStone, stoneCount, canConsume, consume, craftMatch,
-         createHotbar, isVowel } from './hotbar.js';          // addStone 与 Task 7 行合并声明，防重复绑定
+         createHotbar, isVowel } from './hotbar.js';
 import { createDoor, doorEvent } from './door.js';
-import { PAL, iconURL } from './art.js';
-import { Speech, Sfx, pickVoices } from './audio.js';
-import { LAYOUT, createScene, initScene, updateScene, drawScene, drawOverlay,
-         screenToLogical, moveToward, resolveCollisions, makeStone, stepStone, magnetStep } from './scene.js';
-import { createActors, updateActors, drawPlayer, drawNpc, drawCat, setGesture } from './actors.js';
-import { createJournal } from './journal.js';
-import { createUI } from './ui.js';
-import { RITUAL_STEP, ritualSeats } from './door.js';
 
 export async function loadContent() {
   try {
@@ -22,15 +14,16 @@ export async function loadContent() {
 
 const cap = w => w[0].toUpperCase() + w.slice(1) + '.';
 
-// —— 游戏状态机（纯逻辑，规格 §3/§4；指令表见计划）——
+// —— 游戏状态机 v2（纯逻辑；指令表见 boot 的 run 解释器）——
 export function createGame(content) {
   return {
     content, beat: 'hello-listen',
-    book: new Set(), touched: new Set(),
+    book: new Set(),
     inv: createInventory(),
     stonesPicked: 0, lit: false,
+    hand: null,                        // {kind:'stone',ipa} | {kind:'item',word} | null
     door: createDoor(), usedTargets: new Set(),
-    hatOn: false, torchesLit: false, bloomed: false, greeted: false,
+    helloDropped: false, switchOn: false,
     teaseClock: 0
   };
 }
@@ -38,41 +31,26 @@ export function createGame(content) {
 export function startGame(g) {
   g.beat = 'hello-listen';
   return [
-    { t: 'speak', who: 'uncle', text: g.content.explorables.npc.lines[0] },
-    { t: 'hint', key: 'hello' }
+    { t: 'speak', who: 'uncle', text: g.content.flows.hello.lines[0] },
+    { t: 'hint', key: 'hello' },
+    { t: 'beat', beat: 'hello-listen' }
   ];
 }
 
+// 卡关提示 v2：hello 未拼 → 开关未按 → open 未拼 → 拿着开关去门
 export function chooseTease(g) {
-  const c = g.content;
-  for (const [id, ex] of Object.entries(c.explorables)) {
-    if (id === 'npc' || g.touched.has(id)) continue;
-    if (ex.requires === 'lit' && !g.lit) continue;
-    return { kind: 'word', word: ex.word };
-  }
-  for (const w of Object.keys(c.words)) {
-    if (g.inv.items.has(w)) continue;
-    if (canConsume(g.inv, c.words[w].phonemes.map(p => p[0]))) return { kind: 'craft', word: w };
-  }
-  if ((g.door.state === 'pulsing' || g.door.state === 'whispered') && !g.inv.items.has('open')) return { kind: 'door' };
-  return null;
+  if (!g.book.has('hello')) return g.helloDropped ? { kind: 'hint', key: 'hand' } : { kind: 'hello' };
+  if (!g.switchOn) return { kind: 'hint', key: 'switch' };
+  if (!g.inv.items.has('open')) return { kind: 'hint', key: 'craft' };
+  return { kind: 'hint', key: 'openItem' };
 }
 
 function teaseOut(g) {
   const c = g.content;
   const tease = chooseTease(g);
-  if (!tease) return [{ t: 'speak', who: 'uncle', text: c.explorables.npc.lines[0] }];
-  if (tease.kind === 'word') return [{ t: 'speak', who: 'uncle', text: c.npcTease[tease.word], slow: true }];
-  if (tease.kind === 'door') return [{ t: 'speak', who: 'uncle', text: c.door.listen[0], slow: true }];
-  return [{ t: 'speak', who: 'uncle', text: cap(tease.word), slow: true }, { t: 'pointHotbar' }];
-}
-
-// 词入书后统一查醒门：hello 经首点入书、其余经合成入书，两条路径都必须立即唤醒（Task 6 评审修正）
-function checkDoorAwake(g, out) {
-  if (!g.door.dropped && g.book.size >= 5 && g.door.state === 'asleep') {
-    doorEvent(g.door, 'WORDS_COMPLETE', g.book.size);
-    out.push({ t: 'doorAwake' }, { t: 'hint', key: 'doorAwake' }, { t: 'beat', beat: 'door-awake' });
-  }
+  if (!tease) return [];
+  if (tease.kind === 'hello') return [{ t: 'speak', who: 'uncle', text: c.flows.hello.lines[0], slow: true }];
+  return [{ t: 'speak', who: 'uncle', text: c.flows.hello.lines[0], slow: true }, { t: 'hint', key: tease.key }];
 }
 
 export function gameEvent(g, ev, arg = null) {
@@ -81,109 +59,110 @@ export function gameEvent(g, ev, arg = null) {
     case 'INTERACT': {
       const id = arg;
       if (id === 'cat') return [{ t: 'cat' }];
+      if (c.ambience[id]) return [{ t: 'sfx', name: c.ambience[id].sfx }];
       if (id === 'npc') {
-        if (!g.touched.has('npc')) {
-          g.touched.add('npc');
-          g.book.add('hello');                                  // 词入书时机①：hello=首点大叔
-          g.beat = 'explore-left';
-          const out = [
-            { t: 'speak', who: 'uncle', text: c.explorables.npc.linesFirst[0] },
-            { t: 'drop', word: 'hello' },
-            { t: 'hint', key: 'explore' },
-            { t: 'beat', beat: 'explore-left' }
-          ];
-          checkDoorAwake(g, out);                               // hello=第5词时也在首点瞬间立即醒门
-          return out;
+        if (g.hand?.kind === 'item' && g.hand.word === 'hello') {
+          return gameEvent(g, 'USE', { word: 'hello', target: 'npc' });
         }
-        return teaseOut(g);
+        if (!g.helloDropped) {
+          g.helloDropped = true;
+          return [
+            { t: 'speak', who: 'uncle', text: c.flows.hello.linesFirst[0] },
+            { t: 'drop', word: 'hello' },
+            { t: 'hint', key: 'hand' },
+            { t: 'beat', beat: 'explore' }
+          ];
+        }
+        return [{ t: 'speak', who: 'uncle', text: c.flows.hello.lines[0] }];
       }
-      const ex = c.explorables[id];
-      if (!ex) return [];
-      if (ex.requires === 'lit' && !g.lit) return [{ t: 'blocked', id }];
-      if (!g.touched.has(id)) {
-        g.touched.add(id);
-        return [
-          { t: 'speak', who: 'uncle', text: ex.lines[0] },
-          { t: 'drop', word: ex.word }
-        ];
+      if (id === 'switch') {
+        if (!g.switchOn) {
+          g.switchOn = true; g.lit = true;
+          return [
+            { t: 'sfx', name: 'clack' },
+            { t: 'speak', who: 'door', text: c.flows.open.listen[0] },
+            { t: 'illuminate' },
+            { t: 'drop', word: 'open' },
+            { t: 'hint', key: 'litUp' },
+            { t: 'beat', beat: 'lit' }
+          ];
+        }
+        return [{ t: 'sfx', name: 'glowTick' }, { t: 'speak', who: 'door', text: c.flows.open.listen[0] }];
       }
-      return [{ t: 'speak', who: 'uncle', text: ex.lines[0] }];
+      return [];
     }
-    case 'PICKUP': {
-      addStone(g.inv, arg);
-      g.inv.everPicked.add(arg);
+    case 'PICKUP': {                    // E 拾地面石 → 手上（纯手持制，一次一块）
+      const ipa = arg;
+      const out = [];
+      if (g.hand?.kind === 'stone') out.push({ t: 'dropBack', ipa: g.hand.ipa }); // 旧石放回地面
+      g.hand = { kind: 'stone', ipa };
+      g.inv.everPicked.add(ipa);
       g.stonesPicked++;
-      const out = [{ t: 'bagPulse' }];
-      if (g.stonesPicked === 1) {
-        g.beat = 'first-stone';
-        out.push({ t: 'hotbarShow' }, { t: 'hint', key: 'firstStone' }, { t: 'beat', beat: 'first-stone' });
-      }
+      out.push({ t: 'carrier', ipa }, { t: 'hand' }, { t: 'bagPulse' });
+      if (g.stonesPicked === 1) out.push({ t: 'hotbarShow' }, { t: 'hint', key: 'bench' }, { t: 'beat', beat: 'first-stone' });
       return out;
+    }
+    case 'HOLD_ITEM': {                 // 点物品栏词具 → 拿到手上
+      const word = arg;
+      if (!g.inv.items.has(word)) return [];
+      g.hand = { kind: 'item', word };
+      return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' },
+              { t: 'hint', key: word === 'open' ? 'openItem' : 'hello' }];
+    }
+    case 'BANK': {                      // 合成台：手上的石存入底部物品栏
+      if (g.hand?.kind !== 'stone') return [];
+      const ipa = g.hand.ipa;
+      g.hand = null;
+      addStone(g.inv, ipa);
+      return [{ t: 'bank', ipa }, { t: 'hand' }];
     }
     case 'CRAFT': {
       const word = arg;
-      if (!c.words[word] || g.inv.items.has(word)) return []; // 未知词/已持有：静默（Task 13 评审 D）
+      if (!c.words[word] || g.inv.items.has(word)) return [];
       const phon = c.words[word].phonemes.map(p => p[0]);
       if (!canConsume(g.inv, phon)) return [];
       consume(g.inv, phon);
       g.inv.items.set(word, true);
-      g.book.add(word);                                         // 词入书时机②：其余词=合成成功
+      g.book.add(word);
       const out = [
         { t: 'resonate', word },
         { t: 'speak', who: 'child', text: cap(word) },
         { t: 'itemIn', word }
       ];
-      checkDoorAwake(g, out);
-      if (word === 'open') out.push({ t: 'hint', key: 'door' });
+      if (word === 'hello') out.push({ t: 'uncleCheer' });
+      if (word === 'open') out.push({ t: 'hint', key: 'openItem' });
       return out;
     }
     case 'USE': {
       const { word, target } = arg;
       const def = c.words[word]?.use;
       if (!def || target !== def.target) return [{ t: 'mutter' }];
-      const full = !g.usedTargets.has(target);
-      const out = [{ t: 'speak', who: 'child', text: cap(word) }];
-      if (full) {
-        if (def.effect === 'illuminate') { g.lit = true; g.beat = 'lit-right'; }
-        if (def.effect === 'wear') g.hatOn = true;
-        if (def.effect === 'bloom') g.bloomed = true;
-        if (def.effect === 'ignite') g.torchesLit = true;
-        if (def.effect === 'greet') g.greeted = true;
-        if (def.effect === 'unlock') {
-          // unlock 只在仪式成功瞬间烧 usedTargets（Task 13 评审 D：失败可重试，不算用过）
-          const r = doorEvent(g.door, 'OFFER', 'open');
-          if (r?.ritual) { g.usedTargets.add(target); return out.concat([{ t: 'ritualStart' }]); }
-          return [{ t: 'mutter' }];
+      if (def.effect === 'unlock') {
+        const r = doorEvent(g.door, 'OFFER', 'open');
+        if (r?.ritual) {
+          g.usedTargets.add(target); g.hand = null;
+          return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' }, { t: 'ritualStart' }];
         }
-        g.usedTargets.add(target);                            // 其余效果：首次即烧（重复使用=轻反应）
-        out.push({ t: 'effect', name: def.effect, full: true });
-        if (def.effect === 'illuminate') out.push({ t: 'hint', key: 'litUp' }, { t: 'beat', beat: 'lit-right' });
-      } else {
-        out.push({ t: 'effect', name: def.effect, full: false });
+        return [{ t: 'mutter' }];
       }
-      return out;
-    }
-    case 'DOOR_CLICK': {
-      if (g.door.state === 'ritual' || g.door.state === 'opening') return []; // 仪式/开门期静默（Task 13 评审 D）
-      const r = doorEvent(g.door, 'CLICK');
-      if (!r) return [];
-      const out = [{ t: 'speak', who: 'door', text: c.door.listen[0] }];
-      if (r.dropOpenStones) out.push({ t: 'drop', word: 'open' }, { t: 'hint', key: 'door' });
+      const full = !g.usedTargets.has(target);          // greet
+      const out = [{ t: 'speak', who: 'child', text: cap(word) }];
+      if (full) { g.usedTargets.add(target); out.push({ t: 'effect', name: 'greet', full: true }); }
+      else out.push({ t: 'effect', name: 'greet', full: false });
       return out;
     }
     case 'RITUAL_DONE': {
       const r = doorEvent(g.door, 'RITUAL_DONE');
-      if (!r) return [];                                    // 非仪式态重放：静默（防 G.jump 二次开门，评审 Fix 4）
+      if (!r) return [];
       return [{ t: 'openAnim' }];
     }
     case 'OPEN_DONE': {
       const r = doorEvent(g.door, 'OPEN_DONE');
-      if (!r) return [];                                    // 非开门态重放：静默（同上）
+      if (!r) return [];
       g.beat = 'summary';
       return [{ t: 'summary' }];
     }
     case 'TICK': {
-      if (['ritual', 'opening', 'opened'].includes(g.door.state) || g.beat === 'summary') return []; // 终局静默（Task 13 评审 D）
       g.teaseClock += arg;
       if (g.teaseClock < 45) return [];
       g.teaseClock = 0;
@@ -194,33 +173,41 @@ export function gameEvent(g, ev, arg = null) {
   }
 }
 
-// —— 调试跳拍（?autostart + G.jump，规格 §11.7）——
+function collect(g, word) {              // 调试用：掉落→逐块 E 拾取→合成台存入→合成（幂等）
+  if (g.inv.items.has(word)) return [];
+  let out = [];
+  const src = word === 'hello' ? 'npc' : 'switch';
+  out = out.concat(gameEvent(g, 'INTERACT', src));
+  for (const [ipa] of g.content.words[word].phonemes) {
+    out = out.concat(gameEvent(g, 'PICKUP', ipa));
+    out = out.concat(gameEvent(g, 'BANK'));
+  }
+  return out.concat(gameEvent(g, 'CRAFT', word));
+}
+
+// —— 调试跳拍（?autostart=1 + G.jump）——
 export function jump(g, beat) {
-  const c = g.content;
-  const doWord = word => {
-    const found = Object.entries(c.explorables).find(([, ex]) => ex.word === word);
-    let out = gameEvent(g, 'INTERACT', found?.[0]);            // 门词（open）无探索点：INTERACT 未知 id 返回 []（设计如此）
-    for (const [ipa] of c.words[word].phonemes) out = out.concat(gameEvent(g, 'PICKUP', ipa));
-    return out.concat(gameEvent(g, 'CRAFT', word));
-  };
   switch (beat) {
-    case 'hello-meet': return doWord('hello');
-    case 'explore-left': return [];
-    case 'lit-right': {
-      let out = [];
-      for (const w of ['hello', 'water', 'fire', 'light']) out = out.concat(doWord(w));
-      return out.concat(gameEvent(g, 'USE', { word: 'light', target: 'lamp' }));
-    }
-    case 'door-awake':
-      return jump(g, 'lit-right').concat(doWord('hat'), gameEvent(g, 'DOOR_CLICK'));
+    case 'hello-meet': return gameEvent(g, 'INTERACT', 'npc');
+    case 'hello': return collect(g, 'hello');
+    case 'lit': return jump(g, 'hello').concat(gameEvent(g, 'INTERACT', 'switch'));
     case 'door-open':
-      return jump(g, 'door-awake').concat(doWord('open'), gameEvent(g, 'USE', { word: 'open', target: 'door' }), gameEvent(g, 'RITUAL_DONE'));
+      return jump(g, 'lit').concat(collect(g, 'open'), gameEvent(g, 'USE', { word: 'open', target: 'door' }), gameEvent(g, 'RITUAL_DONE'));
     case 'summary':
       return jump(g, 'door-open').concat(gameEvent(g, 'OPEN_DONE'));
     default:
       return [];
   }
 }
+
+// ================= boot：DOM 接线（浏览器） =================
+import { PAL } from './art.js';
+import { Speech, Sfx, pickVoices } from './audio.js';
+import { LAYOUT, createScene, initScene, updateScene, drawScene, drawOverlay,
+         screenToLogical, moveToward, resolveCollisions, makeStone, stepStone } from './scene.js';
+import { createActors, updateActors, drawPlayer, drawNpc, drawCat, setGesture } from './actors.js';
+import { createUI } from './ui.js';
+import { RITUAL_STEP, ritualSeats } from './door.js';
 
 function boot() {
   const el = id => document.getElementById(id);
@@ -247,7 +234,7 @@ function start(content) {
   const el = id => document.getElementById(id);
   const cv = el('game'), ctx = cv.getContext('2d');
 
-  // —— 音频（首手势解锁）——
+  // —— 音频 ——
   const speech = new Speech(), sfx = new Sfx();
   let voices = { uncle: null, child: null, door: null };
   const scanVoices = () => {
@@ -255,9 +242,9 @@ function start(content) {
   };
   scanVoices();
   if (speech.ready) speechSynthesis.addEventListener('voiceschanged', scanVoices);
-  addEventListener('pointerdown', () => sfx.ctx?.resume(), { once: true }); // 任意首手势解锁音频（含 autostart 路径，评审 Fix 4）
+  addEventListener('pointerdown', () => sfx.ctx?.resume(), { once: true });
 
-  let speechChain = Promise.resolve();                       // 语音串行
+  let speechChain = Promise.resolve();
   function speak(text, who = 'uncle', slow = false) {
     const conf = {
       uncle: { voice: voices.uncle, pitch: 0.9, rate: slow ? 0.7 : 0.95 },
@@ -274,76 +261,78 @@ function start(content) {
     return speechChain;
   }
 
-  // —— 世界对象 ——
+  // —— 世界 ——
   const game = createGame(content);
   const actors = createActors();
   const sc = createScene(); initScene(sc);
-  const stones = [];                                          // 场上音素石
-  const view = { t: 0, lit: 0, doorState: 'asleep', doorPulse: 0, doorOpen: 0,
-                 torchesLit: false, bloomed: false, hatOn: false };
+  const stones = [];
+  const view = { t: 0, lit: 0, doorState: 'closed', doorPulse: 0, doorOpen: 0,
+                 torchesLit: false, bloomed: false, hatOn: false, switchOn: false };
   const ritual = { active: false, t: 0, seated: 0 };
   let walkTarget = null, pendingInteract = null, started = false;
-  let lastPX = 0, lastPY = 0, stuckT = 0;                    // 走位卡死检测（评审 Fix 2）
+  let eTarget = null;                                   // 当前 E 可交互目标
+  let lastPX = 0, lastPY = 0, stuckT = 0;
 
   const ui = createUI({ content });
-  const journal = createJournal({
-    content,
-    speakWord: w => speak(w[0].toUpperCase() + w.slice(1) + '.', 'child'),
-    speakCarrier: ipa => speak(content.carriers[ipa], 'child')
-  });
   const hb = createHotbar({
     words: content.words,
-    crafting: content.crafting,                               // Task 13 评审 C：合成配置透传
+    crafting: content.crafting,
     onSpeakCarrier: ipa => { sfx.click(); speak(content.carriers[ipa], 'child'); },
-    onSpeakWord: w => { sfx.click(); speak(w[0].toUpperCase() + w.slice(1) + '.', 'child'); },
+    onSpeakWord: w => { sfx.click(); speak(cap(w), 'child'); },
     onCraft: word => run(gameEvent(game, 'CRAFT', word)),
+    onTakeItem: word => run(gameEvent(game, 'HOLD_ITEM', word)),
     onDropItem: (word, cx, cy) => {
       const p = screenToLogical(cx, cy, cv.getBoundingClientRect());
       if (!p.inside) return;
-      const target = hitUseTarget(p, word);
-      run(gameEvent(game, 'USE', { word, target }));
+      run(gameEvent(game, 'USE', { word, target: hitUseTarget(p, word) }));
     }
   });
+  hb.show();                                            // MC 式常驻物品栏
 
-  // —— 词具落点：目标命中（含「自己」）——
+  // —— 词具落点命中 ——
   function hitUseTarget(p, word) {
     const want = content.words[word].use.target;
     if (want === 'player') return Math.hypot(p.x - actors.player.x, p.y - actors.player.y) < 90 ? 'player' : null;
     if (want === 'npc') return Math.hypot(p.x - LAYOUT.targets.npc.x, p.y - LAYOUT.targets.npc.y) < 90 ? 'npc' : null;
     const t = LAYOUT.targets[want];
-    if (t && Math.hypot(p.x - t.x, p.y - t.y) < t.r) {
-      if (want !== 'player' && want !== 'npc' && t.x > 800 && !game.lit) return null; // 暗区目标未点亮不接词具（规格 §6.2，评审 Fix 5）
-      return want;
-    }
+    if (t && Math.hypot(p.x - t.x, p.y - t.y) < t.r) return want;
     return null;
   }
 
   // —— 掉石 ——
   function spawnDrop(word) {
-    const src = Object.values(content.explorables).find(e => e.word === word);
-    const [dx, dy] = src ? src.drop : [1145, 460];            // 门词（open）无探索点：四石从门符文处掉落
+    const src = content.flows[word].drop;
     const phon = content.words[word].phonemes;
-    phon.forEach(([ipa], i) => stones.push(makeStone(ipa, dx, dy, i * 0.13)));
-    stones.slice(-phon.length).forEach((s, i) => { s.floorY = dy + 26 + (i % 3) * 16; });
+    phon.forEach(([ipa], i) => stones.push(makeStone(ipa, src[0], src[1], i * 0.13)));
+    stones.slice(-phon.length).forEach((s, i) => { s.floorY = src[1] + 26 + (i % 3) * 16; });
+  }
+  function spawnOne(ipa, x, y) {                        // 换手时旧石放回地面
+    const s = makeStone(ipa, x, y - 20, 0);
+    s.floorY = Math.min(700, y + 22);
+    stones.push(s);
   }
 
-  // —— 指令解释器（Task 7 词汇表）——
+  // —— 指令解释器 ——
   function run(instructions) {
     for (const ins of instructions) {
       switch (ins.t) {
         case 'speak': speak(ins.text, ins.who, ins.slow); break;
+        case 'carrier': sfx.click(); speak(content.carriers[ins.ipa], 'child'); break;
         case 'drop': spawnDrop(ins.word); break;
+        case 'dropBack': spawnOne(ins.ipa, actors.player.x, actors.player.y); break;
         case 'hint': ui.setHint(ins.key); break;
-        case 'beat': game.beat = ins.beat; break;             // G.beat 是 getter（直读 game.beat），无需镜像
-        case 'hotbarShow': hb.show(); sfx.chime(); break;
+        case 'beat': game.beat = ins.beat; break;
+        case 'hotbarShow': sfx.chime(); break;
         case 'bagPulse': hb.pulseBag(game.stonesPicked); break;
+        case 'bank': sfx.itemIn(); hb.refresh(game.inv); break;
+        case 'hand': ui.updateHand(game.hand); syncHeld(); break;
         case 'resonate': sfx.resonate(); hb.refresh(game.inv); break;
         case 'itemIn': sfx.itemIn(); hb.refresh(game.inv); break;
-        case 'doorAwake': sfx.glowTick(); break;
         case 'mutter': sfx.mutter(); break;
         case 'cat': sfx.meow(); actors.cat.earT = 1; actors.cat.meowT = 0.6; break;
-        case 'blocked': setGesture(actors.npc, 'tilt', 1.2); break;
-        case 'pointHotbar': setGesture(actors.npc, 'point', 2); break;
+        case 'sfx': sfx[ins.name]?.(); break;
+        case 'illuminate': sfx.sweepUp(); view.switchOn = true; setGesture(actors.npc, 'laugh', 2); break;
+        case 'uncleCheer': sfx.laugh(); setGesture(actors.npc, 'laugh', 2); ui.setHint('helloDone'); break;
         case 'effect': applyEffect(ins.name, ins.full); break;
         case 'ritualStart': startRitual(); break;
         case 'openAnim': openDoor(); break;
@@ -353,31 +342,25 @@ function start(content) {
   }
 
   function applyEffect(name, full) {
-    if (name === 'illuminate') {
-      if (full) { sfx.sweepUp(); view.lit = 1; setGesture(actors.npc, 'laugh', 2); actors.cat.earT = 1; }
-      else sfx.glowTick();
-    } else if (name === 'bloom') {
-      if (full) { sfx.water(); setTimeout(() => sfx.bloom(), 300); view.bloomed = true; actors.cat.earT = 1; }
-      else sfx.water();
-    } else if (name === 'ignite') {
-      if (full) { sfx.ignite(); view.torchesLit = true; }
-      else sfx.crackle();
-    } else if (name === 'wear') {
-      sfx.hatPuff(); actors.player.hatOn = true; view.hatOn = true; actors.cat.earT = 1;
-    } else if (name === 'greet') {
+    if (name === 'greet') {
       if (full) { sfx.laugh(); setGesture(actors.npc, 'laugh', 1.8); }
       else setGesture(actors.npc, 'wave', 1.2);
-    } else if (name === 'unlock') {                           // Task 13 评审 A：重复 open=门后风声（首次走 ritualStart）
-      if (!full) sfx.wind();
     }
   }
 
-  // —— 门仪式：四石绕拱依次咏亮 → Open. → Open! → 揭示卡 → 开门（规格 §3.1 节拍 12）——
+  function syncHeld() {                                  // 手持 → 角色渲染
+    const p = actors.player;
+    if (!game.hand) { p.held = null; p.heldVowel = false; p.heldIcon = null; return; }
+    if (game.hand.kind === 'stone') { p.held = game.hand.ipa; p.heldVowel = isVowel(game.hand.ipa); p.heldIcon = null; }
+    else { p.held = null; p.heldVowel = false; p.heldIcon = content.words[game.hand.word].icon; }
+  }
+
+  // —— 门仪式（词具开门）——
   function startRitual() {
     ritual.active = true; ritual.t = 0; ritual.seated = 0;
     sfx.glowTick();
     const seats = ritualSeats(content.door.ipa.length);
-    const ritualStones = content.door.ipa.map((ipa, i) => makeStone(ipa, 1145, 460, 0));
+    const ritualStones = content.door.ipa.map((ipa) => makeStone(ipa, 1145, 460, 0));
     ritualStones.forEach((s, i) => {
       s.state = 'idle'; s.from = { x: 1145, y: 460 }; s.to = { x: seats[i][0], y: seats[i][1] }; s.at = i * RITUAL_STEP;
       stones.push(s);
@@ -397,7 +380,7 @@ function start(content) {
       const k = Math.min(1, (performance.now() - t0) / 1400);
       view.doorOpen = k;
       if (k >= 1) {
-        for (let i = stones.length - 1; i >= 0; i--) if (stones[i].to) stones.splice(i, 1);  // 仪式石谢幕，不再参与磁吸
+        for (let i = stones.length - 1; i >= 0; i--) if (stones[i].to) stones.splice(i, 1);
         sfx.choir();
         run(gameEvent(game, 'OPEN_DONE'));
         return;
@@ -411,50 +394,75 @@ function start(content) {
   const keys = new Set();
   const KEYMAP = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r' };
   addEventListener('keydown', e => {
-    if (e.code === 'KeyB') { journal.toggle(game); return; }
-    if (e.code === 'Escape') { journal.close(); return; }
-    if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); walkTarget = null; pendingInteract = null; }
+    if (e.code === 'Escape') return;
+    if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); walkTarget = null; pendingInteract = null; return; }
+    if (e.code === 'KeyE' && started && eTarget) doE();
   });
   addEventListener('keyup', e => { if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
-  addEventListener('blur', () => keys.clear());              // 失焦清键：防 alt-tab 卡键（评审 Fix 4）
+  addEventListener('blur', () => keys.clear());
+
+  function doE() {
+    sfx.click();
+    const t = eTarget;
+    if (t.kind === 'stone') run(gameEvent(game, 'PICKUP', t.ipa));
+    else if (t.id === 'bench') run(gameEvent(game, 'BANK'));
+    else if (t.id === 'door') {
+      if (game.hand?.kind === 'item') run(gameEvent(game, 'USE', { word: game.hand.word, target: 'door' }));
+      else sfx.mutter();
+    }
+    else run(gameEvent(game, 'INTERACT', t.id));
+  }
+
+  // E 目标探测：玩家附近的可交互物
+  function findETarget() {
+    const p = actors.player;
+    let best = null, bestD = 1e9;
+    const consider = (d, target) => { if (d < bestD && d <= (target.r ?? 74)) { bestD = d; best = target; } };
+    for (const s of stones) {
+      if (s.to) continue;
+      if (s.state !== 'idle' && s.state !== 'settle') continue;
+      consider(Math.hypot(p.x - s.x, p.y - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, r: 56 });
+    }
+    for (const id of ['npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout', 'switch', 'bench', 'door']) {
+      const t = LAYOUT.targets[id];
+      if (!t) continue;
+      if (id === 'door' && !game.lit) continue;         // 黑暗中摸不到门
+      consider(Math.hypot(p.x - t.x, p.y - t.y), { kind: 'obj', id, x: t.x, y: t.y, r: t.r });
+    }
+    return best;
+  }
 
   cv.addEventListener('pointerdown', e => {
     if (!started) return;
-    if (e.target.closest('#hotbar') || e.target.closest('.screen')) return;
     const p = screenToLogical(e.clientX, e.clientY, cv.getBoundingClientRect());
     if (!p.inside) return;
+    // 直接点石头 → 走过去捡
+    let stone = null, sd = 1e9;
+    for (const s of stones) {
+      if (s.to || (s.state !== 'idle' && s.state !== 'settle')) continue;
+      const d = Math.hypot(p.x - s.x, p.y - s.y);
+      if (d < 30 && d < sd) { sd = d; stone = s; }
+    }
+    if (stone) { walkTarget = approach(stone); pendingInteract = { kind: 'stone', ipa: stone.ipa }; return; }
     const hit = hitSceneTarget(p);
-    if (!hit) { walkTarget = { x: Math.max(40, Math.min(LAYOUT.W - 40, p.x)), y: clampY(p.y) }; pendingInteract = null; return; }
-    if (near(hit)) { interact(hit.id); return; }
-    walkTarget = approach(hit); pendingInteract = hit.id;
+    if (!hit) { walkTarget = { x: Math.max(40, Math.min(LAYOUT.W - 40, p.x)), y: Math.max(340, Math.min(700, p.y)) }; pendingInteract = null; return; }
+    walkTarget = approach(hit); pendingInteract = { kind: 'obj', id: hit.id };
   });
 
-  function clampY(y) { return Math.max(340, Math.min(700, y)); }
   function near(t) { return Math.hypot(actors.player.x - t.x, actors.player.y - t.y) < LAYOUT.INTERACT_R; }
   function approach(t) {
     const dx = actors.player.x - t.x, dy = actors.player.y - t.y, d = Math.hypot(dx, dy) || 1;
-    return { x: Math.max(40, Math.min(LAYOUT.W - 40, t.x + (dx / d) * 120)),
-             y: Math.max(340, Math.min(LAYOUT.H - 20, t.y + (dy / d) * 120)) };   // 落点钳回房间（评审 Fix 2）
-  }
-  // cat 不在 LAYOUT.targets（只登记在障碍表）：点击/走位交互统一经此解析（点击半径放宽到 40）
-  function targetOf(id) {
-    if (id === 'cat') { const o = LAYOUT.obstacles.find(o => o.id === 'cat'); return o ? { x: o.x, y: o.y, r: 40 } : null; }
-    return LAYOUT.targets[id] || null;
+    return { x: Math.max(40, Math.min(LAYOUT.W - 40, t.x + (dx / d) * 90)), y: Math.max(340, Math.min(LAYOUT.H - 20, t.y + (dy / d) * 90)) };
   }
   function hitSceneTarget(p) {
-    const ids = ['door', 'hatstand', 'lamp', 'brazier', 'well', 'sprout', 'cat', 'npc'];
+    const ids = ['switch', 'bench', 'door', 'npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout'];
     for (const id of ids) {
-      const t = targetOf(id);
+      const t = LAYOUT.targets[id];
       if (!t) continue;
-      if (p.x > 800 && !game.lit && id !== 'lamp') continue;          // 暗区不可交互（规格 §6.2）
+      if (t.x > 800 && !game.lit) continue;
       if (Math.hypot(p.x - t.x, p.y - t.y) < t.r) return { id, x: t.x, y: t.y };
     }
     return null;
-  }
-  function interact(id) {
-    sfx.click();
-    if (id === 'door') run(gameEvent(game, 'DOOR_CLICK'));
-    else run(gameEvent(game, 'INTERACT', id));
   }
 
   // —— 主循环 ——
@@ -465,11 +473,10 @@ function start(content) {
     view.t += dt;
     view.doorState = game.door.state;
     view.doorPulse = (Math.sin(view.t * 2.4) + 1) / 2;
-    updateScene(sc, dt, game.lit ? 1 : 0);                   // Task 13 评审 G：先推进光照缓动……
-    view.lit = sc.lit;                                       // ……再采样：drawScene/drawOverlay 同帧同值
+    updateScene(sc, dt, game.lit ? 1 : 0);
+    view.lit = sc.lit;
     updateActors(actors, dt);
 
-    // 移动
     const p = actors.player;
     let moved = false;
     if (keys.size) {
@@ -484,14 +491,19 @@ function start(content) {
       resolveCollisions(p);
       moved = true;
       if (pendingInteract) {
-        const t = targetOf(pendingInteract);
-        if (arrived || (t && Math.hypot(p.x - t.x, p.y - t.y) < LAYOUT.INTERACT_R)) {
-          const done = pendingInteract;
+        const t = pendingInteract.kind === 'stone'
+          ? { x: p.x, y: p.y } : (LAYOUT.targets[pendingInteract.id] || { x: p.x, y: p.y });
+        const done = pendingInteract;
+        if (arrived || Math.hypot(p.x - t.x, p.y - t.y) < 110) {
           walkTarget = null; pendingInteract = null;
-          if (t && Math.hypot(p.x - t.x, p.y - t.y) < LAYOUT.INTERACT_R) interact(done);
+          if (done.kind === 'stone') {
+            const s = nearestStone(done.ipa);
+            if (s) { run(gameEvent(game, 'PICKUP', s.ipa)); }
+          } else {
+            eTarget = { kind: 'obj', id: done.id }; doE();
+          }
         }
       } else if (arrived) walkTarget = null;
-      // 防走位死锁：位移可忽略持续 0.6s 则放弃（障碍重叠/不可达点）
       if (walkTarget) {
         const disp = Math.hypot(p.x - lastPX, p.y - lastPY);
         stuckT = disp < 1 ? stuckT + dt : 0;
@@ -502,16 +514,10 @@ function start(content) {
     p.moving = moved;
     if (moved) p.walkT += dt;
 
-    // 音素石：物理 + 磁吸拾取
     for (let i = stones.length - 1; i >= 0; i--) {
       const s = stones[i];
-      if (s.to) continue;                              // 仪式石永不参与物理/磁吸（揭示卡等待期防盗取，评审 Fix 1）
+      if (s.to) continue;
       stepStone(s, dt, s.floorY ?? 660);
-      if (magnetStep(s, p, dt)) {
-        stones.splice(i, 1);
-        sfx.chime();
-        run(gameEvent(game, 'PICKUP', s.ipa));
-      }
     }
     if (ritual.active) {
       ritual.t += dt;
@@ -523,6 +529,7 @@ function start(content) {
       if (ritual.t > RITUAL_STEP * 4 + 1) ritual.active = false;
     }
 
+    eTarget = started ? findETarget() : null;
     if (started) run(gameEvent(game, 'TICK', dt));
 
     // —— 绘制 ——
@@ -534,12 +541,24 @@ function start(content) {
       if (who === 'cat') drawCat(ctx, actors.cat, view.t);
       if (who === 'player') drawPlayer(ctx, actors.player, view.t);
     }
-    for (const s of stones) if (!s.to) drawStone(ctx, s, view.t);   // 仪式石只由 drawRitualStones 画（评审 Fix 1）
+    for (const s of stones) if (!s.to) drawStone(ctx, s, view.t);
     drawOverlay(ctx, sc, view);
     if (ritual.active || view.doorOpen > 0) drawRitualStones(ctx);
+    if (eTarget && started) drawEHint(ctx, eTarget);
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  function nearestStone(ipa) {
+    const p = actors.player;
+    let best = null, bd = 1e9;
+    for (const s of stones) {
+      if (s.to || s.ipa !== ipa || (s.state !== 'idle' && s.state !== 'settle')) continue;
+      const d = Math.hypot(p.x - s.x, p.y - s.y);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return bd < 80 ? best : null;
+  }
 
   function drawStone(x, s, t) {
     const bob = s.state === 'idle' ? Math.sin(t * 2.2 + s.phase) * 3 : 0;
@@ -550,7 +569,7 @@ function start(content) {
     x.beginPath(); x.arc(0, 0, 15, 0, 7); x.fill();
     x.lineWidth = 3.5; x.strokeStyle = PAL.ink; x.stroke();
     x.strokeStyle = 'rgba(255,255,255,' + (0.35 + Math.abs(Math.sin(t * 3 + s.phase)) * 0.4) + ')';
-    x.beginPath(); x.arc(0, 0, 18, 0, 7); x.stroke();       // 静止后描边闪烁（规格 §3.1 节拍 6）
+    x.beginPath(); x.arc(0, 0, 18, 0, 7); x.stroke();
     x.fillStyle = PAL.ink;
     x.font = 'bold 13px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
     x.fillText(s.ipa, 0, 1);
@@ -575,7 +594,7 @@ function start(content) {
       x.fillText(s.ipa, 0, 1);
       x.restore();
     });
-    seats.forEach(([qx, qy], j) => {                        // 已落座座位发青光（移出石循环：单层 0.25，防 4× 叠加，评审 Fix 3）
+    seats.forEach(([qx, qy], j) => {
       if (j < ritual.seated) {
         x.fillStyle = 'rgba(84,224,200,.25)';
         x.beginPath(); x.arc(qx, qy, 20, 0, 7); x.fill();
@@ -583,22 +602,34 @@ function start(content) {
     });
   }
 
+  function drawEHint(x, t) {
+    const hx = t.x, hy = t.y - (t.kind === 'stone' ? 34 : 60);
+    x.save();
+    x.globalAlpha = 0.85 + Math.sin(view.t * 4) * 0.15;
+    x.fillStyle = 'rgba(28,31,40,.85)';
+    x.beginPath(); x.arc(hx, hy, 14, 0, 7); x.fill();
+    x.lineWidth = 2; x.strokeStyle = PAL.glowRune; x.stroke();
+    x.fillStyle = '#fff';
+    x.font = 'bold 14px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('E', hx, hy + 1);
+    x.restore();
+  }
+
   // —— 开始/调试 ——
   function begin() {
     started = true;
-    window.__gameLoopOn = true;
     hb.refresh(game.inv);
+    ui.updateHand(null);
     run(startGame(game));
   }
   addEventListener('game:start', begin);
   window.G = {
     content,
-    get beat() { return game.beat; },                        // 调试直读；写态经 G.game
+    get beat() { return game.beat; },
     jump(b) {
-      started = true; window.__gameLoopOn = true;
-      run(jump(game, b).filter(i => i.t !== 'drop'));        // Task 13 评审 B：drop 已被虚拟拾取，过滤防磁吸双收
-      hb.refresh(game.inv); hb.show();
-      if (game.stonesPicked) hb.pulseBag(game.stonesPicked);
+      started = true;
+      run(jump(game, b).filter(i => i.t !== 'drop'));
+      hb.refresh(game.inv); ui.updateHand(game.hand); syncHeld();
     },
     game
   };
@@ -607,7 +638,7 @@ function start(content) {
     dispatchEvent(new CustomEvent('game:start'));
     G.jump('hello-meet');
   } else {
-    el('title').classList.remove('hidden');                  // HTML 初始 hidden：正常路径先亮标题屏
+    el('title').classList.remove('hidden');
     el('btn-start').addEventListener('click', () => {
       el('title').classList.add('hidden');
       el('prologue').classList.remove('hidden');

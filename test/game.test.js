@@ -2,182 +2,150 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { createGame, startGame, gameEvent, chooseTease, jump } from '../public/js/main.js';
+import { stoneCount } from '../public/js/hotbar.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter1.json', import.meta.url), 'utf8'));
-const seq = w => content.words[w].phonemes.map(p => p[0]);
 
-function collect(g, word) { // 模拟：碰来源→捡全部石→合成
-  const [id] = Object.entries(content.explorables).find(([, ex]) => ex.word === word);
-  let out = gameEvent(g, 'INTERACT', id);
-  for (const [ipa] of content.words[word].phonemes) out = out.concat(gameEvent(g, 'PICKUP', ipa));
-  return out.concat(gameEvent(g, 'CRAFT', word));
+function carry(g, word) {              // E 拾取 → 合成台存入（逐块）
+  let out = [];
+  for (const [ipa] of content.words[word].phonemes) {
+    out = out.concat(gameEvent(g, 'PICKUP', ipa));
+    out = out.concat(gameEvent(g, 'BANK'));
+  }
+  return out;
 }
 
-test('开局：大叔只出声招手，提示「走过去点他」', () => {
+test('开局：大叔只出声招手，提示「按 E 碰他」', () => {
   const g = createGame(content);
   const out = startGame(g);
   assert.ok(out.some(i => i.t === 'speak' && i.who === 'uncle' && i.text === 'Hello! Hello!'));
   assert.ok(out.some(i => i.t === 'hint' && i.key === 'hello'));
 });
 
-test('首点大叔：hello 入书 + 掉四石 + 进入自由探索', () => {
+test('首碰大叔：掉 hello 四石 + 提示「按 E 捡」', () => {
   const g = createGame(content);
   const out = gameEvent(g, 'INTERACT', 'npc');
-  assert.ok(g.book.has('hello'));
   assert.ok(out.some(i => i.t === 'drop' && i.word === 'hello'));
-  assert.equal(g.beat, 'explore-left');
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'hand'));
+  assert.equal(g.helloDropped, true);
 });
 
-test('黑暗中帽架不可交互；点亮后可碰', () => {
+test('纯手持：E 拾石发声入手上；换手把旧石放回地面；首石提示去合成台', () => {
   const g = createGame(content);
-  assert.ok(gameEvent(g, 'INTERACT', 'hatstand').some(i => i.t === 'blocked'));
-  g.lit = true;
-  assert.ok(gameEvent(g, 'INTERACT', 'hatstand').some(i => i.t === 'drop' && i.word === 'hat'));
+  gameEvent(g, 'INTERACT', 'npc');
+  let out = gameEvent(g, 'PICKUP', 'h');
+  assert.deepEqual(g.hand, { kind: 'stone', ipa: 'h' });
+  assert.ok(out.some(i => i.t === 'carrier' && i.ipa === 'h'));
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'bench'));       // 首石
+  out = gameEvent(g, 'PICKUP', 'ə');
+  assert.deepEqual(g.hand, { kind: 'stone', ipa: 'ə' });
+  assert.ok(out.some(i => i.t === 'dropBack' && i.ipa === 'h'));       // 旧石放回
+  assert.equal(g.stonesPicked, 2);
+  assert.ok(g.inv.everPicked.has('h') && g.inv.everPicked.has('ə'));
 });
 
-test('首石：工具栏滑入恰好一次；合成 light 聪明路径可行', () => {
+test('合成台：手石入库；空手按台无反应', () => {
   const g = createGame(content);
-  let all = [];
-  for (const w of ['hello', 'fire', 'water']) all = all.concat(collect(g, w)); // l/hello aɪ/fire t/water
-  assert.equal(all.filter(i => i.t === 'hotbarShow').length, 1);  // 首颗石时滑入一次
-  for (const ipa of ['l', 'aɪ', 't']) all = all.concat(gameEvent(g, 'PICKUP', ipa));
-  const out = gameEvent(g, 'CRAFT', 'light');
-  assert.ok(g.inv.items.has('light') && g.book.has('light'));
-  assert.ok(out.some(i => i.t === 'resonate' && i.word === 'light'));
-  assert.ok(out.some(i => i.t === 'speak' && i.who === 'child'));
+  gameEvent(g, 'PICKUP', 'h');
+  const out = gameEvent(g, 'BANK');
+  assert.equal(g.hand, null);
+  assert.ok(out.some(i => i.t === 'bank' && i.ipa === 'h'));
+  assert.equal(stoneCount(g.inv, 'h'), 1);
+  assert.deepEqual(gameEvent(g, 'BANK'), []);
 });
 
-test('USE：词具匹配目标才生效；首次 full、重复轻反应；拖错咕哝', () => {
+test('全流程：hello 教学合成（大叔庆祝）→ 开关（Open+掉石+亮）→ open 合成 → 词具开门 → 结算', () => {
   const g = createGame(content);
-  collect(g, 'hello'); collect(g, 'fire'); collect(g, 'water');
-  for (const ipa of ['l', 'aɪ', 't']) gameEvent(g, 'PICKUP', ipa);
-  gameEvent(g, 'CRAFT', 'light');
-  let out = gameEvent(g, 'USE', { word: 'light', target: 'well' });
-  assert.ok(out.some(i => i.t === 'mutter'));
-  out = gameEvent(g, 'USE', { word: 'light', target: 'lamp' });
+  // hello
+  let out = gameEvent(g, 'INTERACT', 'npc');
+  out = out.concat(carry(g, 'hello'));
+  out = out.concat(gameEvent(g, 'CRAFT', 'hello'));
+  assert.ok(g.inv.items.has('hello') && g.book.has('hello'));
+  assert.ok(out.some(i => i.t === 'resonate' && i.word === 'hello'));
+  assert.ok(out.some(i => i.t === 'uncleCheer'));
+  // 开关
+  out = gameEvent(g, 'INTERACT', 'switch');
   assert.equal(g.lit, true);
-  assert.ok(out.some(i => i.t === 'effect' && i.name === 'illuminate' && i.full === true));
-  out = gameEvent(g, 'USE', { word: 'light', target: 'lamp' });
-  assert.ok(out.some(i => i.t === 'effect' && i.full === false));
-});
-
-test('门醒需 5 词；点击低语并只掉一次 open 石；全链路到结算', () => {
-  const g = createGame(content);
-  for (const w of ['hello', 'water', 'fire', 'light']) collect(g, w);
-  assert.equal(g.door.state, 'asleep');
-  collect(g, 'hat');                                             // 第 5 词入书
-  assert.equal(g.door.state, 'pulsing');
-  let out = gameEvent(g, 'DOOR_CLICK');
+  assert.equal(g.switchOn, true);
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'door' && i.text === 'Open.'));
   assert.ok(out.some(i => i.t === 'drop' && i.word === 'open'));
+  assert.ok(out.some(i => i.t === 'illuminate'));
+  // 再点开关：只复读不掉石
+  out = gameEvent(g, 'INTERACT', 'switch');
   assert.ok(out.some(i => i.t === 'speak' && i.who === 'door'));
-  out = gameEvent(g, 'DOOR_CLICK');
-  assert.ok(!out.some(i => i.t === 'drop'));                     // 反复听，不再掉
-  for (const [ipa] of content.words.open.phonemes) gameEvent(g, 'PICKUP', ipa); // 门词无探索点：显式捡门石
-  gameEvent(g, 'CRAFT', 'open');
+  assert.ok(!out.some(i => i.t === 'drop'));
+  // open
+  out = carry(g, 'open');
+  out = out.concat(gameEvent(g, 'CRAFT', 'open'));
+  assert.ok(g.inv.items.has('open'));
+  // 拿起词具 → 门
+  out = gameEvent(g, 'HOLD_ITEM', 'open');
+  assert.deepEqual(g.hand, { kind: 'item', word: 'open' });
   out = gameEvent(g, 'USE', { word: 'open', target: 'door' });
   assert.ok(out.some(i => i.t === 'ritualStart'));
+  assert.equal(g.hand, null);
   gameEvent(g, 'RITUAL_DONE');
   assert.equal(g.door.state, 'opening');
   out = gameEvent(g, 'OPEN_DONE');
   assert.ok(out.some(i => i.t === 'summary'));
-  assert.equal(g.book.size, 6);
+  assert.equal(g.book.size, 2);
+  assert.equal(g.stonesPicked, 8);
 });
 
-test('乱序合成无死局：收齐全部石后按倒序拼，六词全成（规格 §3.2）', () => {
-  const g = createGame(content);
-  const sources = ['hello', 'water', 'fire', 'light', 'hat'];
-  for (const w of sources) {
-    const [id] = Object.entries(content.explorables).find(([, ex]) => ex.word === w);
-    if (id === 'hatstand') g.lit = true;
-    gameEvent(g, 'INTERACT', id);
-    for (const ipa of seq(w)) gameEvent(g, 'PICKUP', ipa);
-  }
-  gameEvent(g, 'DOOR_CLICK');
-  for (const ipa of seq('open')) gameEvent(g, 'PICKUP', ipa);
-  for (const w of ['open', 'hat', 'light', 'fire', 'water', 'hello']) {
-    gameEvent(g, 'CRAFT', w);
-    assert.ok(g.inv.items.has(w), `倒序合成失败: ${w}`);
-  }
-});
-
-test('卡关提示：先报未收集词，再报「该拼词了」，门醒后报门', () => {
+test('拖错/拿错：hello 词具对门 = 咕哝；open 对大叔 = 咕哝；黑暗门不可 E（纯逻辑层面跳过）', () => {
   const g = createGame(content);
   gameEvent(g, 'INTERACT', 'npc');
-  assert.equal(chooseTease(g).kind, 'word');
-  for (const w of ['hello', 'water', 'fire', 'light', 'hat']) collect(g, w === 'hat' ? 'hat' : w);
-  gameEvent(g, 'DOOR_CLICK');
-  for (const ipa of seq('open')) gameEvent(g, 'PICKUP', ipa);
-  // 全部来源已碰、门石已捡：只剩拼词
-  assert.equal(chooseTease(g).kind, 'craft');
-  const g2 = createGame(content);
-  for (const w of ['hello', 'water', 'fire', 'light', 'hat']) collect(g2, w);
-  assert.equal(chooseTease(g2).kind, 'door');
+  carry(g, 'hello');
+  gameEvent(g, 'CRAFT', 'hello');
+  assert.ok(gameEvent(g, 'USE', { word: 'hello', target: 'door' }).some(i => i.t === 'mutter'));
+  assert.ok(gameEvent(g, 'USE', { word: 'open', target: 'npc' }).every(i => i.t === 'mutter'));
 });
 
-test('jump 调试拍：lit-right / door-awake / door-open / summary 状态正确', () => {
+test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应', () => {
   const g = createGame(content);
-  jump(g, 'lit-right');
+  gameEvent(g, 'INTERACT', 'npc');
+  carry(g, 'hello');
+  gameEvent(g, 'CRAFT', 'hello');
+  gameEvent(g, 'HOLD_ITEM', 'hello');
+  let out = gameEvent(g, 'INTERACT', 'npc');                            // 手持 hello 碰大叔 = USE
+  assert.ok(out.some(i => i.t === 'effect' && i.name === 'greet' && i.full === true));
+  gameEvent(g, 'HOLD_ITEM', 'hello');
+  out = gameEvent(g, 'INTERACT', 'npc');
+  assert.ok(out.some(i => i.t === 'effect' && i.full === false));
+});
+
+test('氛围物：只出音效指令，永不掉石', () => {
+  const g = createGame(content);
+  for (const id of ['well', 'brazier', 'hatstand', 'sprout']) {
+    const out = gameEvent(g, 'INTERACT', id);
+    assert.ok(out.length === 1 && out[0].t === 'sfx', `${id} 应只出音效`);
+  }
+  assert.ok(gameEvent(g, 'INTERACT', 'cat').some(i => i.t === 'cat'));
+});
+
+test('TICK 卡关提示链：捡石 → 开关 → 合成 → 去门', () => {
+  const g = createGame(content);
+  assert.equal(chooseTease(g).kind, 'hello');
+  gameEvent(g, 'INTERACT', 'npc');
+  assert.equal(chooseTease(g).key, 'hand');
+  carry(g, 'hello'); gameEvent(g, 'CRAFT', 'hello');
+  assert.equal(chooseTease(g).key, 'switch');
+  gameEvent(g, 'INTERACT', 'switch');
+  carry(g, 'open');
+  assert.equal(chooseTease(g).key, 'craft');
+  gameEvent(g, 'CRAFT', 'open');
+  assert.equal(chooseTease(g).key, 'openItem');
+});
+
+test('jump 调试拍：hello / lit / door-open / summary 状态正确且不重复掉落', () => {
+  const g = createGame(content);
+  jump(g, 'lit');
+  assert.equal(g.book.has('hello'), true);
   assert.equal(g.lit, true);
-  assert.equal(g.book.size, 4);
-  jump(g, 'door-awake');
-  assert.equal(g.book.size, 5);
-  assert.ok(['pulsing', 'whispered'].includes(g.door.state));
   jump(g, 'door-open');
-  assert.equal(g.inv.items.has('open'), true);
+  assert.ok(g.inv.items.has('open'));
   assert.ok(['opening', 'opened'].includes(g.door.state));
   jump(g, 'summary');
   assert.equal(g.door.state, 'opened');
-});
-
-test('修正（Task 6 评审）：hello 最后入书也立即唤醒门', () => {
-  const g = createGame(content);
-  for (const w of ['water', 'fire', 'light']) collect(g, w);          // 3 词先合成入书
-  gameEvent(g, 'USE', { word: 'light', target: 'lamp' });             // 点亮右侧（hatstand 需 lit）
-  collect(g, 'hat');                                                  // 第 4 词入书
-  assert.equal(g.book.size, 4);
-  assert.equal(g.door.state, 'asleep');
-  const out = gameEvent(g, 'INTERACT', 'npc');                        // hello = 第 5 词，经首点入书
-  assert.equal(g.book.size, 5);
-  assert.equal(g.door.state, 'pulsing');
-  assert.ok(out.some(i => i.t === 'doorAwake'));
-});
-
-test('TICK 累积 45s 触发提示并复位；仪式/结算期静默（Task 13 评审修正）', () => {
-  const g = createGame(content);
-  let out = [];
-  for (let i = 0; i < 44; i++) out = gameEvent(g, 'TICK', 1);
-  assert.equal(out.length, 0);
-  out = gameEvent(g, 'TICK', 1);
-  assert.ok(out.some(i => i.t === 'speak' && i.who === 'uncle'));
-  assert.equal(g.teaseClock, 0);                                // 触发后复位
-  // 仪式/结算期静默
-  const g2 = createGame(content);
-  for (const w of ['hello', 'water', 'fire', 'light']) collect(g2, w);
-  gameEvent(g2, 'USE', { word: 'light', target: 'lamp' });       // 点亮：帽架可碰（hat 需 lit）
-  collect(g2, 'hat');
-  gameEvent(g2, 'DOOR_CLICK');
-  for (const [ipa] of content.words.open.phonemes) gameEvent(g2, 'PICKUP', ipa);
-  gameEvent(g2, 'CRAFT', 'open');
-  gameEvent(g2, 'USE', { word: 'open', target: 'door' });
-  assert.equal(g2.door.state, 'ritual');
-  assert.equal(gameEvent(g2, 'DOOR_CLICK').length, 0);           // 仪式期点门静默
-  for (let i = 0; i < 100; i++) assert.equal(gameEvent(g2, 'TICK', 1).length, 0);
-});
-
-test('CRAFT 未知词静默；unlock 失败不烧 usedTargets、仪式成功才烧（Task 13 评审修正）', () => {
-  const g = createGame(content);
-  assert.equal(gameEvent(g, 'CRAFT', 'nope').length, 0);         // 未知词守卫
-  for (const w of ['hello', 'water', 'fire', 'light']) collect(g, w);
-  gameEvent(g, 'USE', { word: 'light', target: 'lamp' });
-  collect(g, 'hat');                                            // 5 词 → 门 pulsing（尚未点击低语）
-  for (const [ipa] of content.words.open.phonemes) gameEvent(g, 'PICKUP', ipa);
-  gameEvent(g, 'CRAFT', 'open');
-  let out = gameEvent(g, 'USE', { word: 'open', target: 'door' }); // 门未低语：OFFER 失败
-  assert.ok(out.some(i => i.t === 'mutter'));
-  assert.equal(g.door.state, 'pulsing');
-  assert.ok(!g.usedTargets.has('door'));                        // 未烧：仍可重试
-  gameEvent(g, 'DOOR_CLICK');                                   // → whispered
-  out = gameEvent(g, 'USE', { word: 'open', target: 'door' });
-  assert.ok(out.some(i => i.t === 'ritualStart'));
-  assert.ok(g.usedTargets.has('door'));                         // 仪式成功才烧
+  assert.equal(g.stonesPicked, 8);
 });

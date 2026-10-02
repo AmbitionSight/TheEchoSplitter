@@ -5,7 +5,7 @@ export const LAYOUT = {
   obstacles: [
     { id: 'well', x: 210, y: 470, r: 46 },
     { id: 'brazier', x: 480, y: 480, r: 40 },
-    { id: 'lamp', x: 620, y: 340, r: 34 },
+    { id: 'bench', x: 640, y: 616, r: 36 },
     { id: 'hatstand', x: 980, y: 520, r: 34 },
     { id: 'npc', x: 400, y: 430, r: 38 },
     { id: 'sprout', x: 330, y: 570, r: 28 },
@@ -13,9 +13,10 @@ export const LAYOUT = {
   ],
   targets: {
     npc: { x: 400, y: 430, r: 60 }, well: { x: 210, y: 470, r: 56 },
-    brazier: { x: 480, y: 480, r: 52 }, lamp: { x: 620, y: 340, r: 56 },
-    hatstand: { x: 980, y: 520, r: 52 }, sprout: { x: 330, y: 570, r: 46 },
-    torches: { x: 980, y: 260, r: 130 }, door: { x: 1145, y: 430, r: 95 }
+    brazier: { x: 480, y: 480, r: 52 }, sprout: { x: 330, y: 570, r: 46 },
+    cat: { x: 560, y: 560, r: 50 }, hatstand: { x: 980, y: 520, r: 52 },
+    switch: { x: 660, y: 282, r: 120 }, bench: { x: 640, y: 616, r: 85 },
+    door: { x: 1145, y: 430, r: 95 }
   },
   INTERACT_R: 170, MAGNET_R: 46
 };
@@ -105,7 +106,7 @@ export function magnetStep(s, player, dt) {
 // ================= 渲染层（DOM 只在函数内） =================
 import { PAL, drawRune } from './art.js';
 
-const LIGHT_CENTER = { x: 740, y: 350 };   // 灯柱悬臂灯头
+const LIGHT_CENTER = { x: 950, y: 110 };   // 右半吸顶灯
 
 function thick(ctx, w = 5, color = PAL.ink) {
   ctx.lineWidth = w; ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -179,22 +180,23 @@ export function prerenderStatic() {
   for (const dx of [-30, 0, 30]) {
     x.beginPath(); x.moveTo(480 + dx, 500); x.lineTo(480 + dx * 1.3, 522); x.stroke();
   }
-  // —— 灯柱（柱+悬臂+吊灯笼架，火苗动态画）——
-  thick(x, 7, PAL.wood2);
-  x.beginPath(); x.moveTo(620, 480); x.lineTo(620, 320); x.stroke();          // 立柱
-  x.beginPath(); x.moveTo(620, 322); x.lineTo(744, 330); x.stroke();          // 悬臂
-  x.strokeStyle = '#c9b18a'; x.lineWidth = 2;
-  x.beginPath(); x.moveTo(620, 324); x.lineTo(742, 300); x.stroke();          // 拉索
-  x.beginPath(); x.moveTo(740, 332); x.lineTo(740, 350); x.stroke();          // 吊杆
-  // 灯头笼
+  // —— 合成台（房间下方居中：木桌面 + 腿 + 四道石槽刻痕）——
   x.fillStyle = PAL.wood;
   x.beginPath();
-  x.moveTo(722, 352); x.lineTo(758, 352); x.lineTo(752, 386); x.lineTo(728, 386); x.closePath();
+  x.moveTo(584, 596); x.lineTo(696, 596); x.lineTo(704, 616); x.lineTo(576, 616); x.closePath();
+  x.fill(); thick(x, 5); x.stroke();
+  x.fillStyle = PAL.wood3; x.fillRect(576, 616, 128, 10);
+  thick(x, 5, PAL.wood2);
+  x.beginPath(); x.moveTo(592, 626); x.lineTo(586, 654); x.stroke();
+  x.beginPath(); x.moveTo(688, 626); x.lineTo(694, 654); x.stroke();
+  x.strokeStyle = PAL.ink; x.lineWidth = 2;
+  for (let i = 0; i < 4; i++) { x.strokeRect(602 + i * 22, 600, 16, 8); }     // 四道石槽刻痕
+  // —— 右半吸顶灯（底盘 + 灯罩；光由动态层画）——
+  x.fillStyle = PAL.stoneD;
+  x.fillRect(930, 28, 40, 8);
+  x.fillStyle = '#c9c2b2';
+  x.beginPath(); x.moveTo(924, 36); x.lineTo(976, 36); x.lineTo(962, 56); x.lineTo(938, 56); x.closePath();
   x.fill(); thick(x, 4); x.stroke();
-  // 拉闸开关（柱身）
-  x.strokeStyle = PAL.ink; x.lineWidth = 4;
-  x.beginPath(); x.moveTo(600, 400); x.lineTo(588, 412); x.stroke();
-  x.beginPath(); x.arc(588, 412, 4, 0, 7); x.fillStyle = PAL.ink; x.fill();
   // —— 枯苗陶盆（花动态画）——
   x.fillStyle = '#b06a3f';
   x.beginPath();
@@ -298,8 +300,8 @@ export function drawScene(x, sc, view) {
     x.beginPath(); x.moveTo(958, 462); x.quadraticCurveTo(980, 424, 1002, 462); x.closePath(); x.fill(); x.stroke();
     x.fillStyle = PAL.hatD; x.fillRect(960, 458, 40, 6);
   }
-  drawTorch(x, 900, 190, view.torchesLit, t, 3);
-  drawTorch(x, 1060, 190, view.torchesLit, t, 4);
+  drawTorch(x, 900, 190, false, t, 3);                                           // 右墙火把：纯装饰（v2 不点燃）
+  drawTorch(x, 1060, 190, false, t, 4);
   // 木门（绕左轴收窄，规格 §6.3）
   x.save();
   x.translate(1096, 0);
@@ -313,7 +315,7 @@ export function drawScene(x, sc, view) {
   x.beginPath(); x.moveTo(1096, 442); x.arc(1144, 442, 48, Math.PI, 0); x.lineTo(1192, 442); x.closePath(); x.fill(); x.stroke();
   x.fillStyle = '#565b63';
   x.fillRect(1096, 452, 96, 8); x.fillRect(1096, 480, 96, 8);               // 铁箍
-  drawRune(x, 'ᛟ', 1144, 462, 40, view.doorState === 'asleep' ? 'rgba(30,32,44,.8)' : PAL.glowRune, view.doorState === 'asleep' ? 5 : 6);
+  drawRune(x, 'ᛟ', 1144, 462, 40, view.doorState === 'closed' ? 'rgba(30,32,44,.8)' : PAL.glowRune, view.doorState === 'closed' ? 5 : 6);
   x.restore();
   x.restore();
   // —— 门后金光（开门时）——
@@ -332,17 +334,27 @@ export function drawScene(x, sc, view) {
     }
     x.restore();
   }
-  // —— 门符文脉动 ——
-  if (view.doorState === 'pulsing' || view.doorState === 'whispered') {
+  // —— 门符文脉动（仪式中）——
+  if (view.doorState === 'ritual') {
     glow(x, 1144, 462, 60 + view.doorPulse * 26, 'rgba(84,224,200,ALPHA)', 0.22 + view.doorPulse * 0.2);
+  }
+  // —— 墙上开关面板（明暗分界；未按时青光脉动 beckoning）——
+  {
+    const on = view.switchOn;
+    thick(x, 3, PAL.stoneD);
+    x.fillStyle = '#d8d3c6';
+    x.fillRect(650, 268, 22, 32); x.strokeRect(650, 268, 22, 32);
+    x.fillStyle = on ? '#7bd88f' : '#8a8375';
+    x.fillRect(655, on ? 284 : 274, 12, 10);
+    if (!on) glow(x, 661, 284, 40 + view.doorPulse * 14, 'rgba(123,216,143,ALPHA)', 0.3 + view.doorPulse * 0.25);
   }
   // —— 火光们 ——
   flame(x, 480, 470, 30, t, 1); glow(x, 480, 472, 130, 'rgba(255,140,60,ALPHA)', 0.3);   // 火盆
   drawTorch(x, 140, 190, true, t, 5); drawTorch(x, 300, 190, true, t, 6);                // 左墙火把恒亮
-  if (view.lit > 0.02) {                                                                  // 灯柱灯头
+  if (view.lit > 0.02) {                                                                  // 吸顶灯亮起
     x.save(); x.globalAlpha = view.lit;
-    flame(x, 740, 362, 20, t, 2);
-    glow(x, 740, 364, 200, 'rgba(255,210,122,ALPHA)', 0.34);
+    glow(x, 950, 58, 340, 'rgba(255,224,150,ALPHA)', 0.4);
+    glow(x, 950, 54, 62, 'rgba(255,240,200,ALPHA)', 0.75);
     x.restore();
   }
   // —— 枯苗/花 ——

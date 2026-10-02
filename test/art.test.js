@@ -32,7 +32,7 @@ test('48 个卢文字形都有折线数据（0..1 归一，线段合法）', () 
 
 test('PAL 与 ICON_TYPES 齐备', () => {
   for (const k of ['ink','vowel','cons','glowRune','gold','uiBlue']) assert.ok(PAL[k]);
-  assert.deepEqual([...ICON_TYPES].sort(), ['fire','gem','hat','hello','light','open','water']);
+  assert.deepEqual([...ICON_TYPES].sort(), ['fire','gem','hat','hello','light','open','switch','water']);
 });
 
 test('drawIcon / drawRune 在桩 ctx 上可执行且确实作画', () => {
