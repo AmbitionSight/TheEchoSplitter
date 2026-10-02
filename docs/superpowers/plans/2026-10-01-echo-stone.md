@@ -1195,6 +1195,14 @@ test('磁吸：46px 内进入磁吸态并最终判定拾取', () => {
   for (let i = 0; i < 60 && !picked; i++) picked = magnetStep(s, player, 0.016);
   assert.ok(picked);
 });
+
+test('磁吸：大 dt（0.05）也不越过玩家导致永久振荡（回归）', () => {
+  const s = { ipa: 'l', x: 20, y: 0, vx: 0, vy: 0, state: 'idle', t: 0 };
+  const player = { x: 0, y: 0 };
+  let picked = false;
+  for (let i = 0; i < 60 && !picked; i++) picked = magnetStep(s, player, 0.05);
+  assert.ok(picked);
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -1304,8 +1312,9 @@ export function magnetStep(s, player, dt) {
   if (!s.magnet && d > LAYOUT.MAGNET_R) return false;
   s.magnet = true;
   const sp = 900 * dt;
-  s.x += (dx / (d || 1)) * sp;
-  s.y += (dy / (d || 1)) * sp;
+  const step = Math.min(sp, d);              // 不越过玩家：至多走完剩余距离，杜绝大 dt 下的两侧振荡死循环
+  s.x += (dx / (d || 1)) * step;
+  s.y += (dy / (d || 1)) * step;
   return d < 14;
 }
 ```

@@ -96,7 +96,8 @@ export function magnetStep(s, player, dt) {
   if (!s.magnet && d > LAYOUT.MAGNET_R) return false;
   s.magnet = true;
   const sp = 900 * dt;
-  s.x += (dx / (d || 1)) * sp;
-  s.y += (dy / (d || 1)) * sp;
+  const step = Math.min(sp, d);              // 不越过玩家：至多走完剩余距离，杜绝大 dt 下的两侧振荡死循环
+  s.x += (dx / (d || 1)) * step;
+  s.y += (dy / (d || 1)) * step;
   return d < 14;
 }
