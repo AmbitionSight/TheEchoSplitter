@@ -727,7 +727,8 @@ export const RUNE_STROKES = {
   'ᛚ': [[0,0,0,1],[0,.25,.5,.1],[0,.55,.3,.45],[.3,.45,.3,.75]],
   'ᚱ': [[0,0,0,1],[0,.2,.45,.15],[.45,.15,.45,.4],[.45,.4,0,.45]],
   'ᛅ': [[0,0,0,1],[0,.5,.45,.3]],
-  'ᚹ': [[0,0,0,1],[0,.3,.45,.2],[.45,.2,.45,.45],[.45,.45,0,.6]]
+  'ᚹ': [[0,0,0,1],[0,.3,.45,.2],[.45,.2,.45,.45],[.45,.45,0,.6]],
+  'ᛟ': [[.5,0,.85,.5],[.85,.5,.5,1],[.5,1,.15,.5],[.15,.5,.5,0]], // ᛟ 门之符文（规格 §6.1，非音素）
 };
 
 export function drawRune(ctx, glyph, cx, cy, size, color = PAL.glowRune, lw = null) {
@@ -842,7 +843,9 @@ const ICON_DRAW = {
 };
 
 export function drawIcon(ctx, type, cx, cy, size) {
+  ctx.save();
   (ICON_DRAW[type] || ICON_DRAW.gem)(ctx, cx, cy, size);
+  ctx.restore();
 }
 
 // —— dataURL（DOM 用；仅函数内触碰 document）——
