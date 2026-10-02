@@ -37,12 +37,33 @@ export class Speech {
       ?? (t => (typeof SpeechSynthesisUtterance !== 'undefined' ? new SpeechSynthesisUtterance(t) : null));
   }
   get ready() { return !!this.synth; }
+  // 静音热身：开局预触发一次（音量为 0），让移动端把网络音型提前拉好
+  warmup() {
+    if (!this.synth) return;
+    try {
+      const u = this.makeUtterance(' ');
+      if (!u) return;
+      u.volume = 0;
+      this.synth.speak(u);
+    } catch { /* 无声失败不影响流程 */ }
+  }
   speak(text, { voice = null, pitch = 1, rate = 1, onStart = null, onPulse = null } = {}) {
     return new Promise(resolve => {
       const est = estimateMs(text, rate);
-      let done = false;
-      const finish = () => { if (done) return; done = true; clearTimeout(timer); clearInterval(pulseIv); resolve(); };
-      const timer = setTimeout(finish, est + 400); // 兜底：永不低于估算+400ms
+      let done = false, started = false;
+      const finish = () => {
+        if (done) return; done = true;
+        clearTimeout(timer); clearTimeout(startWatch); clearInterval(pulseIv);
+        resolve();
+      };
+      const timer = setTimeout(finish, est + 400);       // 兜底：永不低于估算+400ms
+      // 起音看门狗：1.2s 内没真正开口（移动端网络音型哑火/被系统拦截）→ 取消这句放行队列，
+      // 绝不让一句死台词把后面所有话都堵住（内网多设备实测的延迟根因）。
+      const startWatch = setTimeout(() => {
+        if (done || started) return;
+        try { this.synth?.cancel(); } catch { /* ignore */ }
+        finish();
+      }, 1200);
       let pulseIv = 0;
       const startPulse = () => {
         if (!onPulse || pulseIv) return;
@@ -52,7 +73,7 @@ export class Speech {
       try { u = this.synth ? this.makeUtterance(text) : null; } catch { u = null; }
       if (!u) { if (onStart) onStart(); setTimeout(finish, 50); return; } // 无 TTS：立刻走，绝不卡死
       u.pitch = pitch; u.rate = rate; if (voice) u.voice = voice;
-      u.onstart = () => { if (onStart) onStart(); startPulse(); };
+      u.onstart = () => { started = true; clearTimeout(startWatch); if (onStart) onStart(); startPulse(); };
       u.onend = finish;
       u.onerror = finish;
       if (onPulse) u.onboundary = () => onPulse();
