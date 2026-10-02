@@ -1,0 +1,23 @@
+{
+  "meta": { "title": "回响之石 · 第三间房", "titleEn": "ROOM THREE", "chapter": 3,
+            "intro": ["崖壁下面只有一条窄路。", "头顶的墙上，垂着一截断掉的绳子。", "上面，风的声音更大了。"] },
+  "words": {
+    "rope": { "icon": "rope", "phonemes": [["r",90],["əʊ",160],["p",80]],
+               "use": { "target": "rope", "effect": "mendRope", "once": true } }
+  },
+  "flows": {
+    "rope": { "listen": ["Rope."], "puzzled": ["Rope?"], "drop": [880, 600] }
+  },
+  "carriers": { "r": "Err.", "əʊ": "Oh.", "p": "P." },
+  "geometry": { "wallX": 900, "wallW": 110, "groundY": 620, "topY": 120, "exitX": 1160, "benchX": 420, "spawnX": 140 },
+  "hints": {
+    "start": "墙太高了，跳不上去。看看那截绳子。",
+    "attempt": "断掉的绳子也在等人。按 E 听听它。",
+    "carrying": "按 E 捡起声音石，搬到木桌上按 E 放下。",
+    "craft": "把声音石拖进右下角的槽——拼出一个词。",
+    "give": "点一下物品栏里的绳圈，拿在手上，对断绳按 E。",
+    "mended": "绳子接好了！站在绳下，按住 ↑ 往上爬。",
+    "top": "翻上去了！右边的门……按 E。",
+    "end": "风从更深的黑暗里吹来。（第四章 · 未完待续）"
+  }
+}

@@ -212,6 +212,7 @@ import { LAYOUT, createScene, initScene, updateScene, drawScene, drawOverlay,
 import { createActors, updateActors, drawPlayer, drawNpc, drawCat, setGesture } from './actors.js';
 import { createUI } from './ui.js';
 import { RITUAL_STEP, ritualSeats } from './door.js';
+import { loadProfile, saveProfile, mergeProfile } from './profile.js';
 
 function boot() {
   const el = id => document.getElementById(id);
@@ -340,7 +341,17 @@ function start(content) {
         case 'effect': applyEffect(ins.name, ins.full); break;
         case 'ritualStart': startRitual(); break;
         case 'openAnim': openDoor(); break;
-        case 'summary': ui.summary(game); break;
+        case 'summary': {
+          const p = mergeProfile(loadProfile(localStorage), {
+            everPicked: [...game.inv.everPicked], words: [...game.book], chapter: 1
+          });
+          saveProfile(localStorage, p);                                 // 声音书档：过关存档
+          ui.summary(game);
+          const walk = document.getElementById('btn-walk');
+          walk.textContent = '下一间房 →';
+          walk.onclick = () => { location.href = 'chapter2.html'; };
+          break;
+        }
       }
     }
   }
