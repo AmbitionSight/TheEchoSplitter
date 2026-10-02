@@ -368,9 +368,9 @@ git commit -m "feat: 零依赖服务器与 chapter1 内容（含内容不变量�
   </div>
 
   <div id="toast" class="glass hidden"></div>
-  <div id="drag-ghost" class="hidden"></div>
 </div>
 <script type="module" src="js/main.js"></script>
+<div id="drag-ghost" class="hidden"></div>
 </body>
 </html>
 ```
