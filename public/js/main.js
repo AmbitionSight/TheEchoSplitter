@@ -271,7 +271,7 @@ function start(content) {
   const sc = createScene(); initScene(sc);
   const stones = [];
   const view = { t: 0, lit: 0, doorState: 'closed', doorPulse: 0, doorOpen: 0,
-                 torchesLit: false, bloomed: false, hatOn: false, switchOn: false };
+                 torchesLit: false, bloomed: false, hatOn: false, switchOn: false, benchHot: false };
   const ritual = { active: false, t: 0, seated: 0 };
   let walkTarget = null, pendingInteract = null, started = false;
   let eTarget = null;                                   // 当前 E 可交互目标
@@ -477,6 +477,7 @@ function start(content) {
     view.t += dt;
     view.doorState = game.door.state;
     view.doorPulse = (Math.sin(view.t * 2.4) + 1) / 2;
+    view.benchHot = game.hand?.kind === 'stone';
     updateScene(sc, dt, game.lit ? 1 : 0);
     view.lit = sc.lit;
     updateActors(actors, dt);
