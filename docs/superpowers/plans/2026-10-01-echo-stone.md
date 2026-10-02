@@ -2500,7 +2500,7 @@ export function canPlace(slots, inv, ipa) {
   return inSlots < stoneCount(inv, ipa);
 }
 
-export function createHotbar({ words, onSpeakCarrier, onSpeakWord, onCraft, onDropItem }) {
+export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord, onCraft, onDropItem }) {
   const el = id => document.getElementById(id);
   const root = el('hotbar'), craftRow = el('craft-row');
   const stoneBox = el('stone-cells'), itemBox = el('item-cells');
@@ -2513,7 +2513,7 @@ export function createHotbar({ words, onSpeakCarrier, onSpeakWord, onCraft, onDr
     slotEls.forEach((s, i) => {
       s.textContent = slots[i] || '';
       s.className = 'slot' + (slots[i] ? ' filled' : '');
-      if (words.crafting?.progressiveGlow !== false) {
+      if (crafting.progressiveGlow !== false) {
         const m = inv ? craftMatch(slots, words, inv) : { word: null, glowDepth: 0 };
         const d = m.word ? 3 : m.glowDepth;
         s.classList.remove('g1', 'g2', 'g3');
@@ -2631,18 +2631,38 @@ export function createHotbar({ words, onSpeakCarrier, onSpeakWord, onCraft, onDr
 }
 ```
 
-- [ ] **Step 2: Node 冒烟**
+- [ ] **Step 2: Node 冒烟 + 纯函数测试**
 
-Run: `node --test`
-Expected: 全 pass（`iconURL`/DOM 都在函数体内，`virtualInventory` 为纯函数）。
+Run: `timeout 60 node --test`
+Expected: 49 pass（45 + 4 新增；`iconURL`/DOM 都在函数体内，顶层保持纯）。
 
-补一条纯函数测试到 `test/hotbar.test.js`：先把文件顶部 import 列表加入 `canPlace`，再追加：
+补纯函数测试到 `test/hotbar.test.js`：先把文件顶部 import 列表加入 `canPlace` 与 `isVowel`，再追加：
 ```js
 test('canPlace：槽内同音素数不得超过库存', () => {
   const inv = invWith([['t', 2]]);
   assert.equal(canPlace([null, null, null, null], inv, 't'), true);
   assert.equal(canPlace(['t', null, null, null], inv, 't'), true);   // 已放 1，还有 1
   assert.equal(canPlace(['t', 't', null, null], inv, 't'), false);   // 已放 2，放不下第 3 颗
+});
+
+test('渐进共鸣跨候选词取最大（回归）', () => {
+  const inv = invWith([['h', 1], ['æ', 1], ['ə', 1]]);
+  assert.equal(craftMatch(['h', 'æ', null, null], WORDS, inv).glowDepth, 2);  // hat 前缀胜过 hello 的 1
+  assert.equal(craftMatch(['h', 'ə', null, null], WORDS, inv).glowDepth, 2);  // hello 前缀胜过 hat 的 1
+});
+
+test('重复音素多重集消耗（回归）', () => {
+  const inv = invWith([['ə', 2], ['h', 1], ['l', 1], ['əʊ', 1]]);
+  assert.equal(canConsume(inv, ['h', 'ə', 'l', 'əʊ']), true);
+  assert.ok(consume(inv, ['h', 'ə', 'l', 'əʊ']));
+  assert.equal(stoneCount(inv, 'ə'), 1);
+  const inv2 = invWith([['ə', 1]]);
+  assert.equal(canConsume(inv2, ['ə', 'ə']), false);                          // 一颗 ə 拼不出两颗
+});
+
+test('isVowel：20 个元音音素分类正确', () => {
+  assert.ok(isVowel('əʊ') && isVowel('aɪ') && isVowel('æ'));
+  assert.ok(!isVowel('t') && !isVowel('p') && !isVowel('ŋ'));
 });
 ```
 
