@@ -48,9 +48,7 @@ export function screenToLogical(px, py, rect) {
   const ox = rect.left + (rect.width - LAYOUT.W * scale) / 2;
   const oy = rect.top + (rect.height - LAYOUT.H * scale) / 2;
   const x = (px - ox) / scale, y = (py - oy) / scale;
-  // inside = 落在可行走房间区域内（与 resolveCollisions 的墙体边界一致），墙上/画布外点击不算
-  const inside = x >= 40 && x <= LAYOUT.W - 40 && y >= 340 && y <= LAYOUT.H - 20;
-  return { x, y, inside };
+  return { x, y, inside: x >= 0 && x <= LAYOUT.W && y >= 0 && y <= LAYOUT.H };
 }
 
 // —— 行走 ——

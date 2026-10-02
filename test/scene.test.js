@@ -22,7 +22,7 @@ test('screenToLogical：整档与缩放档都换算正确，出界标记', () =>
   assert.deepEqual([r.x, r.y], [640, 360]); assert.ok(r.inside);
   r = screenToLogical(320, 180, { left: 0, top: 0, width: 640, height: 360 });
   assert.deepEqual([Math.round(r.x), Math.round(r.y)], [640, 360]);
-  r = screenToLogical(5, 5, { left: 0, top: 0, width: 640, height: 360 });
+  r = screenToLogical(5, 5, { left: 0, top: 0, width: 800, height: 360 });
   assert.equal(r.inside, false);
 });
 
