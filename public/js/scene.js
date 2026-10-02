@@ -5,7 +5,7 @@ export const LAYOUT = {
   obstacles: [
     { id: 'well', x: 210, y: 470, r: 46 },
     { id: 'brazier', x: 480, y: 480, r: 40 },
-    { id: 'bench', x: 640, y: 616, r: 36 },
+    { id: 'bench', x: 640, y: 560, r: 34 },
     { id: 'hatstand', x: 980, y: 520, r: 34 },
     { id: 'npc', x: 400, y: 430, r: 38 },
     { id: 'sprout', x: 330, y: 570, r: 28 },
@@ -15,7 +15,7 @@ export const LAYOUT = {
     npc: { x: 400, y: 430, r: 60 }, well: { x: 210, y: 470, r: 56 },
     brazier: { x: 480, y: 480, r: 52 }, sprout: { x: 330, y: 570, r: 46 },
     cat: { x: 560, y: 560, r: 50 }, hatstand: { x: 980, y: 520, r: 52 },
-    switch: { x: 660, y: 282, r: 120 }, bench: { x: 640, y: 616, r: 85 },
+    switch: { x: 660, y: 282, r: 120 }, bench: { x: 640, y: 556, r: 85 },
     door: { x: 1145, y: 430, r: 95 }
   },
   INTERACT_R: 170, MAGNET_R: 46
@@ -120,8 +120,8 @@ function shade(hex, f) {
   return `rgb(${r0},${g0},${b0})`;
 }
 
-// 合成台石槽中心（v2：厚木板工桌 + 四个内凹石槽；拿石时由动态层点亮）
-export const BENCH_SOCKETS = [[602, 597], [631, 597], [660, 597], [689, 597]];
+// 合成台石槽中心（v2.1：上移避开底部工具栏；拿石时由动态层点亮）
+export const BENCH_SOCKETS = [[592, 541], [624, 541], [656, 541], [688, 541]];
 
 export function prerenderStatic() {
   const c = document.createElement('canvas');
@@ -229,40 +229,46 @@ export function prerenderStatic() {
   for (const dx of [-30, 0, 30]) {
     x.beginPath(); x.moveTo(480 + dx, 500); x.lineTo(480 + dx * 1.3, 522); x.stroke();
   }
-  // —— 合成台 v2（MC 风工桌：厚板面 + 裙边 + 粗腿 + 内嵌石槽板）——
+  // —— 合成台 v2.1（MC 风工桌：上移全露、厚板 + 粗腿 + 内嵌石槽 + 蜡烛座）——
   x.fillStyle = 'rgba(0,0,0,.25)';
-  x.beginPath(); x.ellipse(640, 662, 96, 18, 0, 0, 7); x.fill();              // 落地影
-  for (const lx of [578, 702]) {                                              // 粗腿（梯形）
+  x.beginPath(); x.ellipse(640, 600, 96, 17, 0, 0, 7); x.fill();              // 落地影
+  for (const lx of [574, 706]) {                                              // 粗腿（梯形）
     x.fillStyle = shade(PAL.wood2, lx < 640 ? -0.06 : 0.06);
     x.beginPath();
-    x.moveTo(lx - 11, 606); x.lineTo(lx + 11, 606); x.lineTo(lx + 8, 660); x.lineTo(lx - 8, 660); x.closePath();
+    x.moveTo(lx - 11, 552); x.lineTo(lx + 11, 552); x.lineTo(lx + 8, 598); x.lineTo(lx - 8, 598); x.closePath();
     x.fill(); thick(x, 5, PAL.ink); x.stroke();
   }
   x.fillStyle = PAL.wood2;                                                    // 横撑
-  x.fillRect(585, 636, 110, 9);
-  thick(x, 4, PAL.ink); x.strokeRect(585, 636, 110, 9);
+  x.fillRect(582, 574, 116, 9);
+  thick(x, 4, PAL.ink); x.strokeRect(582, 574, 116, 9);
   x.fillStyle = PAL.wood;                                                     // 桌面大厚板
   x.beginPath();
-  if (x.roundRect) x.roundRect(556, 580, 168, 30, 7); else x.rect(556, 580, 168, 30);
+  if (x.roundRect) x.roundRect(552, 526, 176, 30, 7); else x.rect(552, 526, 176, 30);
   x.fill(); thick(x, 6, PAL.ink); x.stroke();
   x.strokeStyle = 'rgba(0,0,0,.18)'; x.lineWidth = 2;
-  for (const sy of [590, 600]) { x.beginPath(); x.moveTo(562, sy); x.lineTo(718, sy); x.stroke(); }
+  for (const sy of [536, 546]) { x.beginPath(); x.moveTo(558, sy); x.lineTo(722, sy); x.stroke(); }
   x.fillStyle = 'rgba(255,236,200,.14)';
-  x.fillRect(560, 583, 160, 3);                                               // 顶面亮线
+  x.fillRect(556, 529, 168, 3);                                               // 顶面亮线
   x.fillStyle = shade(PAL.wood2, -0.12);                                      // 裙边
-  x.fillRect(564, 610, 152, 12);
-  thick(x, 4, PAL.ink); x.strokeRect(564, 610, 152, 12);
-  drawRune(x, 'ᚹ', 640, 616, 14, 'rgba(217,164,65,.5)', 2);
+  x.fillRect(560, 556, 160, 12);
+  thick(x, 4, PAL.ink); x.strokeRect(560, 556, 160, 12);
+  drawRune(x, 'ᚹ', 640, 562, 14, 'rgba(217,164,65,.5)', 2);
   x.fillStyle = shade(PAL.stoneD, -0.25);                                     // 内嵌石槽板
   x.beginPath();
-  if (x.roundRect) x.roundRect(574, 584, 132, 22, 8); else x.rect(574, 584, 132, 22);
+  if (x.roundRect) x.roundRect(570, 530, 140, 22, 8); else x.rect(570, 530, 140, 22);
   x.fill(); thick(x, 3.5, PAL.ink); x.stroke();
   for (const [sx, sy] of BENCH_SOCKETS) {                                     // 四个内凹圆槽
     x.fillStyle = 'rgba(0,0,0,.4)';
-    x.beginPath(); x.arc(sx, sy, 8, 0, 7); x.fill();
+    x.beginPath(); x.arc(sx, sy, 9, 0, 7); x.fill();
     x.strokeStyle = 'rgba(255,255,255,.10)'; x.lineWidth = 1.5;
-    x.beginPath(); x.arc(sx, sy, 8, -2.2, 0.6); x.stroke();
+    x.beginPath(); x.arc(sx, sy, 9, -2.2, 0.6); x.stroke();
   }
+  // 蜡烛座（桌角，火苗由动态层画）
+  x.fillStyle = '#d8d3c6';
+  x.fillRect(698, 512, 8, 14);
+  thick(x, 3, PAL.ink); x.strokeRect(698, 512, 8, 14);
+  x.fillStyle = '#9a958a';
+  x.fillRect(700, 520, 4, 6);
   // —— 右半吸顶灯（底盘 + 灯罩；光由动态层画）——
   x.fillStyle = PAL.stoneD;
   x.fillRect(930, 28, 40, 8);
@@ -286,14 +292,14 @@ export function makeDarkness() {
   const c = document.createElement('canvas');
   c.width = LAYOUT.W; c.height = LAYOUT.H;
   const x = c.getContext('2d');
-  // 右半近乎全黑：自边界向右快速压到 0.97（未开灯时灯位无光，不做亮晕）
-  const g = x.createLinearGradient(545, 0, 680, 0);
+  // 右半近乎全黑：边界右收（610→740 渐入），暗区不再吃掉半个屏幕
+  const g = x.createLinearGradient(610, 0, 740, 0);
   g.addColorStop(0, 'rgba(6,7,11,0)');
-  g.addColorStop(1, 'rgba(6,7,11,.97)');
+  g.addColorStop(1, 'rgba(6,7,11,.95)');
   x.fillStyle = g;
-  x.fillRect(545, 0, 135, LAYOUT.H);
-  x.fillStyle = 'rgba(6,7,11,.97)';
-  x.fillRect(680, 0, LAYOUT.W - 680, LAYOUT.H);
+  x.fillRect(610, 0, 130, LAYOUT.H);
+  x.fillStyle = 'rgba(6,7,11,.95)';
+  x.fillRect(740, 0, LAYOUT.W - 740, LAYOUT.H);
   const fade = x.createLinearGradient(430, 0, 560, 0);               // 左半不受暗角
   fade.addColorStop(0, 'rgba(6,7,11,1)'); fade.addColorStop(1, 'rgba(6,7,11,0)');
   x.globalCompositeOperation = 'destination-out';
@@ -412,15 +418,26 @@ export function drawScene(x, sc, view) {
   if (view.doorState === 'ritual') {
     glow(x, 1144, 462, 60 + view.doorPulse * 26, 'rgba(84,224,200,ALPHA)', 0.22 + view.doorPulse * 0.2);
   }
-  // —— 墙上开关面板（明暗分界；未按时青光脉动 beckoning）——
+  // —— 墙上摇杆开关（明暗分界；四角螺丝 + 大摇杆 + LED；未按时青光脉动）——
   {
-    const on = view.switchOn;
-    thick(x, 3, PAL.stoneD);
-    x.fillStyle = '#d8d3c6';
-    x.fillRect(650, 268, 22, 32); x.strokeRect(650, 268, 22, 32);
-    x.fillStyle = on ? '#7bd88f' : '#8a8375';
-    x.fillRect(655, on ? 284 : 274, 12, 10);
-    if (!on) glow(x, 661, 284, 40 + view.doorPulse * 14, 'rgba(123,216,143,ALPHA)', 0.3 + view.doorPulse * 0.25);
+    const on = view.switchOn, sx = 660, sy = 282;
+    thick(x, 3, '#3a3f4d');
+    x.fillStyle = '#e8e4d8';                                                  // 面板
+    x.beginPath();
+    if (x.roundRect) x.roundRect(sx - 17, sy - 26, 34, 52, 6); else x.rect(sx - 17, sy - 26, 34, 52);
+    x.fill(); x.stroke();
+    x.fillStyle = '#9a958a';                                                  // 四角螺丝
+    for (const [dx, dy] of [[-11, -20], [11, -20], [-11, 20], [11, 20]]) {
+      x.beginPath(); x.arc(sx + dx, sy + dy, 2, 0, 7); x.fill();
+    }
+    const ry = on ? sy - 8 : sy + 6;                                          // 摇杆（上=开）
+    x.fillStyle = on ? '#7bd88f' : '#cfc9ba';
+    x.beginPath();
+    if (x.roundRect) x.roundRect(sx - 10, ry - 10, 20, 21, 7); else x.rect(sx - 10, ry - 10, 20, 21);
+    x.fill(); x.stroke();
+    x.fillStyle = on ? '#39d47f' : '#a08b4a';                                 // LED 指示点
+    x.beginPath(); x.arc(sx, sy + 21, 2.5, 0, 7); x.fill();
+    if (!on) glow(x, sx, sy, 46 + view.doorPulse * 16, 'rgba(123,216,143,ALPHA)', 0.28 + view.doorPulse * 0.22);
   }
   // —— 合成台石槽：手持音素石时亮起招手 ——
   if (view.benchHot) {
@@ -428,6 +445,7 @@ export function drawScene(x, sc, view) {
   }
   // —— 火光们 ——
   flame(x, 480, 470, 30, t, 1); glow(x, 480, 472, 130, 'rgba(255,140,60,ALPHA)', 0.3);   // 火盆
+  flame(x, 702, 508, 9, t, 7); glow(x, 702, 510, 48, 'rgba(255,190,90,ALPHA)', 0.22);    // 合成台蜡烛
   drawTorch(x, 140, 190, true, t, 5); drawTorch(x, 300, 190, true, t, 6);                // 左墙火把恒亮
   if (view.lit > 0.02) {                                                                  // 吸顶灯亮起
     x.save(); x.globalAlpha = view.lit;
