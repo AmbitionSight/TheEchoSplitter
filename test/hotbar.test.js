@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createInventory, addStone, stoneCount, canConsume, consume, craftMatch } from '../public/js/hotbar.js';
+import { createInventory, addStone, stoneCount, canConsume, consume, craftMatch, canPlace, isVowel } from '../public/js/hotbar.js';
 
 const data = JSON.parse(await readFile(new URL('../content/chapter1.json', import.meta.url), 'utf8'));
 const WORDS = data.words;
@@ -51,4 +51,31 @@ test('聪明路径：用别处捡的石也能拼 light（规格 §3.2）', () =>
 test('聪明路径反例：没碰过帽架就拼不出 hat（æ 无其它来源）', () => {
   const inv = invWith([['h', 1], ['t', 1]]);
   assert.equal(craftMatch(['h', 'æ', 't', null], WORDS, inv).word, null);
+});
+
+test('canPlace：槽内同音素数不得超过库存', () => {
+  const inv = invWith([['t', 2]]);
+  assert.equal(canPlace([null, null, null, null], inv, 't'), true);
+  assert.equal(canPlace(['t', null, null, null], inv, 't'), true);   // 已放 1，还有 1
+  assert.equal(canPlace(['t', 't', null, null], inv, 't'), false);   // 已放 2，放不下第 3 颗
+});
+
+test('渐进共鸣跨候选词取最大（回归）', () => {
+  const inv = invWith([['h', 1], ['æ', 1], ['ə', 1]]);
+  assert.equal(craftMatch(['h', 'æ', null, null], WORDS, inv).glowDepth, 2);  // hat 前缀胜过 hello 的 1
+  assert.equal(craftMatch(['h', 'ə', null, null], WORDS, inv).glowDepth, 2);  // hello 前缀胜过 hat 的 1
+});
+
+test('重复音素多重集消耗（回归）', () => {
+  const inv = invWith([['ə', 2], ['h', 1], ['l', 1], ['əʊ', 1]]);
+  assert.equal(canConsume(inv, ['h', 'ə', 'l', 'əʊ']), true);
+  assert.ok(consume(inv, ['h', 'ə', 'l', 'əʊ']));
+  assert.equal(stoneCount(inv, 'ə'), 1);
+  const inv2 = invWith([['ə', 1]]);
+  assert.equal(canConsume(inv2, ['ə', 'ə']), false);                          // 一颗 ə 拼不出两颗
+});
+
+test('isVowel：20 个元音音素分类正确', () => {
+  assert.ok(isVowel('əʊ') && isVowel('aɪ') && isVowel('æ'));
+  assert.ok(!isVowel('t') && !isVowel('p') && !isVowel('ŋ'));
 });
