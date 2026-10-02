@@ -141,3 +141,43 @@ test('修正（Task 6 评审）：hello 最后入书也立即唤醒门', () => {
   assert.equal(g.door.state, 'pulsing');
   assert.ok(out.some(i => i.t === 'doorAwake'));
 });
+
+test('TICK 累积 45s 触发提示并复位；仪式/结算期静默（Task 13 评审修正）', () => {
+  const g = createGame(content);
+  let out = [];
+  for (let i = 0; i < 44; i++) out = gameEvent(g, 'TICK', 1);
+  assert.equal(out.length, 0);
+  out = gameEvent(g, 'TICK', 1);
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'uncle'));
+  assert.equal(g.teaseClock, 0);                                // 触发后复位
+  // 仪式/结算期静默
+  const g2 = createGame(content);
+  for (const w of ['hello', 'water', 'fire', 'light']) collect(g2, w);
+  gameEvent(g2, 'USE', { word: 'light', target: 'lamp' });       // 点亮：帽架可碰（hat 需 lit）
+  collect(g2, 'hat');
+  gameEvent(g2, 'DOOR_CLICK');
+  for (const [ipa] of content.words.open.phonemes) gameEvent(g2, 'PICKUP', ipa);
+  gameEvent(g2, 'CRAFT', 'open');
+  gameEvent(g2, 'USE', { word: 'open', target: 'door' });
+  assert.equal(g2.door.state, 'ritual');
+  assert.equal(gameEvent(g2, 'DOOR_CLICK').length, 0);           // 仪式期点门静默
+  for (let i = 0; i < 100; i++) assert.equal(gameEvent(g2, 'TICK', 1).length, 0);
+});
+
+test('CRAFT 未知词静默；unlock 失败不烧 usedTargets、仪式成功才烧（Task 13 评审修正）', () => {
+  const g = createGame(content);
+  assert.equal(gameEvent(g, 'CRAFT', 'nope').length, 0);         // 未知词守卫
+  for (const w of ['hello', 'water', 'fire', 'light']) collect(g, w);
+  gameEvent(g, 'USE', { word: 'light', target: 'lamp' });
+  collect(g, 'hat');                                            // 5 词 → 门 pulsing（尚未点击低语）
+  for (const [ipa] of content.words.open.phonemes) gameEvent(g, 'PICKUP', ipa);
+  gameEvent(g, 'CRAFT', 'open');
+  let out = gameEvent(g, 'USE', { word: 'open', target: 'door' }); // 门未低语：OFFER 失败
+  assert.ok(out.some(i => i.t === 'mutter'));
+  assert.equal(g.door.state, 'pulsing');
+  assert.ok(!g.usedTargets.has('door'));                        // 未烧：仍可重试
+  gameEvent(g, 'DOOR_CLICK');                                   // → whispered
+  out = gameEvent(g, 'USE', { word: 'open', target: 'door' });
+  assert.ok(out.some(i => i.t === 'ritualStart'));
+  assert.ok(g.usedTargets.has('door'));                         // 仪式成功才烧
+});

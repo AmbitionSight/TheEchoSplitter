@@ -24,10 +24,17 @@ export function createUI({ content }) {
     el('reveal-word').textContent = word.toUpperCase();
     el('reveal-ok').textContent = '把这个词，还给门';
     el('reveal').classList.remove('hidden');
-    return new Promise(res => el('reveal-ok').addEventListener('click', () => {
-      el('reveal').classList.add('hidden');
-      res();
-    }, { once: true }));
+    return new Promise(res => {
+      let settled = false;
+      const done = () => {
+        if (settled) return; settled = true;
+        el('reveal').classList.add('hidden');
+        document.removeEventListener('pointerdown', done);
+        res();
+      };
+      el('reveal-ok').addEventListener('click', done, { once: true });
+      setTimeout(() => { if (!settled) document.addEventListener('pointerdown', done); }, 12000); // 12s 后任意点按兜底（Task 13 评审 F；按钮仍是主路径）
+    });
   }
   function summary(g) {
     el('summary-line').textContent = `你捡起了 ${g.book.size} 个词 · ${g.stonesPicked} 块声音石`;

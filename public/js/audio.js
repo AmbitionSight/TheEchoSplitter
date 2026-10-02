@@ -113,4 +113,5 @@ export class Sfx {
   choir()   { [261, 329, 392, 523].forEach((f, i) => this.tone({ f, t: i * 0.12, dur: 2.2, vol: 0.07 })); }
   meow()    { this.tone({ f: 700, f2: 1100, dur: 0.18, vol: 0.11 }); this.tone({ f: 1100, f2: 600, t: 0.18, dur: 0.3, vol: 0.09 }); }
   crackle() { for (let i = 0; i < 3; i++) this.noise({ t: Math.random() * 0.4, dur: 0.05, vol: 0.04, freq: 2500 }); }
+  wind()    { this.noise({ dur: 0.9, vol: 0.08, freq: 420 }); this.noise({ t: 0.15, dur: 0.7, vol: 0.05, freq: 300 }); } // 重复 open=门后风声（规格 §4，Task 13 评审 A）
 }
