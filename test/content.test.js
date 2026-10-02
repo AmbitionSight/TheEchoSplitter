@@ -30,6 +30,7 @@ test('自给自足：每个探索物的掉落词存在于 words（含 npc=hello�
   }
   assert.equal(data.explorables.npc.word, 'hello');
   assert.equal(data.explorables.hatstand.requires, 'lit');
+  assert.deepEqual(data.door.ipa, data.words.open.phonemes.map(p => p[0]));
 });
 
 test('content 中不含 emoji（铁律）', () => {
