@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { createGame, gameEvent, jumpDebug, startGame } from '../public/js/ch2.js';
-import { createProfile, mergeProfile, seedMemory } from '../public/js/profile.js';
+import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { addStone, stoneCount } from '../public/js/hotbar.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter2.json', import.meta.url), 'utf8'));
@@ -18,12 +18,14 @@ test('开局（第一关书档在场）：不剧透 jump，只提示裂缝', () 
   assert.equal(g.jumpUnlocked, false);
 });
 
-test('记忆凝石：p 已在物品栏（一颗），dʒ ʌ m 不在', () => {
+test('记忆凝石：只带本章需要的 p，其余旧音素不塞背包', () => {
   const g = createGame(content, ch1Profile);
-  const seeded = seedMemory(g.inv, addStone, ch1Profile.everPicked);
-  assert.ok(seeded.includes('p'));
-  assert.ok(!seeded.includes('dʒ'));
+  const seeds = neededSeeds(content, ch1Profile.everPicked);
+  assert.deepEqual(seeds, ['p']);                                     // jump 只需要旧识 p
+  const seeded = seedMemory(g.inv, addStone, seeds);
+  assert.deepEqual(seeded, ['p']);
   assert.equal(stoneCount(g.inv, 'p'), 1);
+  assert.equal(stoneCount(g.inv, 'h'), 0);                            // h/l/n/ə/əʊ 不带入
 });
 
 test('空格尝试：耸肩+红叉气泡+童声疑惑+世界低语+只掉一次 dʒ ʌ m', () => {

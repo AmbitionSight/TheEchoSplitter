@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { createGame, gameEvent, ropeDebug, startGame } from '../public/js/ch3.js';
-import { createProfile, mergeProfile, seedMemory } from '../public/js/profile.js';
+import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { addStone, stoneCount } from '../public/js/hotbar.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter3.json', import.meta.url), 'utf8'));
@@ -19,11 +19,12 @@ test('开局：崖壁提示；断绳未碰', () => {
   assert.equal(g.mended, false);
 });
 
-test('记忆凝石：əʊ 与 p 入栏，r 仍需实地捡', () => {
+test('记忆凝石：只带本章需要的 əʊ 与 p，r 仍需实地捡', () => {
   const g = createGame(content, ch2Profile);
-  const seeded = seedMemory(g.inv, addStone, ch2Profile.everPicked);
-  assert.ok(seeded.includes('əʊ') && seeded.includes('p'));
-  assert.ok(!seeded.includes('r'));
+  const seeds = neededSeeds(content, ch2Profile.everPicked);
+  assert.deepEqual(seeds.sort(), ['p', 'əʊ']);                        // rope 只需要旧识 əʊ、p
+  const seeded = seedMemory(g.inv, addStone, seeds);
+  assert.deepEqual(seeded.sort(), ['p', 'əʊ']);
 });
 
 test('断绳：世界低语 Rope + 童声疑惑 + 只掉一次 r', () => {

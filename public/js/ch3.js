@@ -130,7 +130,7 @@ import { SIDE, shade, moveSide, sideJump, spawnSideStone, stepSideStone,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette } from './sideview.js';
 import { PAL, drawRune } from './art.js';
 import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
-import { seedMemory } from './profile.js';
+import { seedMemory, neededSeeds } from './profile.js';
 import { isVowel } from './hotbar.js';
 
 const kit = {
@@ -139,8 +139,8 @@ const kit = {
   createGame, startGame, gameEvent, debug: ropeDebug,
 
   voices: v => ({
-    child: { voice: v.child, pitch: 1.25, rate: 1 },
-    door: { voice: v.door, pitch: 0.7, rate: 0.8 }
+    child: { voice: v.child, pitch: 1.25, rate: 1, rateSlow: 0.8 },
+    door: { voice: v.door, pitch: 0.7, rate: 0.8, rateSlow: 0.6 }
   }),
 
   makeWorld({ content, profile, game }) {
@@ -166,7 +166,8 @@ const kit = {
   },
 
   onBegin(w) {
-    const seeded = seedMemory(w.game.inv, addStone, w.profile.everPicked);   // 旧识凝石
+    const seeds = neededSeeds(w.content, w.profile.everPicked);              // 只带本章需要的旧音素（əʊ、p）
+    const seeded = seedMemory(w.game.inv, addStone, seeds);
     if (seeded.length) setTimeout(() => { w.sfx.chime(); w.hb.refresh(w.game.inv); }, 900);
     w.hb.refresh(w.game.inv);
   },

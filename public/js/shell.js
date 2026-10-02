@@ -39,9 +39,10 @@ function bootShell(kit) {
     if (content.meta.intro) {
       pro.querySelectorAll('p:not(.tap)').forEach((p, i) => { if (content.meta.intro[i]) p.textContent = content.meta.intro[i]; });
     }
+    startShell({ kit, content, el, cv, ctx });
     if (new URLSearchParams(location.search).get('autostart') === '1') {
       el('title').classList.add('hidden');
-      dispatchEvent(new CustomEvent('game:start'));
+      dispatchEvent(new CustomEvent('game:start'));                       // 必须在 startShell 注册监听之后
     } else {
       el('title').classList.remove('hidden');
       el('btn-start').addEventListener('click', () => {
@@ -50,7 +51,6 @@ function bootShell(kit) {
         pro.addEventListener('click', () => { pro.classList.add('hidden'); dispatchEvent(new CustomEvent('game:start')); }, { once: true });
       }, { once: true });
     }
-    startShell({ kit, content, el, cv, ctx });
   });
 }
 
@@ -66,7 +66,8 @@ function startShell({ kit, content, el, cv, ctx }) {
   let chain = Promise.resolve();
   function speak(text, who = 'door', slow = false) {
     const conf = (kit.voices?.(voices) || voices)[who] || {};
-    chain = chain.then(() => speech.speak(text, { ...conf, rate: slow ? Math.min(0.6, conf.rate ?? 1) : conf.rate, pitch: conf.pitch }))
+    const rate = slow ? (conf.rateSlow ?? Math.min(0.6, conf.rate ?? 1)) : conf.rate;
+    chain = chain.then(() => speech.speak(text, { ...conf, rate, pitch: conf.pitch }))
       .catch(() => {});
     kit.onSpeak?.(text, who, slow);
     return chain;
@@ -154,6 +155,7 @@ function startShell({ kit, content, el, cv, ctx }) {
   });
   addEventListener('keyup', e => { if (KM[e.code]) keys.delete(KM[e.code]); });
   addEventListener('blur', () => keys.clear());
+  cv.addEventListener('pointerdown', e => { if (w.started) kit.onPointerDown?.(w, e, cv); });
 
   // —— 主循环 ——
   let last = performance.now();
@@ -181,7 +183,13 @@ function startShell({ kit, content, el, cv, ctx }) {
   window.G = {
     content,
     get beat() { return game.beat; },
-    jump(b) { w.started = true; run(kit.debug(game, b)); hb.refresh(game.inv); },
+    jump(b) {
+      w.started = true;
+      run(kit.debug(game, b));
+      hb.refresh(game.inv);
+      ui.updateHand(game.hand);
+      kit.syncHeld?.(w);
+    },
     game
   };
 }

@@ -45,3 +45,12 @@ export function seedMemory(inv, addStone, profileEverPicked) {
   }
   return seeded;
 }
+
+// 只携带本章词真正需要的旧音素（背包不塞无关石头；其余声音仍在书档里）
+export function neededSeeds(content, everPicked) {
+  const needed = new Set();
+  for (const def of Object.values(content.words)) {
+    for (const [ipa] of def.phonemes) needed.add(ipa);
+  }
+  return everPicked.filter(ipa => needed.has(ipa));
+}

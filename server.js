@@ -33,7 +33,7 @@ export function createServer({ auth = true } = {}) {
         return res.end('401');
       }
       const url = new URL(req.url, 'http://localhost');
-      const api = url.pathname.match(/^\/api\/chapter([123])$/);
+      const api = url.pathname.match(/^\/api\/chapter([1-9])$/);
       if (api) {
         const body = await readFile(join(ROOT, 'content', `chapter${api[1]}.json`));
         res.writeHead(200, { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' });
