@@ -132,8 +132,9 @@ export function jumpDebug(g, beat) {
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount, CHAPTER_DAY } from './shell.js';
 import { SIDE, shade, moveSide, sideJump, spawnSideStone, stepSideStone,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawBrickBack } from './sideview.js';
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawWallBack, drawFloorSide } from './sideview.js';
 import { PAL, drawRune } from './art.js';
+import { blit, tile } from './sprites.js';
 import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
 import { seedMemory, neededSeeds } from './profile.js';
 import { isVowel } from './hotbar.js';
@@ -152,7 +153,7 @@ const kit = {
     const geo = content.geometry;
     const actors = createActors();
     const player = actors.player;
-    player.x = geo.spawnX; player.y = geo.groundY;
+    player.x = geo.spawnX; player.y = geo.groundY; player.dir = 'right';
     player.vy = 0; player.airborne = false; player.squash = 0;
     actors.cat.x = geo.spawnX - 70; actors.cat.y = geo.groundY + 12;
     const w = {
@@ -194,6 +195,7 @@ const kit = {
     w.cfg.canJump = w.game.jumpUnlocked;
     updateActors(w.actors, dt);
     moveSide(w, dt);
+    if (w.player.moving && (w.keys.has('l') || w.keys.has('r'))) w.player.walkT += dt;  // 行走帧推进（仅水平移动）
     // 猫：过坑后在对岸出现
     const cat = w.actors.cat;
     const tx = w.player.x > geo.chasmR ? geo.chasmR + 90
@@ -275,19 +277,12 @@ const kit = {
   draw(w, x, eTarget) {
     const { view: v, geo, game } = w;
     x.clearRect(0, 0, SIDE.W, SIDE.H);
-    drawBrickBack(x, SIDE.W, SIDE.H);
+    if (!w.bg) w.bg = makeBg(w);                                            // 墙/地一次性预渲染
+    x.drawImage(w.bg, 0, 0);
     // 出口微光
     const eg = x.createLinearGradient(geo.exitX - 70, 0, geo.exitX + 70, 0);
     eg.addColorStop(0, 'rgba(255,214,130,0)'); eg.addColorStop(0.5, 'rgba(255,214,130,.10)'); eg.addColorStop(1, 'rgba(255,214,130,0)');
     x.fillStyle = eg; x.fillRect(geo.exitX - 70, 200, 140, 420);
-    // 地面（裂缝两侧）
-    x.fillStyle = shade(PAL.floorB, -0.05);
-    x.fillRect(0, geo.groundY, geo.chasmL, 120);
-    x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 120);
-    x.fillStyle = 'rgba(255,236,200,.07)';
-    x.fillRect(0, geo.groundY, geo.chasmL, 3); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 3);
-    x.fillStyle = 'rgba(0,0,0,.3)';
-    x.fillRect(0, geo.groundY + 40, geo.chasmL, 4); x.fillRect(geo.chasmR, geo.groundY + 40, SIDE.W - geo.chasmR, 4);
     // 深渊
     const gg = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 220);
     gg.addColorStop(0, '#05060a'); gg.addColorStop(1, '#000');
@@ -305,13 +300,13 @@ const kit = {
     }
     drawTorchSide(x, 90, 180, v.t);
     drawTorchSide(x, geo.chasmR + 120, 180, v.t);
-    drawBenchSide(x, geo.benchX, geo.groundY, game.hand?.kind === 'stone');
-    drawExit(x, geo.exitX, geo.groundY, game.crossed, v.t);
+    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone');
+    drawExit(x, w.atlases, geo.exitX, geo.groundY, game.crossed, v.t);
     drawCat(x, w.actors.cat, v.t);
     x.save();
     if (w.player.airborne) { x.translate(w.player.x, w.player.y); x.scale(1, 0.92); x.translate(-w.player.x, -w.player.y); }
     if (w.player.squash > 0) { const q = 1 - Math.sin(w.player.squash * Math.PI) * 0.08; x.translate(w.player.x, w.player.y); x.scale(1.06, q); x.translate(-w.player.x, -w.player.y); }
-    drawPlayer(x, w.player, v.t);
+    drawPlayer(x, w.player, v.t, w.atlases);
     x.restore();
     for (const s of w.stones) drawSideStone(x, s, v.t);
     drawFX(w, x);
@@ -320,22 +315,35 @@ const kit = {
   }
 };
 
-function drawExit(x, ex, gy, lit) {
-  x.fillStyle = PAL.stone;
-  x.beginPath();
-  x.moveTo(ex - 44, gy); x.lineTo(ex - 44, gy - 96);
-  x.arc(ex, gy - 96, 44, Math.PI, 0); x.lineTo(ex + 44, gy); x.closePath();
-  x.fill(); x.lineWidth = 6; x.strokeStyle = PAL.stoneD; x.stroke();
-  x.fillStyle = lit ? 'rgba(255,214,130,.85)' : 'rgba(20,24,34,.9)';
-  x.beginPath();
-  x.moveTo(ex - 28, gy); x.lineTo(ex - 28, gy - 88);
-  x.arc(ex, gy - 88, 28, Math.PI, 0); x.lineTo(ex + 28, gy); x.closePath();
-  x.fill();
-  drawRune(x, 'ᚹ', ex, gy - 74, 26, lit ? PAL.glowRune : 'rgba(30,32,44,.8)', 4);
+function makeBg(w) {
+  const { geo } = w;
+  const c = document.createElement('canvas');
+  c.width = SIDE.W; c.height = SIDE.H;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  drawWallBack(x, w.atlases, SIDE.W, SIDE.H, 0.42);
+  // 墙脚踢脚线（裂缝两侧断开）
+  tile(x, w.atlases, 'wall_base', 0, geo.groundY - 16, geo.chasmL, 16);
+  tile(x, w.atlases, 'wall_base', geo.chasmR, geo.groundY - 16, SIDE.W - geo.chasmR, 16);
+  // 地面（裂缝两侧）：MI 地砖平铺 + 顶缘亮线 + 下部压暗
+  drawFloorSide(x, w.atlases, 0, geo.groundY, geo.chasmL, 130);
+  drawFloorSide(x, w.atlases, geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130);
+  x.fillStyle = 'rgba(255,236,200,.09)';
+  x.fillRect(0, geo.groundY, geo.chasmL, 2); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 2);
+  const gsh = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 130);
+  gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.42)');
+  x.fillStyle = gsh;
+  x.fillRect(0, geo.groundY, geo.chasmL, 130); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130);
+  return c;
+}
+
+function drawExit(x, imgs, ex, gy, lit) {
+  blit(x, imgs, 'door', ex - 27, gy - 78);
+  drawRune(x, 'ᚹ', ex, gy - 46, 20, lit ? PAL.glowRune : 'rgba(30,32,44,.85)', 3);
   if (lit) {
-    const g = x.createRadialGradient(ex, gy - 60, 10, ex, gy - 60, 90);
+    const g = x.createRadialGradient(ex, gy - 40, 10, ex, gy - 40, 90);
     g.addColorStop(0, 'rgba(255,214,130,.25)'); g.addColorStop(1, 'rgba(255,214,130,0)');
-    x.fillStyle = g; x.beginPath(); x.arc(ex, gy - 60, 90, 0, 7); x.fill();
+    x.fillStyle = g; x.beginPath(); x.arc(ex, gy - 40, 90, 0, 7); x.fill();
   }
 }
 

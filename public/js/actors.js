@@ -1,4 +1,5 @@
 import { PAL, drawIcon } from './art.js';
+import { drawChar } from './sprites.js';
 
 function thick(x, w = 4.5) { x.lineWidth = w; x.strokeStyle = PAL.ink; x.lineJoin = 'round'; x.lineCap = 'round'; }
 function shadow(x, cx, cy, rx) {
@@ -8,7 +9,7 @@ function shadow(x, cx, cy, rx) {
 
 export function createActors() {
   return {
-    player: { x: 560, y: 600, facing: 1, walkT: 0, moving: false, hatOn: false },
+    player: { x: 560, y: 600, facing: 1, dir: 'down', walkT: 0, moving: false, hatOn: false },
     npc: { x: 400, y: 430, facing: 1, mouth: 0, gesture: 'idle', gestureT: 0, gestureDur: 0 },
     cat: { x: 505, y: 632, earT: 0, meowT: 0 }
   };
@@ -26,108 +27,61 @@ export function updateActors(a, dt) {
   a.cat.meowT = Math.max(0, a.cat.meowT - dt);
 }
 
-// —— 小孩：蓝兜帽，Q 版大头，腿部交替 ——
-export function drawPlayer(x, p, t) {
-  const bob = p.moving ? Math.abs(Math.sin(p.walkT * 9)) * 3 : Math.sin(t * 2) * 1.2;
-  shadow(x, p.x, p.y + 2, 20);
-  x.save();
-  x.translate(p.x, p.y - bob);
-  x.scale(p.facing, 1);
-  // 腿
-  thick(x, 5, PAL.ink);
-  x.strokeStyle = PAL.ink; x.fillStyle = '#3a4a6b';
-  const step = p.moving ? Math.sin(p.walkT * 9) * 7 : 0;
-  x.fillRect(-9 + step * 0.4, -10, 7, 12);
-  x.fillRect(2 - step * 0.4, -10, 7, 12);
-  // 身体
-  x.fillStyle = '#4a7bd4';
-  x.beginPath();
-  x.moveTo(-13, -8); x.quadraticCurveTo(-15, -34, 0, -36); x.quadraticCurveTo(15, -34, 13, -8); x.closePath();
-  x.fill(); thick(x); x.stroke();
-  // 兜帽（先画：蓝环+下颌垂布，框住脸）+ 头
-  x.fillStyle = '#4a7bd4';
-  x.beginPath();
-  x.arc(0, -50, 21, Math.PI * 0.85, Math.PI * 2.15);
-  x.quadraticCurveTo(0, -24, -18.71, -40.47);   // 从弧终点经下颌垂布回到弧起点（精确闭合）
-  x.closePath(); x.fill(); x.stroke();
-  x.fillStyle = '#f2c99b';
-  x.beginPath(); x.arc(0, -48, 15, 0, 7); x.fill(); x.stroke();
-  // 脸
-  x.fillStyle = PAL.ink;
-  x.beginPath(); x.arc(4, -48, 1.9, 0, 7); x.fill();
-  x.beginPath(); x.arc(11, -48, 1.9, 0, 7); x.fill();
-  x.beginPath(); x.arc(6, -43, 3.2, 0.15, Math.PI - 0.15); x.stroke();
+// —— 小孩：MI 角色（Alex 块；走 3 帧 / 站姿微浮）——
+// 帧序 0,1,2,1：中间帧 1 是双脚着地的中立姿，0/2 为左右迈步帧
+export function drawPlayer(x, p, t, imgs) {
+  const dir = p.dir || 'down';
+  const frame = p.moving ? [0, 1, 2, 1][Math.floor(p.walkT * 4.5) % 4] : 1;
+  const bob = p.moving ? 0 : Math.sin(t * 2) * 1.2;
+  shadow(x, p.x, p.y + 2, 18);
+  if (!imgs) {                                                   // 图集未加载的兜底：色块
+    x.fillStyle = '#4a7bd4'; x.fillRect(p.x - 9, p.y - 40 + bob, 18, 40);
+    x.fillStyle = '#f2c99b'; x.beginPath(); x.arc(p.x, p.y - 48 + bob, 12, 0, 7); x.fill();
+    return;
+  }
+  drawChar(x, imgs, 'kid', dir, frame, p.x, p.y - bob);
+  const side = dir === 'left' ? -1 : 1;
   // 草帽（hatOn 时戴上，规格 §4）
   if (p.hatOn) {
+    x.save();
+    x.translate(p.x, p.y - bob);
+    thick(x, 3);
     x.fillStyle = PAL.hat;
-    x.beginPath(); x.ellipse(5, -62, 22, 7, 0, 0, 7); x.fill(); x.stroke();
-    x.beginPath(); x.moveTo(-7, -61); x.quadraticCurveTo(5, -82, 17, -61); x.closePath(); x.fill(); x.stroke();
-    x.fillStyle = PAL.hatD; x.fillRect(-5, -67, 24, 4);
+    x.beginPath(); x.ellipse(side * 2, -64, 20, 6, 0, 0, 7); x.fill(); x.stroke();
+    x.beginPath(); x.moveTo(side * 2 - 11, -63); x.quadraticCurveTo(side * 2, -82, side * 2 + 11, -63); x.closePath(); x.fill(); x.stroke();
+    x.fillStyle = PAL.hatD; x.fillRect(side * 2 - 10, -68, 20, 3);
+    x.restore();
   }
   // 手持（v2：音素石或词具拿在手上）
   if (p.held) {
+    const hx = p.x + side * 15, hy = p.y - bob - 30;
     x.fillStyle = p.heldVowel ? '#ffd166' : '#6fb7ff';
-    x.beginPath(); x.arc(17, -30, 9, 0, 7); x.fill();
+    x.beginPath(); x.arc(hx, hy, 9, 0, 7); x.fill();
     x.lineWidth = 2.5; x.strokeStyle = PAL.ink; x.stroke();
     x.fillStyle = PAL.ink; x.font = 'bold 8px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText(p.held, 17, -30);
+    x.fillText(p.held, hx, hy);
   } else if (p.heldIcon) {
-    drawIcon(x, p.heldIcon, 17, -32, 30);
+    drawIcon(x, p.heldIcon, p.x + side * 15, p.y - bob - 32, 30);
   }
-  x.restore();
 }
 
-// —— 大叔：棕袍大胡子，手势系统 ——
-export function drawNpc(x, n, t) {
+// —— 大叔：MI 角色（Bob 块）；手势 = 整体动势（说笑弹跳/招手摇晃/点头前倾）——
+export function drawNpc(x, n, t, imgs) {
   const g = n.gesture, gt = n.gestureT;
   const bounce = g === 'laugh' ? Math.abs(Math.sin(gt * 10)) * 4 : Math.sin(t * 1.6) * 1.2;
   const tilt = g === 'tilt' ? Math.sin(gt * 2) * 0.12 : g === 'nod' ? Math.max(0, Math.sin(gt * 6)) * 0.2 : 0;
-  shadow(x, n.x, n.y + 2, 26);
+  const rock = g === 'wave' ? Math.sin(gt * 9) * 0.08 : 0;
+  const hop = g === 'wave' ? Math.sin(gt * 9) * 3 : 0;
+  const frame = n.mouth > 0.15 ? [0, 1][Math.floor(t * 8) % 2] : 1;      // 说话轻踏 / 站姿
+  shadow(x, n.x, n.y + 2, 22);
+  if (!imgs) {                                                   // 兜底：色块
+    x.fillStyle = '#8a6a4a'; x.fillRect(n.x - 14, n.y - 44 - bounce, 28, 44);
+    return;
+  }
   x.save();
-  x.translate(n.x, n.y - bounce);
-  x.scale(n.facing, 1);
-  x.rotate(tilt);
-  // 腿脚
-  x.fillStyle = '#4a3a2c';
-  x.fillRect(-12, -8, 9, 10); x.fillRect(3, -8, 9, 10);
-  // 袍身
-  x.fillStyle = '#8a6a4a';
-  x.beginPath();
-  x.moveTo(-18, 0); x.quadraticCurveTo(-22, -40, 0, -44); x.quadraticCurveTo(22, -40, 18, 0); x.closePath();
-  x.fill(); thick(x, 5); x.stroke();
-  // 手臂（手势驱动）
-  thick(x, 5);
-  x.strokeStyle = PAL.ink; x.fillStyle = '#8a6a4a';
-  const arm = (side, ang) => {
-    x.save();
-    x.translate(side * 15, -34);
-    x.rotate(ang);
-    x.beginPath(); x.roundRect ? x.roundRect(-4, 0, 8, 22, 4) : x.rect(-4, 0, 8, 22);
-    x.fill(); x.stroke();
-    x.fillStyle = '#f2c99b';
-    x.beginPath(); x.arc(0, 24, 5, 0, 7); x.fill(); x.stroke();
-    x.restore();
-  };
-  let la = 0.5, ra = -0.5;                                    // 下垂
-  if (g === 'wave') ra = -2.2 + Math.sin(gt * 8) * 0.5;
-  if (g === 'point') { ra = -1.35; la = 0.7; }
-  if (g === 'laugh') { ra = -2.4 + Math.sin(gt * 10) * 0.25; la = 2.4 - Math.sin(gt * 10) * 0.25; }
-  arm(-1, la); arm(1, ra);
-  // 头（秃顶+侧发）
-  x.fillStyle = '#e8bd8f';
-  x.beginPath(); x.arc(0, -58, 16, 0, 7); x.fill(); thick(x, 5); x.stroke();
-  x.fillStyle = '#b8b2a8';
-  x.beginPath(); x.arc(-14, -56, 5, 0, 7); x.fill();
-  x.beginPath(); x.arc(14, -56, 5, 0, 7); x.fill();
-  // 大胡子 + 口型（mouth 0..1）
-  x.fillStyle = '#cfc8bb';
-  x.beginPath();
-  x.moveTo(-13, -52); x.quadraticCurveTo(0, -30, 13, -52); x.quadraticCurveTo(0, -44, -13, -52);
-  x.closePath(); x.fill(); x.stroke();
-  x.fillStyle = PAL.ink;
-  x.beginPath(); x.ellipse(4, -50, 2.6 + n.mouth * 2, 1.6 + n.mouth * 4, 0, 0, 7); x.fill();
-  x.beginPath(); x.arc(-2, -60, 2, 0, 7); x.fill();
-  x.beginPath(); x.arc(9, -60, 2, 0, 7); x.fill();
+  x.translate(n.x + hop, n.y - bounce);
+  x.rotate(tilt + rock);
+  drawChar(x, imgs, 'uncle', 'down', frame, 0, 0);
   x.restore();
 }
 

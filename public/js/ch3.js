@@ -127,8 +127,9 @@ export function ropeDebug(g, beat) {
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
 import { SIDE, shade, moveSide, sideJump, spawnSideStone, stepSideStone,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette } from './sideview.js';
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide } from './sideview.js';
 import { PAL, drawRune } from './art.js';
+import { blit, tile } from './sprites.js';
 import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
 import { seedMemory, neededSeeds } from './profile.js';
 import { isVowel } from './hotbar.js';
@@ -147,7 +148,7 @@ const kit = {
     const geo = content.geometry;
     const actors = createActors();
     const player = actors.player;
-    player.x = geo.spawnX; player.y = geo.groundY;
+    player.x = geo.spawnX; player.y = geo.groundY; player.dir = 'right';
     player.vy = 0; player.airborne = false; player.climbing = false;
     actors.cat.x = geo.spawnX - 70; actors.cat.y = geo.groundY + 12;
     const canJump = profile.abilities.includes('jump');
@@ -180,6 +181,7 @@ const kit = {
     v.ropeMendT = Math.max(0, v.ropeMendT - dt);
     updateActors(w.actors, dt);
     moveSide(w, dt);
+    if (w.player.moving && (w.keys.has('l') || w.keys.has('r'))) w.player.walkT += dt;  // 行走帧推进（仅水平移动）
     const cat = w.actors.cat;
     const tx = w.player.y < geo.groundY - 160 ? cat.x
       : Math.max(geo.spawnX - 70, Math.min(w.player.x - 80, geo.wallX - 70));
@@ -198,7 +200,7 @@ const kit = {
     }
     consider(Math.abs(player.x - geo.benchX), { kind: 'obj', id: 'bench', x: geo.benchX, y: geo.groundY }, 80);
     consider(Math.hypot(player.x - ropeX, player.y - (geo.groundY - 80)), { kind: 'obj', id: 'rope', x: ropeX, y: geo.groundY - 80 }, 90);
-    consider(Math.abs(player.x - geo.exitX), { kind: 'obj', id: 'exit', x: geo.exitX, y: geo.topY }, 80);
+    consider(Math.hypot(player.x - geo.exitX, player.y - geo.topY), { kind: 'obj', id: 'exit', x: geo.exitX, y: geo.topY }, 80);  // 须在顶台（y≈topY）才可交
     consider(Math.abs(player.x - w.actors.cat.x), { kind: 'obj', id: 'cat', x: w.actors.cat.x, y: w.actors.cat.y }, 50);
     return best;
   },
@@ -257,35 +259,16 @@ const kit = {
     const { view: v, geo, game } = w;
     const ropeX = geo.wallX + geo.wallW / 2;
     x.clearRect(0, 0, SIDE.W, SIDE.H);
-    // 夜空 + 星
-    const sky = x.createLinearGradient(0, 0, 0, SIDE.H);
-    sky.addColorStop(0, '#0b0e18'); sky.addColorStop(1, '#1c1610');
-    x.fillStyle = sky; x.fillRect(0, 0, SIDE.W, SIDE.H);
-    x.fillStyle = 'rgba(244,240,216,.5)';
-    for (let i = 0; i < 20; i++) x.fillRect((i * 137 + 60) % SIDE.W, (i * 89 + 40) % 320, 2, 2);
-    // 高墙 + 平台
-    x.fillStyle = shade(PAL.wallA, -0.1);
-    x.fillRect(geo.wallX, geo.topY, geo.wallW, geo.groundY - geo.topY);
-    x.strokeStyle = PAL.wallDark; x.lineWidth = 3;
-    for (let ry = geo.topY + 30; ry < geo.groundY; ry += 60) {
-      x.beginPath(); x.moveTo(geo.wallX, ry); x.lineTo(geo.wallX + geo.wallW, ry); x.stroke();
-    }
-    x.fillStyle = shade(PAL.floorB, -0.02);
-    x.fillRect(geo.wallX, geo.topY - 14, geo.wallW, 16);
-    x.fillStyle = 'rgba(255,236,200,.1)';
-    x.fillRect(geo.wallX, geo.topY - 14, geo.wallW, 3);
-    // 地面
-    x.fillStyle = shade(PAL.floorB, -0.05);
-    x.fillRect(0, geo.groundY, SIDE.W, SIDE.H - geo.groundY);
-    x.fillStyle = 'rgba(255,236,200,.07)'; x.fillRect(0, geo.groundY, SIDE.W, 3);
+    if (!w.bg) w.bg = makeBg(w);                                            // 夜空/高墙/地面一次性预渲染
+    x.drawImage(w.bg, 0, 0);
     drawRope(x, w, ropeX);
     drawTorchSide(x, 90, 180, v.t);
-    drawBenchSide(x, geo.benchX, geo.groundY, game.hand?.kind === 'stone');
-    drawExit(x, geo.exitX, geo.topY, game.climbed);
+    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone');
+    drawExit(x, w.atlases, geo.exitX, geo.topY, game.climbed);
     drawCat(x, w.actors.cat, v.t);
     x.save();
     if (w.player.climbing) { x.translate(w.player.x, w.player.y); x.rotate(0.12); x.translate(-w.player.x, -w.player.y); }
-    drawPlayer(x, w.player, v.t);
+    drawPlayer(x, w.player, v.t, w.atlases);
     x.restore();
     if (w.player.climbing) drawClimbArms(x, w.player);
     for (const s of w.stones) drawSideStone(x, s, v.t);
@@ -298,6 +281,34 @@ const kit = {
     vignette(x);
   }
 };
+
+function makeBg(w) {
+  const { geo } = w;
+  const c = document.createElement('canvas');
+  c.width = SIDE.W; c.height = SIDE.H;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+  // 夜空 + 星
+  const sky = x.createLinearGradient(0, 0, 0, SIDE.H);
+  sky.addColorStop(0, '#0b0e18'); sky.addColorStop(1, '#1c1610');
+  x.fillStyle = sky; x.fillRect(0, 0, SIDE.W, SIDE.H);
+  x.fillStyle = 'rgba(244,240,216,.5)';
+  for (let i = 0; i < 20; i++) x.fillRect((i * 137 + 60) % SIDE.W, (i * 89 + 40) % 320, 2, 2);
+  // 高墙（MI 墙面平铺 + 压暗）+ 平台沿（地板砖）
+  tile(x, w.atlases, 'wall_face', geo.wallX, geo.topY, geo.wallW, geo.groundY - geo.topY);
+  x.fillStyle = 'rgba(10,12,22,.45)';
+  x.fillRect(geo.wallX, geo.topY, geo.wallW, geo.groundY - geo.topY);
+  drawFloorSide(x, w.atlases, geo.wallX, geo.topY - 14, geo.wallW, 16);
+  x.fillStyle = 'rgba(255,236,200,.10)';
+  x.fillRect(geo.wallX, geo.topY - 14, geo.wallW, 2);
+  // 地面：MI 地板平铺
+  drawFloorSide(x, w.atlases, 0, geo.groundY, SIDE.W, SIDE.H - geo.groundY);
+  x.fillStyle = 'rgba(255,236,200,.09)'; x.fillRect(0, geo.groundY, SIDE.W, 2);
+  const gsh = x.createLinearGradient(0, geo.groundY, 0, SIDE.H);
+  gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.40)');
+  x.fillStyle = gsh; x.fillRect(0, geo.groundY, SIDE.W, SIDE.H - geo.groundY);
+  return c;
+}
 
 function drawRope(x, w, ropeX) {
   const geo = w.geo, v = w.view, game = w.game;
@@ -333,18 +344,9 @@ function drawRope(x, w, ropeX) {
   }
 }
 
-function drawExit(x, ex, ty, open) {
-  x.fillStyle = PAL.stone;
-  x.beginPath();
-  x.moveTo(ex - 40, ty); x.lineTo(ex - 40, ty - 78);
-  x.arc(ex, ty - 78, 40, Math.PI, 0); x.lineTo(ex + 40, ty); x.closePath();
-  x.fill(); x.lineWidth = 6; x.strokeStyle = PAL.stoneD; x.stroke();
-  x.fillStyle = open ? 'rgba(255,214,130,.85)' : 'rgba(20,24,34,.9)';
-  x.beginPath();
-  x.moveTo(ex - 25, ty); x.lineTo(ex - 25, ty - 72);
-  x.arc(ex, ty - 72, 25, Math.PI, 0); x.lineTo(ex + 25, ty); x.closePath();
-  x.fill();
-  drawRune(x, 'ᚱ', ex, ty - 58, 22, open ? PAL.glowRune : 'rgba(30,32,44,.8)', 4);
+function drawExit(x, imgs, ex, ty, open) {
+  blit(x, imgs, 'door', ex - 27, ty - 78);
+  drawRune(x, 'ᚱ', ex, ty - 46, 20, open ? PAL.glowRune : 'rgba(30,32,44,.85)', 3);
   if (open) {
     const g = x.createRadialGradient(ex, ty - 40, 10, ex, ty - 40, 80);
     g.addColorStop(0, 'rgba(255,214,130,.28)'); g.addColorStop(1, 'rgba(255,214,130,0)');

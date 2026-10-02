@@ -1,6 +1,7 @@
 // —— 横版共用件：移动/跳跃/攀爬物理核心 + 通用渲染（火把/合成台/石头/E 提示/暗角） ——
 import { PAL } from './art.js';
 import { isVowel } from './hotbar.js';
+import { blit, tile } from './sprites.js';
 
 export const SIDE = { W: 1280, H: 720 };
 
@@ -22,6 +23,7 @@ export function moveSide(w, dt) {
   if (p.climbing) {
     if (!rope?.ok() || Math.abs(p.x - rope.x()) > 40) p.climbing = false;
     else {
+      p.dir = 'up';                                    // 攀爬 = 背对镜头
       if (w.keys.has('u')) { p.y -= 170 * dt; p.walkT += dt; }
       if (w.keys.has('d')) p.y += 130 * dt;
       p.y = Math.max(wall.topY, Math.min(geo.groundY, p.y));
@@ -30,8 +32,8 @@ export function moveSide(w, dt) {
   }
   if (!p.climbing) {
     const sp = (cfg.speed ?? 300) * dt;
-    if (w.keys.has('l')) { p.x -= sp; p.facing = -1; }
-    if (w.keys.has('r')) { p.x += sp; p.facing = 1; }
+    if (w.keys.has('l')) { p.x -= sp; p.facing = -1; p.dir = 'left'; }
+    if (w.keys.has('r')) { p.x += sp; p.facing = 1; p.dir = 'right'; }
     p.moving = w.keys.size > 0 && !p.airborne;
     if (wall) {
       const inWallX = p.x > wall.X - 14 && p.x < wall.X + wall.W + 14;
@@ -39,8 +41,8 @@ export function moveSide(w, dt) {
         p.x = p.x < wall.X + wall.W / 2 ? wall.X - 14 : wall.X + wall.W + 14;
       }
     }
-    if (rope?.ok() && !p.airborne && p.y > wall.topY && Math.abs(p.x - rope.x()) < 34 && w.keys.has('u')) {
-      p.climbing = true;
+    if (rope?.ok() && !p.airborne && p.y > wall.topY && Math.abs(p.x - rope.x()) < 75 && w.keys.has('u')) {
+      p.climbing = true; p.x = rope.x();                // 抓住绳子：吸附到绳位（墙把玩家挡在两侧，起爬判定须放宽）
     }
     if (p.airborne || overGap) {
       p.vy += 1500 * dt; p.y += p.vy * dt; p.airborne = true;
@@ -104,23 +106,31 @@ export function drawTorchSide(x, tx, ty, t) {
   x.fillStyle = g; x.beginPath(); x.arc(tx, ty, 110, 0, 7); x.fill();
 }
 
-export function drawBenchSide(x, bx, gy, hot) {
+export function drawBenchSide(x, imgs, bx, gy, hot) {
   x.fillStyle = 'rgba(0,0,0,.25)';
-  x.beginPath(); x.ellipse(bx, gy + 6, 60, 9, 0, 0, 7); x.fill();
-  x.strokeStyle = PAL.ink; x.lineWidth = 4;
-  for (const lx of [bx - 40, bx + 40]) { x.beginPath(); x.moveTo(lx - 5, gy - 38); x.lineTo(lx + 3, gy); x.stroke(); }
-  x.fillStyle = PAL.wood;
-  x.beginPath(); x.roundRect ? x.roundRect(bx - 62, gy - 62, 124, 22, 6) : x.rect(bx - 62, gy - 62, 124, 22);
-  x.fill(); x.lineWidth = 4.5; x.stroke();
-  x.fillStyle = shade(PAL.stoneD, -0.2);
-  x.beginPath(); x.roundRect ? x.roundRect(bx - 48, gy - 58, 96, 14, 6) : x.rect(bx - 48, gy - 58, 96, 14);
-  x.fill(); x.lineWidth = 3; x.stroke();
+  x.beginPath(); x.ellipse(bx, gy + 6, 70, 9, 0, 0, 7); x.fill();
+  blit(x, imgs, 'table', bx - 76, gy - 74);
+  blit(x, imgs, 'table', bx, gy - 74);
   for (let i = 0; i < 4; i++) {
     const sx = bx - 33 + i * 22;
-    x.fillStyle = 'rgba(0,0,0,.4)';
-    x.beginPath(); x.arc(sx, gy - 51, 5, 0, 7); x.fill();
-    if (hot) { x.fillStyle = 'rgba(84,224,200,.25)'; x.beginPath(); x.arc(sx, gy - 51, 9, 0, 7); x.fill(); }
+    x.fillStyle = 'rgba(20,22,34,.55)';
+    x.beginPath(); x.arc(sx, gy - 62, 5, 0, 7); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.28)'; x.lineWidth = 1.2;
+    x.beginPath(); x.arc(sx, gy - 62, 5, -2.2, 0.6); x.stroke();
+    if (hot) { x.fillStyle = 'rgba(84,224,200,.25)'; x.beginPath(); x.arc(sx, gy - 62, 9, 0, 7); x.fill(); }
   }
+}
+
+// 横版背墙：MI 墙面平铺 + 压暗
+export function drawWallBack(x, imgs, W, H, dim = 0.30) {
+  tile(x, imgs, 'wall_face', 0, 0, W, H);
+  x.fillStyle = `rgba(10,12,22,${dim})`;
+  x.fillRect(0, 0, W, H);
+}
+
+// 横版地面：MI 地板平铺（从 groundY 往下）
+export function drawFloorSide(x, imgs, x0, y0, w, h) {
+  tile(x, imgs, 'floor', x0, y0, w, h);
 }
 
 export function drawEHint(x, t, time) {
@@ -154,12 +164,3 @@ export function vignette(x, W = SIDE.W, H = SIDE.H) {
   x.fillStyle = v; x.fillRect(0, 0, W, H);
 }
 
-// 背墙（暗砖，两关共用）
-export function drawBrickBack(x, W, H, dim = -0.18) {
-  for (let ry = 0; ry < H; ry += 56) {
-    for (let bx = ((ry / 56) % 2) * 46 - 46; bx < W; bx += 92) {
-      x.fillStyle = shade(PAL.wallA, (Math.sin(bx * 12.9 + ry * 7.7) * 0.5) * 0.08 + dim);
-      x.fillRect(bx + 1, ry + 1, 90, 54);
-    }
-  }
-}

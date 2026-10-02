@@ -1,7 +1,8 @@
 import { iconURL } from './art.js';
+import { CHAR_BLOCK } from './sprites.js';
 import { isVowel } from './hotbar.js';
 
-export function createUI({ content }) {
+export function createUI({ content, atlases }) {
   const el = id => document.getElementById(id);
   const hint = el('hintbar'), hintText = el('hint-text'), toastEl = el('toast');
   let toastTimer = 0;
@@ -48,17 +49,23 @@ export function createUI({ content }) {
   el('notes-close').addEventListener('click', () => el('notes').classList.add('hidden'));
   el('btn-walk').addEventListener('click', () => el('summary').classList.add('hidden'));
 
-  // —— 左上简笔小人面板（v2：头像 + 手持槽）——
+  // —— 左上小人面板（v2：头像 + 手持槽；有素材时用小孩精灵头像）——
   const fig = el('avatar-fig');
   if (fig) {
     const fx = fig.getContext('2d');
-    fx.strokeStyle = '#F5F5F7'; fx.lineWidth = 3; fx.lineCap = 'round';
-    fx.beginPath(); fx.arc(28, 18, 9, 0, 7); fx.stroke();                  // 头
-    fx.beginPath(); fx.moveTo(28, 27); fx.lineTo(28, 46); fx.stroke();     // 身
-    fx.beginPath(); fx.moveTo(28, 34); fx.lineTo(18, 42); fx.stroke();     // 左臂
-    fx.beginPath(); fx.moveTo(28, 34); fx.lineTo(40, 30); fx.stroke();     // 右臂（持物）
-    fx.beginPath(); fx.moveTo(28, 46); fx.lineTo(20, 58); fx.stroke();     // 左腿
-    fx.beginPath(); fx.moveTo(28, 46); fx.lineTo(36, 58); fx.stroke();     // 右腿
+    const img = atlases?.ch;
+    if (img) {
+      fx.imageSmoothingEnabled = false;
+      fx.drawImage(img, CHAR_BLOCK.kid + 6, 26, 36, 48, 10, 8, 36, 48);    // 正面头+肩（格内 6,26 起）
+    } else {
+      fx.strokeStyle = '#F5F5F7'; fx.lineWidth = 3; fx.lineCap = 'round';
+      fx.beginPath(); fx.arc(28, 18, 9, 0, 7); fx.stroke();                  // 头
+      fx.beginPath(); fx.moveTo(28, 27); fx.lineTo(28, 46); fx.stroke();     // 身
+      fx.beginPath(); fx.moveTo(28, 34); fx.lineTo(18, 42); fx.stroke();     // 左臂
+      fx.beginPath(); fx.moveTo(28, 34); fx.lineTo(40, 30); fx.stroke();     // 右臂（持物）
+      fx.beginPath(); fx.moveTo(28, 46); fx.lineTo(20, 58); fx.stroke();     // 左腿
+      fx.beginPath(); fx.moveTo(28, 46); fx.lineTo(36, 58); fx.stroke();     // 右腿
+    }
   }
   function updateHand(hand) {
     const slot = el('hand-slot');

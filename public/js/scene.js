@@ -105,8 +105,7 @@ export function magnetStep(s, player, dt) {
 
 // ================= 渲染层（DOM 只在函数内） =================
 import { PAL, drawRune } from './art.js';
-
-const LIGHT_CENTER = { x: 950, y: 110 };   // 右半吸顶灯
+import { blit, tile } from './sprites.js';
 
 function thick(ctx, w = 5, color = PAL.ink) {
   ctx.lineWidth = w; ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -123,82 +122,52 @@ function shade(hex, f) {
 // 合成台石槽中心（v2.1：上移避开底部工具栏；拿石时由动态层点亮）
 export const BENCH_SOCKETS = [[592, 541], [624, 541], [656, 541], [688, 541]];
 
-export function prerenderStatic() {
+export function prerenderStatic(atlases) {
   const c = document.createElement('canvas');
   c.width = LAYOUT.W; c.height = LAYOUT.H;
   const x = c.getContext('2d');
-  // —— 地板：64px 石砖 + 每砖明度扰动 + 倒角缝 + 裂缝 ——
-  const r = rng(42);
-  for (let gy = 0; gy * 64 < LAYOUT.H; gy++) {
-    for (let gx = 0; gx * 64 < LAYOUT.W; gx++) {
-      const px = gx * 64, py = Math.max(300, gy * 64);
-      const base = (gx + gy) % 2 ? PAL.floorA : PAL.floorB;
-      x.fillStyle = shade(base, (r() - 0.5) * 0.14);
-      x.fillRect(px, py, 64, 64);
-      x.fillStyle = 'rgba(255,236,200,.055)';                    // 上/左亮棱
-      x.fillRect(px, py, 64, 2); x.fillRect(px, py, 2, 64);
-      x.fillStyle = 'rgba(0,0,0,.16)';                            // 下/右暗棱
-      x.fillRect(px, py + 62, 64, 2); x.fillRect(px + 62, py, 2, 64);
-    }
+  x.imageSmoothingEnabled = false;
+  if (!atlases) {                                       // 素材加载失败兜底：纯色房间
+    x.fillStyle = PAL.wallA; x.fillRect(0, 0, LAYOUT.W, 300);
+    x.fillStyle = PAL.floorB; x.fillRect(0, 300, LAYOUT.W, LAYOUT.H - 300);
   }
-  x.strokeStyle = PAL.crack; x.lineWidth = 1.4;
-  for (let i = 0; i < 44; i++) {                                 // 裂缝（带分叉）
-    const px = r() * LAYOUT.W, py = 308 + r() * (LAYOUT.H - 330), a = r() * 6.28, len = 16 + r() * 30;
-    x.beginPath(); x.moveTo(px, py);
-    const mx = px + Math.cos(a) * len * 0.6, my = py + Math.sin(a) * len * 0.24;
-    x.lineTo(mx, my); x.lineTo(mx + Math.cos(a + 0.5) * len * 0.4, my + Math.sin(a + 0.5) * len * 0.16);
-    x.stroke();
-  }
-  // —— 墙：300px 砖墙（每砖扰动 + 顶部渐暗 + 踢脚线）——
-  for (let ry = 0; ry < 300; ry += 50) {
-    for (let bx = ((ry / 50) % 2) * 55 - 55; bx < LAYOUT.W; bx += 110) {
-      x.fillStyle = shade(PAL.wallA, (r() - 0.5) * 0.10);
-      x.fillRect(bx + 1, ry + 1, 108, 48);
-    }
-  }
-  x.strokeStyle = PAL.wallB; x.lineWidth = 2;
-  for (let ry = 50; ry < 300; ry += 50) {
-    x.beginPath(); x.moveTo(0, ry); x.lineTo(LAYOUT.W, ry); x.stroke();
-    for (let bx = ((ry / 50) % 2) * 55; bx < LAYOUT.W; bx += 110) {
-      x.beginPath(); x.moveTo(bx, ry); x.lineTo(bx, ry + 50); x.stroke();
-    }
-  }
+  // —— 地板：灰石地砖（MI 32px 原尺寸平铺）——
+  tile(x, atlases, 'floor', 0, 300, LAYOUT.W, LAYOUT.H - 300);
+  // —— 墙：灰蓝墙面 + 踢脚线 + 顶部渐暗 + 墙脚阴影 ——
+  tile(x, atlases, 'wall_face', 0, 0, LAYOUT.W, 284);
+  tile(x, atlases, 'wall_base', 0, 284, LAYOUT.W, 16);
   const wsh = x.createLinearGradient(0, 0, 0, 300);                  // 顶暗底亮的纵向渐变
   wsh.addColorStop(0, 'rgba(10,12,20,.42)'); wsh.addColorStop(0.6, 'rgba(10,12,20,0)');
   x.fillStyle = wsh; x.fillRect(0, 0, LAYOUT.W, 300);
-  x.fillStyle = PAL.wallDark; x.fillRect(0, 272, LAYOUT.W, 28);      // 墙脚阴影
-  x.fillStyle = 'rgba(255,236,200,.08)'; x.fillRect(0, 272, LAYOUT.W, 3);
-  x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(0, 297, LAYOUT.W, 3);
-  // —— 月窗（拱形 + 夜空 + 月亮星星）——
-  x.save();
-  x.beginPath();
-  x.moveTo(270, 210); x.arc(330, 165, 60, Math.PI, 0); x.lineTo(390, 210); x.closePath();
-  x.fillStyle = PAL.night; x.fill();
-  thick(x, 8, PAL.stoneD); x.stroke();
-  x.beginPath(); x.arc(352, 150, 22, 0, 7); x.fillStyle = PAL.moon; x.fill();
-  x.fillStyle = 'rgba(0,0,0,.12)';
-  x.beginPath(); x.arc(345, 145, 5, 0, 7); x.fill();
-  x.beginPath(); x.arc(358, 156, 3.5, 0, 7); x.fill();
+  const fsh = x.createLinearGradient(0, 292, 0, 336);                // 墙脚落地阴影
+  fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = fsh; x.fillRect(0, 292, LAYOUT.W, 44);
+  // —— 月窗：MI 木框窗 + 玻璃区里画夜空/月亮/星星（窗 50x40，两格玻璃）——
+  const WX = 305, WY = 140;
+  blit(x, atlases, 'window', WX, WY);
   const rs = rng(7);
-  x.fillStyle = 'rgba(244,240,216,.9)';
-  for (let i = 0; i < 7; i++) { x.fillRect(284 + rs() * 88, 128 + rs() * 66, 2.5, 2.5); }
+  for (const [px0, pw] of [[WX + 5, 19], [WX + 26, 19]]) {
+    x.save();
+    x.beginPath(); x.rect(px0, WY + 6, pw, 27); x.clip();
+    x.fillStyle = PAL.night; x.fillRect(px0, WY + 6, pw, 27);
+    x.fillStyle = 'rgba(244,240,216,.9)';
+    for (let i = 0; i < 4; i++) x.fillRect(px0 + 1 + rs() * (pw - 3), WY + 7 + rs() * 25, 1.4, 1.4);
+    x.restore();
+  }
+  x.save();
+  x.beginPath(); x.arc(WX + 5 + 12, WY + 6 + 9, 6, 0, 7); x.clip();      // 左格月亮（裁进玻璃）
+  x.fillStyle = PAL.moon; x.fillRect(WX + 5, WY + 6, 19, 27);
+  x.fillStyle = 'rgba(0,0,0,.12)';
+  x.beginPath(); x.arc(WX + 5 + 10, WY + 6 + 7, 1.8, 0, 7); x.fill();
   x.restore();
   // 月窗光池（洒在地板上）
   const pool = x.createRadialGradient(330, 352, 10, 330, 352, 120);
   pool.addColorStop(0, 'rgba(214,224,255,.10)'); pool.addColorStop(1, 'rgba(214,224,255,0)');
   x.fillStyle = pool;
   x.beginPath(); x.ellipse(330, 352, 120, 46, 0, 0, 7); x.fill();
-  // —— 挂毯（暗红 + 金边 + 大符文 ᛟ）——
-  thick(x, 4, PAL.ink);
-  x.fillStyle = '#6d2f28';
-  x.beginPath();
-  x.moveTo(116, 62); x.lineTo(196, 62); x.lineTo(196, 236); x.lineTo(176, 218); x.lineTo(156, 240); x.lineTo(136, 218); x.lineTo(116, 236); x.closePath();
-  x.fill(); x.stroke();
-  x.strokeStyle = PAL.rugGold; x.lineWidth = 2.5;
-  x.strokeRect(126, 74, 60, 140);
-  drawRune(x, 'ᛟ', 156, 140, 34, 'rgba(217,164,65,.75)', 4);
-  x.strokeStyle = PAL.wood2; x.lineWidth = 5;
-  x.beginPath(); x.moveTo(108, 58); x.lineTo(204, 58); x.stroke();
+  // —— 挂画（挂毯位：MI 橄榄挂画 + 金符文 ᛟ）——
+  blit(x, atlases, 'painting', 130, 108);
+  drawRune(x, 'ᛟ', 156, 136, 26, 'rgba(217,164,65,.8)', 3);
   // —— 火把托架（左墙两支背后的金属件）——
   x.fillStyle = '#4b4f5a';
   for (const [tx, ty] of [[140, 224], [300, 224]]) {
@@ -207,61 +176,69 @@ export function prerenderStatic() {
   // —— 墙上符文刻痕 ——
   const glyphs = Object.values({ a: 'ᚱ', b: 'ᚹ', c: 'ᚦ', d: 'ᛟ', e: 'ᚷ', f: 'ᛞ', g: 'ᛚ', h: 'ᛝ' });
   glyphs.forEach((g, i) => drawRune(x, g, 520 + i * 52, 80, 26, 'rgba(44,80,74,.6)', 3));
-  // —— 中央红地毯（金边双环）——
-  x.beginPath(); x.ellipse(640, 545, 175, 82, 0, 0, 7); x.fillStyle = PAL.rug; x.fill();
-  thick(x, 5, PAL.rugGold); x.stroke();
-  x.beginPath(); x.ellipse(640, 545, 158, 70, 0, 0, 7); x.strokeStyle = PAL.rugGold; x.lineWidth = 3; x.stroke();
-  x.beginPath(); x.ellipse(640, 545, 146, 62, 0, 0, 7); x.fillStyle = PAL.rugDark; x.fill();
-  // —— 井（石圈+木架+绳桶+水光）——
-  x.beginPath(); x.ellipse(210, 480, 52, 30, 0, 0, 7); x.fillStyle = PAL.stone; x.fill(); thick(x, 5); x.stroke();
-  x.beginPath(); x.ellipse(210, 480, 36, 20, 0, 0, 7); x.fillStyle = PAL.night; x.fill();
-  x.beginPath(); x.ellipse(210, 481, 24, 12, 0, 0, 7); x.fillStyle = PAL.waterD; x.fill();
+  // —— 中央地毯：MI 红金地毯 ×2 拼成工坊毯 ——
+  blit(x, atlases, 'rug', 520, 500);
+  blit(x, atlases, 'rug', 640, 500);
+  // —— 靠墙软装（书架/盆栽/小画；右半暗区里的开灯后才现）——
+  blit(x, atlases, 'shelf', 28, 306);
+  blit(x, atlases, 'plant', 104, 330);
+  blit(x, atlases, 'cactus', 140, 350);
+  blit(x, atlases, 'plant', 844, 330);
+  blit(x, atlases, 'frame_sm', 930, 110);
+  blit(x, atlases, 'frame_sm', 1030, 110);
+  // —— 井（块状石圈 + 深井口 + 水光 + 木架）——
+  x.fillStyle = PAL.stone;                                                     // 石圈（圆角块）
+  x.beginPath();
+  if (x.roundRect) x.roundRect(158, 452, 104, 52, 12); else x.rect(158, 452, 104, 52);
+  x.fill(); thick(x, 5); x.stroke();
+  x.fillStyle = shade(PAL.stone, -0.14);                                       // 石圈内斜面
+  x.fillRect(166, 458, 88, 6);
+  x.fillStyle = '#232a45';                                                     // 井口
+  x.beginPath();
+  if (x.roundRect) x.roundRect(172, 466, 76, 32, 8); else x.rect(172, 466, 76, 32);
+  x.fill();
+  x.fillStyle = PAL.waterD;                                                    // 水面
+  x.fillRect(182, 472, 56, 20);
+  x.fillStyle = PAL.water;                                                     // 水光横条
+  x.fillRect(186, 474, 48, 4);
+  x.fillStyle = 'rgba(255,255,255,.35)';
+  x.fillRect(190, 482, 14, 2); x.fillRect(212, 486, 10, 2);
   thick(x, 6, PAL.wood2);
   x.beginPath(); x.moveTo(170, 470); x.lineTo(178, 380); x.lineTo(242, 380); x.lineTo(250, 470); x.stroke();
   x.beginPath(); x.moveTo(172, 396); x.lineTo(248, 396); x.stroke();
   x.strokeStyle = '#c9b18a'; x.lineWidth = 2;
   x.beginPath(); x.moveTo(210, 382); x.lineTo(210, 428); x.stroke();
   x.strokeRect(200, 428, 20, 16);
-  // —— 火盆（三足铁盆，火苗动态画）——
-  x.beginPath(); x.ellipse(480, 486, 44, 26, 0, 0, 7); x.fillStyle = PAL.stoneD; x.fill(); thick(x, 5); x.stroke();
-  x.beginPath(); x.ellipse(480, 478, 30, 16, 0, 0, 7); x.fillStyle = '#3a3028'; x.fill();
+  // —— 火盆（块状铁盆，三足，火苗动态画）——
+  x.fillStyle = PAL.stoneD;                                                    // 盆身（圆角块）
+  x.beginPath();
+  if (x.roundRect) x.roundRect(436, 462, 88, 46, 12); else x.rect(436, 462, 88, 46);
+  x.fill(); thick(x, 5); x.stroke();
+  x.fillStyle = shade(PAL.stoneD, -0.18);
+  x.fillRect(444, 468, 72, 5);
+  x.fillStyle = '#3a3028';                                                     // 盆口炭
+  x.beginPath();
+  if (x.roundRect) x.roundRect(448, 474, 64, 26, 8); else x.rect(448, 474, 64, 26);
+  x.fill();
   thick(x, 5, PAL.wood2);
   for (const dx of [-30, 0, 30]) {
-    x.beginPath(); x.moveTo(480 + dx, 500); x.lineTo(480 + dx * 1.3, 522); x.stroke();
+    x.beginPath(); x.moveTo(480 + dx, 502); x.lineTo(480 + dx * 1.3, 524); x.stroke();
   }
-  // —— 合成台 v2.1（MC 风工桌：上移全露、厚板 + 粗腿 + 内嵌石槽 + 蜡烛座）——
+  // —— 合成台：两张 MI 木桌拼成工作台 + 内嵌石槽 + 蜡烛座 ——
   x.fillStyle = 'rgba(0,0,0,.25)';
   x.beginPath(); x.ellipse(640, 600, 96, 17, 0, 0, 7); x.fill();              // 落地影
-  for (const lx of [574, 706]) {                                              // 粗腿（梯形）
-    x.fillStyle = shade(PAL.wood2, lx < 640 ? -0.06 : 0.06);
-    x.beginPath();
-    x.moveTo(lx - 11, 552); x.lineTo(lx + 11, 552); x.lineTo(lx + 8, 598); x.lineTo(lx - 8, 598); x.closePath();
-    x.fill(); thick(x, 5, PAL.ink); x.stroke();
-  }
-  x.fillStyle = PAL.wood2;                                                    // 横撑
-  x.fillRect(582, 574, 116, 9);
-  thick(x, 4, PAL.ink); x.strokeRect(582, 574, 116, 9);
-  x.fillStyle = PAL.wood;                                                     // 桌面大厚板
+  blit(x, atlases, 'table', 564, 526);
+  blit(x, atlases, 'table', 640, 526);
+  drawRune(x, 'ᚹ', 640, 588, 12, 'rgba(217,164,65,.5)', 2);
+  x.fillStyle = PAL.stone;                                                    // 内嵌石槽板（浅色石板）
   x.beginPath();
-  if (x.roundRect) x.roundRect(552, 526, 176, 30, 7); else x.rect(552, 526, 176, 30);
-  x.fill(); thick(x, 6, PAL.ink); x.stroke();
-  x.strokeStyle = 'rgba(0,0,0,.18)'; x.lineWidth = 2;
-  for (const sy of [536, 546]) { x.beginPath(); x.moveTo(558, sy); x.lineTo(722, sy); x.stroke(); }
-  x.fillStyle = 'rgba(255,236,200,.14)';
-  x.fillRect(556, 529, 168, 3);                                               // 顶面亮线
-  x.fillStyle = shade(PAL.wood2, -0.12);                                      // 裙边
-  x.fillRect(560, 556, 160, 12);
-  thick(x, 4, PAL.ink); x.strokeRect(560, 556, 160, 12);
-  drawRune(x, 'ᚹ', 640, 562, 14, 'rgba(217,164,65,.5)', 2);
-  x.fillStyle = shade(PAL.stoneD, -0.25);                                     // 内嵌石槽板
-  x.beginPath();
-  if (x.roundRect) x.roundRect(570, 530, 140, 22, 8); else x.rect(570, 530, 140, 22);
-  x.fill(); thick(x, 3.5, PAL.ink); x.stroke();
+  if (x.roundRect) x.roundRect(572, 531, 136, 20, 6); else x.rect(572, 531, 136, 20);
+  x.fill(); thick(x, 3, PAL.ink); x.stroke();
   for (const [sx, sy] of BENCH_SOCKETS) {                                     // 四个内凹圆槽
-    x.fillStyle = 'rgba(0,0,0,.4)';
-    x.beginPath(); x.arc(sx, sy, 9, 0, 7); x.fill();
-    x.strokeStyle = 'rgba(255,255,255,.10)'; x.lineWidth = 1.5;
-    x.beginPath(); x.arc(sx, sy, 9, -2.2, 0.6); x.stroke();
+    x.fillStyle = 'rgba(20,22,34,.55)';
+    x.beginPath(); x.arc(sx, sy, 8, 0, 7); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.28)'; x.lineWidth = 1.5;
+    x.beginPath(); x.arc(sx, sy, 8, -2.2, 0.6); x.stroke();
   }
   // 蜡烛座（桌角，火苗由动态层画）
   x.fillStyle = '#d8d3c6';
@@ -275,16 +252,22 @@ export function prerenderStatic() {
   x.fillStyle = '#c9c2b2';
   x.beginPath(); x.moveTo(924, 36); x.lineTo(976, 36); x.lineTo(962, 56); x.lineTo(938, 56); x.closePath();
   x.fill(); thick(x, 4); x.stroke();
-  // —— 枯苗陶盆（花动态画）——
-  x.fillStyle = '#b06a3f';
-  x.beginPath();
-  x.moveTo(312, 566); x.lineTo(348, 566); x.lineTo(342, 590); x.lineTo(318, 590); x.closePath();
-  x.fill(); thick(x, 4); x.stroke();
-  // —— 右墙拱门石框（木门动态画：开门动画）——
+  // —— 枯苗陶盆：MI 陶盆（苗/花由动态层画）——
+  blit(x, atlases, 'pot', 320, 566);
+  // —— 右墙门洞石框（MI 木门由动态层画在门洞里）——
   x.fillStyle = PAL.stone;
   x.beginPath();
-  x.moveTo(1090, 500); x.lineTo(1090, 430); x.arc(1145, 430, 55, Math.PI, 0); x.lineTo(1200, 500); x.closePath();
+  x.moveTo(1099, 500); x.lineTo(1099, 430); x.arc(1144, 430, 45, Math.PI, 0); x.lineTo(1189, 500); x.closePath();
   x.fill(); thick(x, 6, PAL.stoneD); x.stroke();
+  x.fillStyle = shade(PAL.stoneD, -0.35);                                      // 门洞内暗
+  x.beginPath();
+  x.moveTo(1107, 500); x.lineTo(1107, 434); x.arc(1144, 434, 37, Math.PI, 0); x.lineTo(1181, 500); x.closePath();
+  x.fill();
+  x.fillStyle = 'rgba(0,0,0,.3)';                                              // 门前落地影
+  x.beginPath(); x.ellipse(1144, 502, 40, 8, 0, 0, 7); x.fill();
+  // —— 黄昏底色：压暗全场，保像素纹理（火光/灯光由动态层加暖）——
+  x.fillStyle = 'rgba(16,18,36,.30)';
+  x.fillRect(0, 0, LAYOUT.W, LAYOUT.H);
   return c;
 }
 
@@ -317,8 +300,9 @@ export function createScene() {
   return { static: null, darkness: null, dust, lit: 0, doorOpen: 0 };
 }
 
-export function initScene(sc) {           // boot 时调用（需要 document）
-  sc.static = prerenderStatic();
+export function initScene(sc, atlases) {  // boot 时调用（需要 document）
+  sc.atlases = atlases;
+  sc.static = prerenderStatic(atlases);
   sc.darkness = makeDarkness();
 }
 
@@ -357,12 +341,22 @@ function glow(x, cx, cy, r, color, alpha) {
 function drawTorch(x, tx, ty, lit, t, seed) {
   thick(x, 5, PAL.wood2);
   x.beginPath(); x.moveTo(tx, ty + 34); x.lineTo(tx, ty + 6); x.stroke();     // 柄
-  x.fillStyle = lit ? PAL.fire1 : PAL.stoneD;
-  x.beginPath(); x.ellipse(tx, ty, 9, 12, 0, 0, 7); x.fill(); thick(x, 4); x.stroke();
-  if (lit) { flame(x, tx, ty - 4, 22, t, seed); glow(x, tx, ty - 6, 90, 'rgba(255,179,71,ALPHA)', 0.28); }
+  if (lit) {
+    x.fillStyle = PAL.fire1;
+    x.beginPath(); x.ellipse(tx, ty, 9, 12, 0, 0, 7); x.fill(); thick(x, 4); x.stroke();
+    flame(x, tx, ty - 4, 22, t, seed); glow(x, tx, ty - 6, 90, 'rgba(255,179,71,ALPHA)', 0.28);
+  } else {
+    x.fillStyle = '#3f3a34';                                                  // 熄灭火把头（炭束）
+    x.beginPath(); x.ellipse(tx, ty, 8, 11, 0, 0, 7); x.fill(); thick(x, 3.5, PAL.ink); x.stroke();
+    x.strokeStyle = 'rgba(255,255,255,.10)'; x.lineWidth = 2;
+    x.beginPath();
+    x.moveTo(tx - 4, ty - 4); x.lineTo(tx - 4, ty + 6);
+    x.moveTo(tx + 3, ty - 5); x.lineTo(tx + 3, ty + 5);
+    x.stroke();
+  }
 }
 
-// view：{ t, lit, doorState, doorPulse(0..1), doorOpen(0..1), torchesLit, bloomed, hatOn }
+// view：{ t, lit, doorState, doorPulse(0..1), doorOpen(0..1), bloomed, hatOn }
 export function drawScene(x, sc, view) {
   const { t } = view;
   x.drawImage(sc.static, 0, 0);
@@ -382,20 +376,13 @@ export function drawScene(x, sc, view) {
   }
   drawTorch(x, 900, 190, false, t, 3);                                           // 右墙火把：纯装饰（v2 不点燃）
   drawTorch(x, 1060, 190, false, t, 4);
-  // 木门（绕左轴收窄，规格 §6.3）
+  // 木门（MI 门贴图；绕左轴收窄，规格 §6.3）
   x.save();
-  x.translate(1096, 0);
+  x.translate(1117, 0);
   x.scale(Math.max(0.06, 1 - view.doorOpen * 0.94), 1);
-  x.translate(-1096, 0);
-  x.fillStyle = PAL.wood;
-  x.fillRect(1096, 442, 96, 58);
-  x.strokeStyle = PAL.wood2; x.lineWidth = 3;
-  for (const bx of [1096, 1120, 1144, 1168]) { x.beginPath(); x.moveTo(bx, 442); x.lineTo(bx, 500); x.stroke(); }
-  x.fillStyle = PAL.wood3;
-  x.beginPath(); x.moveTo(1096, 442); x.arc(1144, 442, 48, Math.PI, 0); x.lineTo(1192, 442); x.closePath(); x.fill(); x.stroke();
-  x.fillStyle = '#565b63';
-  x.fillRect(1096, 452, 96, 8); x.fillRect(1096, 480, 96, 8);               // 铁箍
-  drawRune(x, 'ᛟ', 1144, 462, 40, view.doorState === 'closed' ? 'rgba(30,32,44,.8)' : PAL.glowRune, view.doorState === 'closed' ? 5 : 6);
+  x.translate(-1117, 0);
+  blit(x, sc.atlases, 'door', 1117, 422);
+  drawRune(x, 'ᛟ', 1144, 462, 26, view.doorState === 'closed' ? 'rgba(30,32,44,.85)' : PAL.glowRune, view.doorState === 'closed' ? 4 : 5);
   x.restore();
   x.restore();
   // —— 门后金光（开门时）——

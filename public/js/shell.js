@@ -4,6 +4,7 @@ import { createHotbar, isVowel } from './hotbar.js';
 import { createUI } from './ui.js';
 import { Speech, Sfx, pickVoices } from './audio.js';
 import { loadProfile, saveProfile, mergeProfile } from './profile.js';
+import { loadAtlases } from './sprites.js';
 
 export const CHAPTER_NEXT = { 1: 'chapter2.html', 2: 'chapter3.html', 3: null };
 export const CHAPTER_DAY = { 1: '第一天', 2: '第二间房', 3: '第三间房' };
@@ -21,6 +22,7 @@ function bootShell(kit) {
   const dpr = Math.min(2, devicePixelRatio || 1);
   cv.width = kit.W * dpr; cv.height = kit.H * dpr;
   ctx.scale(dpr, dpr);
+  ctx.imageSmoothingEnabled = false;                                      // 像素素材保持锐利
   const fit = () => {
     const s = Math.min(innerWidth / kit.W, innerHeight / kit.H);
     el('stage').style.width = `${kit.W * s}px`;
@@ -30,7 +32,7 @@ function bootShell(kit) {
   window.__errors = [];
   addEventListener('error', e => __errors.push(String(e.message)));
   addEventListener('unhandledrejection', e => __errors.push(String(e.reason)));
-  fetch(`/api/chapter${kit.chapter}`).then(r => r.json()).catch(() => null).then(content => {
+  fetch(`/api/chapter${kit.chapter}`).then(r => r.json()).catch(() => null).then(async content => {
     if (!content) return;
     el('title').querySelector('h1').textContent = content.meta.title;
     el('title').querySelector('.sub').textContent = content.meta.titleEn;
@@ -39,10 +41,13 @@ function bootShell(kit) {
     if (content.meta.intro) {
       pro.querySelectorAll('p:not(.tap)').forEach((p, i) => { if (content.meta.intro[i]) p.textContent = content.meta.intro[i]; });
     }
-    startShell({ kit, content, el, cv, ctx });
-    if (new URLSearchParams(location.search).get('autostart') === '1') {
+    const atlases = await loadAtlases().catch(e => { window.__errors.push('atlas: ' + e.message); return null; });
+    startShell({ kit, content, el, cv, ctx, atlases });
+    const q = new URLSearchParams(location.search);
+    if (q.get('autostart') === '1') {
       el('title').classList.add('hidden');
       dispatchEvent(new CustomEvent('game:start'));                       // 必须在 startShell 注册监听之后
+      if (q.get('beat')) window.G.jump(q.get('beat'));                    // 调试：?autostart=1&beat=door-open
     } else {
       el('title').classList.remove('hidden');
       el('btn-start').addEventListener('click', () => {
@@ -54,7 +59,7 @@ function bootShell(kit) {
   });
 }
 
-function startShell({ kit, content, el, cv, ctx }) {
+function startShell({ kit, content, el, cv, ctx, atlases }) {
   // —— 音频 + 语音链 ——
   const speech = new Speech(), sfx = new Sfx();
   let voices = { uncle: null, child: null, door: null };
@@ -76,12 +81,13 @@ function startShell({ kit, content, el, cv, ctx }) {
   // —— 世界 ——
   const profile = loadProfile(localStorage);
   const game = kit.createGame(content, profile);
-  const w = kit.makeWorld({ content, profile, game, el, cv, ctx, speech, sfx, speak, voices });
+  const w = kit.makeWorld({ content, profile, game, el, cv, ctx, speech, sfx, speak, voices, atlases });
   w.game = game; w.content = content; w.profile = profile; w.speech = speech; w.sfx = sfx; w.speak = speak;
+  w.atlases = atlases;
   w.started = false;
 
   // —— UI / 物品栏 ——
-  const ui = createUI({ content });
+  const ui = createUI({ content, atlases });
   const hb = createHotbar({
     words: content.words,
     crafting: content.crafting || { progressiveGlow: true },

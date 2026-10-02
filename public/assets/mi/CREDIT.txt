@@ -1,0 +1,7 @@
+Modern Interiors Free v2.2 by LimeZu (itch.io)
+FREE VERSION LICENSE: non-commercial use only; editing allowed in non-commercial projects.
+Used for: room tiles, floors, walls, doors, windows, rugs, furniture and character sprites
+(interiors32.png, roombuilder32.png, chars.png).
+
+Custom art by the project: phoneme stones, runes, glowing switch, ceiling lamp, cat,
+well, brazier, wall torches, hat stand, rope.

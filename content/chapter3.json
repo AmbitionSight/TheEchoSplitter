@@ -1,15 +1,66 @@
 {
-  "meta": { "title": "回响之石 · 第三间房", "titleEn": "ROOM THREE", "chapter": 3,
-            "intro": ["崖壁下面只有一条窄路。", "头顶的墙上，垂着一截断掉的绳子。", "上面，风的声音更大了。"] },
+  "meta": {
+    "title": "回响之石 · 第三间房",
+    "titleEn": "ROOM THREE",
+    "chapter": 3,
+    "intro": [
+      "崖壁下面只有一条窄路。",
+      "头顶的墙上，垂着一截断掉的绳子。",
+      "上面，风的声音更大了。"
+    ]
+  },
   "words": {
-    "rope": { "icon": "rope", "phonemes": [["r",90],["əʊ",160],["p",80]],
-               "use": { "target": "rope", "effect": "mendRope", "once": true } }
+    "rope": {
+      "icon": "rope",
+      "phonemes": [
+        [
+          "r",
+          90
+        ],
+        [
+          "əʊ",
+          160
+        ],
+        [
+          "p",
+          80
+        ]
+      ],
+      "use": {
+        "target": "rope",
+        "effect": "mendRope",
+        "once": true
+      }
+    }
   },
   "flows": {
-    "rope": { "listen": ["Rope."], "puzzled": ["Rope?"], "drop": [880, 600] }
+    "rope": {
+      "listen": [
+        "Rope."
+      ],
+      "puzzled": [
+        "Rope?"
+      ],
+      "drop": [
+        880,
+        600
+      ]
+    }
   },
-  "carriers": { "r": "Err.", "əʊ": "Oh.", "p": "P." },
-  "geometry": { "wallX": 900, "wallW": 110, "groundY": 620, "topY": 120, "exitX": 1160, "benchX": 420, "spawnX": 140 },
+  "carriers": {
+    "r": "Err.",
+    "əʊ": "Oh.",
+    "p": "P."
+  },
+  "geometry": {
+    "wallX": 900,
+    "wallW": 110,
+    "groundY": 620,
+    "topY": 120,
+    "exitX": 980,
+    "benchX": 420,
+    "spawnX": 140
+  },
   "hints": {
     "start": "墙太高。上面有截绳子。",
     "attempt": "按 E，听听断绳。",

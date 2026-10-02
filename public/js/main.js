@@ -188,6 +188,9 @@ export function jump(g, beat) {
   switch (beat) {
     case 'hello-meet': return gameEvent(g, 'INTERACT', 'npc');
     case 'hello': return collect(g, 'hello');
+    case 'light':                                  // 调试：只开灯（验收右半与门）
+      g.lit = true; g.switchOn = true;
+      return [{ t: 'illuminate' }, { t: 'forceLight' }];
     case 'lit': return jump(g, 'hello').concat(gameEvent(g, 'INTERACT', 'switch'));
     case 'door-open':
       return jump(g, 'lit').concat(collect(g, 'open'), gameEvent(g, 'USE', { word: 'open', target: 'door' }), gameEvent(g, 'RITUAL_DONE'));
@@ -226,14 +229,14 @@ const kit = {
     }
   },
 
-  makeWorld({ content, game, el, cv }) {
+  makeWorld({ content, game, el, cv, atlases }) {
     const actors = createActors();
-    const sc = createScene(); initScene(sc);
+    const sc = createScene(); initScene(sc, atlases);
     const w = {
       actors, sc, cv,
       stones: [],
       view: { t: 0, lit: 0, doorState: 'closed', doorPulse: 0, doorOpen: 0,
-              torchesLit: false, bloomed: false, hatOn: false, switchOn: false, benchHot: false },
+              bloomed: false, hatOn: false, switchOn: false, benchHot: false },
       ritual: { active: false, t: 0, seated: 0 },
       walkTarget: null, pendingInteract: null,
       lastPX: 0, lastPY: 0, stuckT: 0
@@ -261,13 +264,17 @@ const kit = {
     let moved = false;
     if (w.keys.size) {
       const sp = 220 * dt;
-      if (w.keys.has('l')) { p.x -= sp; p.facing = -1; moved = true; }
-      if (w.keys.has('r')) { p.x += sp; p.facing = 1; moved = true; }
-      if (w.keys.has('u')) { p.y -= sp; moved = true; }
-      if (w.keys.has('d')) { p.y += sp; moved = true; }
+      if (w.keys.has('l')) { p.x -= sp; p.facing = -1; p.dir = 'left'; moved = true; }
+      if (w.keys.has('r')) { p.x += sp; p.facing = 1; p.dir = 'right'; moved = true; }
+      if (w.keys.has('u')) { p.y -= sp; p.dir = 'up'; moved = true; }
+      if (w.keys.has('d')) { p.y += sp; p.dir = 'down'; moved = true; }
       resolveCollisions(p);
     } else if (w.walkTarget) {
+      const px0 = p.x, py0 = p.y;
       const arrived = moveToward(p, w.walkTarget, 220, dt);
+      const ddx = p.x - px0, ddy = p.y - py0;
+      if (Math.abs(ddy) > Math.abs(ddx) && Math.abs(ddy) > 0.05) p.dir = ddy < 0 ? 'up' : 'down';
+      else if (Math.abs(ddx) > 0.05) p.dir = ddx < 0 ? 'left' : 'right';
       resolveCollisions(p);
       moved = true;
       if (w.pendingInteract) {
@@ -340,7 +347,7 @@ const kit = {
     for (const id of ['npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout', 'switch', 'bench', 'door']) {
       const t = LAYOUT.targets[id];
       if (!t) continue;
-      if (id === 'door' && !w.game.lit) continue;         // 黑暗中摸不到门
+      if (t.x > 800 && !w.game.lit) continue;             // 黑暗中右半区目标（门/帽架等）摸不到
       consider(Math.hypot(p.x - t.x, p.y - t.y), { kind: 'obj', id, x: t.x, y: t.y, r: t.r });
     }
     return best;
@@ -382,6 +389,7 @@ const kit = {
       w.view.switchOn = true;
       setGesture(w.actors.npc, 'laugh', 2);
     },
+    forceLight(w) { w.sc.lit = 1; },               // 调试：跳过 1.2s 光潮缓动（无头截图用）
     uncleCheer(w) {
       w.sfx.laugh(); setGesture(w.actors.npc, 'laugh', 2); w.ui.setHint('helloDone');
     },
@@ -404,9 +412,9 @@ const kit = {
     drawScene(x, sc, view);
     const byY = [['npc', w.actors.npc.y], ['cat', w.actors.cat.y], ['player', w.actors.player.y]].sort((a, b) => a[1] - b[1]);
     for (const [who] of byY) {
-      if (who === 'npc') drawNpc(x, w.actors.npc, view.t);
+      if (who === 'npc') drawNpc(x, w.actors.npc, view.t, w.atlases);
       if (who === 'cat') drawCat(x, w.actors.cat, view.t);
-      if (who === 'player') drawPlayer(x, w.actors.player, view.t);
+      if (who === 'player') drawPlayer(x, w.actors.player, view.t, w.atlases);
     }
     for (const s of w.stones) if (!s.to) drawStone(x, s, view.t);
     drawOverlay(x, sc, view);
