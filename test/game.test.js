@@ -102,7 +102,7 @@ test('拖错/拿错：hello 词具对门 = 咕哝；open 对大叔 = 咕哝；�
   assert.ok(gameEvent(g, 'USE', { word: 'open', target: 'npc' }).every(i => i.t === 'mutter'));
 });
 
-test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应', () => {
+test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应；再点物品栏=放下', () => {
   const g = createGame(content);
   gameEvent(g, 'INTERACT', 'npc');
   carry(g, 'hello');
@@ -111,9 +111,13 @@ test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应', () => {
   let out = gameEvent(g, 'INTERACT', 'npc');                            // 手持 hello 碰大叔 = USE
   assert.ok(out.some(i => i.t === 'effect' && i.name === 'greet' && i.full === true));
   assert.ok(out.some(i => i.t === 'hint' && i.key === 'helloDone'));   // 回礼后指向发光开关
-  gameEvent(g, 'HOLD_ITEM', 'hello');
-  out = gameEvent(g, 'INTERACT', 'npc');
+  out = gameEvent(g, 'INTERACT', 'npc');                                // 手上仍持有 → 重复使用轻反应
   assert.ok(out.some(i => i.t === 'effect' && i.full === false));
+  out = gameEvent(g, 'HOLD_ITEM', 'hello');                             // 再点一次物品栏 = 放下
+  assert.equal(g.hand, null);
+  assert.deepEqual(out, [{ t: 'hand' }]);
+  gameEvent(g, 'HOLD_ITEM', 'hello');                                   // 再点 = 重新拿起
+  assert.deepEqual(g.hand, { kind: 'item', word: 'hello' });
 });
 
 test('氛围物：只出音效指令，永不掉石', () => {

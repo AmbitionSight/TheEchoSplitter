@@ -102,9 +102,13 @@ export function gameEvent(g, ev, arg = null) {
       if (g.stonesPicked === 1) out.push({ t: 'hotbarShow' }, { t: 'hint', key: 'bench' }, { t: 'beat', beat: 'first-stone' });
       return out;
     }
-    case 'HOLD_ITEM': {                 // 点物品栏词具 → 拿到手上
+    case 'HOLD_ITEM': {                 // 点物品栏词具 → 拿起 / 再点一次 → 放下
       const word = arg;
       if (!g.inv.items.has(word)) return [];
+      if (g.hand?.kind === 'item' && g.hand.word === word) {
+        g.hand = null;
+        return [{ t: 'hand' }];
+      }
       g.hand = { kind: 'item', word };
       return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' },
               { t: 'hint', key: word === 'open' ? 'openItem' : 'helloGive' }];
