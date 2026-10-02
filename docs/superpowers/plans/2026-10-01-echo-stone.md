@@ -1162,7 +1162,7 @@ test('screenToLogical：整档与缩放档都换算正确，出界标记', () =>
   assert.deepEqual([r.x, r.y], [640, 360]); assert.ok(r.inside);
   r = screenToLogical(320, 180, { left: 0, top: 0, width: 640, height: 360 }, 1280, 720);
   assert.deepEqual([Math.round(r.x), Math.round(r.y)], [640, 360]);
-  r = screenToLogical(5, 5, { left: 0, top: 0, width: 640, height: 360 }, 1280, 720);
+  r = screenToLogical(5, 5, { left: 0, top: 0, width: 800, height: 360 }, 1280, 720);
   assert.equal(r.inside, false);
 });
 
@@ -1242,7 +1242,10 @@ export function resolveCollisions(p, pr = 16) {
   p.y = clamp(p.y, 340, LAYOUT.H - 20);
   for (const o of LAYOUT.obstacles) {
     const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy), min = o.r + pr;
-    if (d < min && d > 0.001) { p.x = o.x + (dx / d) * min; p.y = o.y + (dy / d) * min; }
+    if (d < min) {
+      if (d > 0.001) { p.x = o.x + (dx / d) * min; p.y = o.y + (dy / d) * min; }
+      else { p.x = o.x + min; p.y = o.y; }  // 与圆心重合的退化情况：沿 +x 方向推出
+    }
   }
   return p;
 }
@@ -1306,7 +1309,7 @@ export function magnetStep(s, player, dt) {
   return d < 14;
 }
 ```
-注意：`screenToLogical(px, py, rect)` 只需 3 参（rect 含 css 尺寸）——测试按此签名调用。
+注意：`screenToLogical(px, py, rect)` 只需 3 参（rect 含 css 尺寸）——测试按此签名调用。`inside` 是"画布内"语义（含墙带——Task 13 火把目标 y=260<340 依赖此判定）；出界测试需用带黑边的矩形（如 800×360）才能落到画布外。`resolveCollisions` 对与障碍圆心重合的退化点沿 +x 方向推出。
 
 - [ ] **Step 4: 跑测试**
 
