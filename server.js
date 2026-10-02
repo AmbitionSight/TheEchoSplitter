@@ -1,4 +1,6 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
+import os from 'node:os';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -10,9 +12,26 @@ const MIME = {
   '.svg': 'image/svg+xml'
 };
 
+// —— HTTP Basic 认证（内网部署：用户名 PanPan / 密码 LeLe）——
+const AUTH_EXPECTED = Buffer.from('PanPan:LeLe').toString('base64');
+function authorized(req) {
+  const h = req.headers.authorization || '';
+  if (!h.startsWith('Basic ')) return false;
+  const a = Buffer.from(h.slice(6).trim());
+  const b = Buffer.from(AUTH_EXPECTED);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 export function createServer() {
   return http.createServer(async (req, res) => {
     try {
+      if (!authorized(req)) {
+        res.writeHead(401, {
+          'WWW-Authenticate': 'Basic realm="EchoStone", charset="UTF-8"',
+          'Content-Type': 'text/plain; charset=utf-8'
+        });
+        return res.end('401');
+      }
       const url = new URL(req.url, 'http://localhost');
       if (url.pathname === '/api/chapter1') {
         const body = await readFile(join(ROOT, 'content', 'chapter1.json'));
@@ -33,7 +52,18 @@ export function createServer() {
   });
 }
 
+function lanIPs() {
+  return Object.values(os.networkInterfaces())
+    .flat()
+    .filter(n => n && n.family === 'IPv4' && !n.internal)
+    .map(n => n.address);
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const PORT = Number(process.env.PORT || 3000);
-  createServer().listen(PORT, () => console.log(`回响之石 http://localhost:${PORT}`));
+  const PORT = Number(process.env.PORT || 3001);
+  createServer().listen(PORT, '0.0.0.0', () => {
+    console.log(`回响之石（内网部署，Basic 认证）`);
+    console.log(`  本机:   http://localhost:${PORT}`);
+    for (const ip of lanIPs()) console.log(`  内网:   http://${ip}:${PORT}`);
+  });
 }
