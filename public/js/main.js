@@ -172,11 +172,13 @@ export function gameEvent(g, ev, arg = null) {
       return out;
     }
     case 'RITUAL_DONE': {
-      doorEvent(g.door, 'RITUAL_DONE');
+      const r = doorEvent(g.door, 'RITUAL_DONE');
+      if (!r) return [];                                    // 非仪式态重放：静默（防 G.jump 二次开门，评审 Fix 4）
       return [{ t: 'openAnim' }];
     }
     case 'OPEN_DONE': {
-      doorEvent(g.door, 'OPEN_DONE');
+      const r = doorEvent(g.door, 'OPEN_DONE');
+      if (!r) return [];                                    // 非开门态重放：静默（同上）
       g.beat = 'summary';
       return [{ t: 'summary' }];
     }
@@ -253,7 +255,7 @@ function start(content) {
   };
   scanVoices();
   if (speech.ready) speechSynthesis.addEventListener('voiceschanged', scanVoices);
-  el('btn-start').addEventListener('click', () => sfx.ctx?.resume(), { once: true });
+  addEventListener('pointerdown', () => sfx.ctx?.resume(), { once: true }); // 任意首手势解锁音频（含 autostart 路径，评审 Fix 4）
 
   let speechChain = Promise.resolve();                       // 语音串行
   function speak(text, who = 'uncle', slow = false) {
@@ -281,6 +283,7 @@ function start(content) {
                  torchesLit: false, bloomed: false, hatOn: false };
   const ritual = { active: false, t: 0, seated: 0 };
   let walkTarget = null, pendingInteract = null, started = false;
+  let lastPX = 0, lastPY = 0, stuckT = 0;                    // 走位卡死检测（评审 Fix 2）
 
   const ui = createUI({ content });
   const journal = createJournal({
@@ -308,7 +311,10 @@ function start(content) {
     if (want === 'player') return Math.hypot(p.x - actors.player.x, p.y - actors.player.y) < 90 ? 'player' : null;
     if (want === 'npc') return Math.hypot(p.x - LAYOUT.targets.npc.x, p.y - LAYOUT.targets.npc.y) < 90 ? 'npc' : null;
     const t = LAYOUT.targets[want];
-    if (t && Math.hypot(p.x - t.x, p.y - t.y) < t.r) return want;
+    if (t && Math.hypot(p.x - t.x, p.y - t.y) < t.r) {
+      if (want !== 'player' && want !== 'npc' && t.x > 800 && !game.lit) return null; // 暗区目标未点亮不接词具（规格 §6.2，评审 Fix 5）
+      return want;
+    }
     return null;
   }
 
@@ -410,6 +416,7 @@ function start(content) {
     if (KEYMAP[e.code]) { keys.add(KEYMAP[e.code]); walkTarget = null; pendingInteract = null; }
   });
   addEventListener('keyup', e => { if (KEYMAP[e.code]) keys.delete(KEYMAP[e.code]); });
+  addEventListener('blur', () => keys.clear());              // 失焦清键：防 alt-tab 卡键（评审 Fix 4）
 
   cv.addEventListener('pointerdown', e => {
     if (!started) return;
@@ -417,7 +424,7 @@ function start(content) {
     const p = screenToLogical(e.clientX, e.clientY, cv.getBoundingClientRect());
     if (!p.inside) return;
     const hit = hitSceneTarget(p);
-    if (!hit) { walkTarget = { x: p.x, y: clampY(p.y) }; pendingInteract = null; return; }
+    if (!hit) { walkTarget = { x: Math.max(40, Math.min(LAYOUT.W - 40, p.x)), y: clampY(p.y) }; pendingInteract = null; return; }
     if (near(hit)) { interact(hit.id); return; }
     walkTarget = approach(hit); pendingInteract = hit.id;
   });
@@ -426,7 +433,8 @@ function start(content) {
   function near(t) { return Math.hypot(actors.player.x - t.x, actors.player.y - t.y) < LAYOUT.INTERACT_R; }
   function approach(t) {
     const dx = actors.player.x - t.x, dy = actors.player.y - t.y, d = Math.hypot(dx, dy) || 1;
-    return { x: t.x + (dx / d) * 120, y: t.y + (dy / d) * 120 };
+    return { x: Math.max(40, Math.min(LAYOUT.W - 40, t.x + (dx / d) * 120)),
+             y: Math.max(340, Math.min(LAYOUT.H - 20, t.y + (dy / d) * 120)) };   // 落点钳回房间（评审 Fix 2）
   }
   // cat 不在 LAYOUT.targets（只登记在障碍表）：点击/走位交互统一经此解析（点击半径放宽到 40）
   function targetOf(id) {
@@ -472,16 +480,24 @@ function start(content) {
       if (keys.has('d')) { p.y += sp; moved = true; }
       resolveCollisions(p);
     } else if (walkTarget) {
-      if (moveToward(p, walkTarget, 220, dt)) {
-        resolveCollisions(p);
-        const done = pendingInteract;
-        walkTarget = null;
-        if (done) {
-          const t = targetOf(done) || LAYOUT.targets.npc;
-          if (Math.hypot(p.x - t.x, p.y - t.y) < LAYOUT.INTERACT_R) interact(done);
-        }
-      } else resolveCollisions(p);
+      const arrived = moveToward(p, walkTarget, 220, dt);
+      resolveCollisions(p);
       moved = true;
+      if (pendingInteract) {
+        const t = targetOf(pendingInteract);
+        if (arrived || (t && Math.hypot(p.x - t.x, p.y - t.y) < LAYOUT.INTERACT_R)) {
+          const done = pendingInteract;
+          walkTarget = null; pendingInteract = null;
+          if (t && Math.hypot(p.x - t.x, p.y - t.y) < LAYOUT.INTERACT_R) interact(done);
+        }
+      } else if (arrived) walkTarget = null;
+      // 防走位死锁：位移可忽略持续 0.6s 则放弃（障碍重叠/不可达点）
+      if (walkTarget) {
+        const disp = Math.hypot(p.x - lastPX, p.y - lastPY);
+        stuckT = disp < 1 ? stuckT + dt : 0;
+        if (stuckT > 0.6) { walkTarget = null; pendingInteract = null; stuckT = 0; }
+      }
+      lastPX = p.x; lastPY = p.y;
     }
     p.moving = moved;
     if (moved) p.walkT += dt;
@@ -489,9 +505,7 @@ function start(content) {
     // 音素石：物理 + 磁吸拾取
     for (let i = stones.length - 1; i >= 0; i--) {
       const s = stones[i];
-      if (ritual.active && s.to) {                     // 仪式石：由 ritual 段渲染
-        continue;
-      }
+      if (s.to) continue;                              // 仪式石永不参与物理/磁吸（揭示卡等待期防盗取，评审 Fix 1）
       stepStone(s, dt, s.floorY ?? 660);
       if (magnetStep(s, p, dt)) {
         stones.splice(i, 1);
@@ -520,7 +534,7 @@ function start(content) {
       if (who === 'cat') drawCat(ctx, actors.cat, view.t);
       if (who === 'player') drawPlayer(ctx, actors.player, view.t);
     }
-    for (const s of stones) drawStone(ctx, s, view.t);
+    for (const s of stones) if (!s.to) drawStone(ctx, s, view.t);   // 仪式石只由 drawRitualStones 画（评审 Fix 1）
     drawOverlay(ctx, sc, view);
     if (ritual.active || view.doorOpen > 0) drawRitualStones(ctx);
     requestAnimationFrame(frame);
@@ -560,12 +574,12 @@ function start(content) {
       x.textAlign = 'center'; x.textBaseline = 'middle';
       x.fillText(s.ipa, 0, 1);
       x.restore();
-      seats.forEach(([qx, qy], j) => {                      // 已落座座位发青光
-        if (j < ritual.seated) {
-          x.fillStyle = 'rgba(84,224,200,.25)';
-          x.beginPath(); x.arc(qx, qy, 20, 0, 7); x.fill();
-        }
-      });
+    });
+    seats.forEach(([qx, qy], j) => {                        // 已落座座位发青光（移出石循环：单层 0.25，防 4× 叠加，评审 Fix 3）
+      if (j < ritual.seated) {
+        x.fillStyle = 'rgba(84,224,200,.25)';
+        x.beginPath(); x.arc(qx, qy, 20, 0, 7); x.fill();
+      }
     });
   }
 
