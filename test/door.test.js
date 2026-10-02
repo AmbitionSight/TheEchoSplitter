@@ -2,35 +2,27 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { createDoor, doorEvent } from '../public/js/door.js';
 
-test('门：5 词集齐才从沉睡进入脉动', () => {
+test('门：吃 open 词具才进仪式；其他一律咕哝', () => {
   const d = createDoor();
-  assert.equal(doorEvent(d, 'CLICK'), null);                       // 沉睡中点门无反应
-  assert.equal(doorEvent(d, 'WORDS_COMPLETE', 4), null);
-  const r = doorEvent(d, 'WORDS_COMPLETE', 5);
-  assert.equal(d.state, 'pulsing'); assert.ok(r.entered);
-});
-
-test('门：脉动时点击 → 低语 + 只掉一次 open 石', () => {
-  const d = createDoor();
-  doorEvent(d, 'WORDS_COMPLETE', 5);
-  const r1 = doorEvent(d, 'CLICK');
-  assert.equal(d.state, 'whispered');
-  assert.ok(r1.whisper && r1.dropOpenStones);
-  const r2 = doorEvent(d, 'CLICK');
-  assert.ok(r2.whisper); assert.equal(r2.dropOpenStones, undefined); // 可反复听，不再掉
-});
-
-test('门：拖错词具 → 咕哝不解锁；拖 open → 仪式 → 开启', () => {
-  const d = createDoor();
-  doorEvent(d, 'WORDS_COMPLETE', 5);
-  doorEvent(d, 'CLICK');
-  assert.deepEqual(doorEvent(d, 'OFFER', 'water'), { mutter: true });
-  assert.equal(d.state, 'whispered');
+  assert.deepEqual(doorEvent(d, 'OFFER', 'hello'), { mutter: true });
+  assert.equal(d.state, 'closed');
   const r = doorEvent(d, 'OFFER', 'open');
   assert.equal(d.state, 'ritual'); assert.ok(r.ritual);
+});
+
+test('门：仪式 → 开门动画 → 开启；开过再喂 mutter', () => {
+  const d = createDoor();
+  doorEvent(d, 'OFFER', 'open');
   doorEvent(d, 'RITUAL_DONE');
   assert.equal(d.state, 'opening');
   doorEvent(d, 'OPEN_DONE');
   assert.equal(d.state, 'opened');
-  assert.deepEqual(doorEvent(d, 'OFFER', 'open'), { mutter: true }); // 开过不再响应
+  assert.deepEqual(doorEvent(d, 'OFFER', 'open'), { mutter: true });
+});
+
+test('仪式座位数据：4 座绕拱，可截取', async () => {
+  const { ritualSeats, RITUAL_STEP } = await import('../public/js/door.js');
+  assert.equal(RITUAL_STEP, 0.55);
+  assert.equal(ritualSeats().length, 4);
+  assert.deepEqual(ritualSeats(2), [[1098, 502], [1116, 396]]);
 });

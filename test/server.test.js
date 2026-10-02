@@ -16,8 +16,7 @@ test('GET /api/chapter1 返回 JSON 且六词齐全', async t => {
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /application\/json/);
   const data = await res.json();
-  assert.deepEqual(Object.keys(data.words).sort(),
-    ['fire','hat','hello','light','open','water']);
+  assert.deepEqual(Object.keys(data.words).sort(), ['hello', 'open']);
 });
 
 test('GET / 返回 index.html（后续任务创建后才会通过）', async t => {

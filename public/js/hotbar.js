@@ -54,11 +54,11 @@ export function canPlace(slots, inv, ipa) {
   return inSlots < stoneCount(inv, ipa);
 }
 
-export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord, onCraft, onDropItem }) {
+export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord, onCraft, onTakeItem, onDropItem }) {
   const el = id => document.getElementById(id);
   const root = el('hotbar'), craftRow = el('craft-row');
   const stoneBox = el('stone-cells'), itemBox = el('item-cells');
-  const toggle = el('craft-toggle'), ghost = el('drag-ghost');
+  const ghost = el('drag-ghost');
   const slotEls = [...craftRow.querySelectorAll('.slot')];
   const slots = [null, null, null, null];
   let inv = null;
@@ -143,9 +143,10 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
       window.removeEventListener('pointercancel', cancel);
       ghost.classList.add('hidden');
       cell.style.opacity = '';
-      if (!moved) {                                        // 轻点 = 点读
+      if (!moved) {                                        // 轻点 = 点读（石）/ 拿到手上（词具）
         if (payload.kind === 'stone') onSpeakCarrier(payload.ipa);
-        else onSpeakWord(payload.word);
+        else if (onTakeItem) onTakeItem(payload.word);
+        else if (onSpeakWord) onSpeakWord(payload.word);
         return;
       }
       if (payload.kind === 'stone') {                     // 只能投槽位；投空=原地无事（库存从未动过）
@@ -169,15 +170,10 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
   }
 
   slotEls.forEach((s, i) => s.addEventListener('click', () => returnStone(i)));
-  toggle.addEventListener('click', () => {
-    craftRow.classList.toggle('hidden');
-    toggle.classList.toggle('armed');
-  });
 
   return {
     refresh,
     show() { root.classList.remove('hidden'); document.getElementById('bag').classList.remove('hidden'); },
-    openCraft() { craftRow.classList.remove('hidden'); toggle.classList.add('armed'); },
     pulseBag(total) {
       const bag = document.getElementById('bag');
       document.getElementById('bag-count').textContent = String(total);

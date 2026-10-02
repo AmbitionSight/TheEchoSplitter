@@ -1,0 +1,67 @@
+<h2>右半间的「现代灯 + 开关」长什么样？</h2>
+<p class="subtitle">开局右半黑暗，只有开关在暗中微微发光可点。点了开关 → 灯说出 "Open" → open 音素掉落 → 右半亮起。三个方案区别在灯具形态与开关位置。点一个你觉得对的。</p>
+
+<style>
+  .room{position:relative;width:100%;max-width:420px;height:210px;background:linear-gradient(90deg,#26221c 0%,#26221c 48%,#10121a 52%,#0b0d13 100%);border:1px solid #3a3f4d;border-radius:8px;overflow:hidden;font-size:11px}
+  .room .floor{position:absolute;left:0;right:0;bottom:0;height:34%;background:repeating-linear-gradient(90deg,#2e2a24,#2e2a24 24px,#2a2620 24px,#2a2620 48px)}
+  .room .door{position:absolute;right:14px;bottom:34%;width:44px;height:74px;background:#3a2e22;border:2px solid #52422f;border-radius:18px 18px 0 0}
+  .room .npc{position:absolute;left:34%;bottom:36%;font-size:16px}
+  .room .lightbeam{position:absolute;top:0;right:8%;width:60%;height:100%;background:radial-gradient(ellipse at 78% 6%,rgba(255,214,130,.34),transparent 62%);display:none}
+  .room.lit .lightbeam{display:block}
+  .room.lit{background:linear-gradient(90deg,#26221c 0%,#26221c 48%,#2e2b25 52%,#2e2b25 100%)}
+  .cap{position:absolute;padding:2px 7px;border-radius:5px;background:#0d0f16cc;border:1px solid #4a4f5d;color:#e8dcbe;font-size:10px}
+  .cap.glow{border-color:#7bd88f;color:#aef0bd;box-shadow:0 0 9px #7bd88f66}
+  .switchdot{position:absolute;width:16px;height:22px;background:#d8d3c6;border:1px solid #6b6455;border-radius:4px}
+  .switchdot::after{content:"";position:absolute;left:4px;right:4px;top:4px;height:6px;background:#8a8375;border-radius:2px}
+</style>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>右半天花板吸顶灯 + 墙上明装开关面板（左右分界处）</h3>
+      <div class="room">
+        <div class="lightbeam"></div>
+        <div class="floor"></div>
+        <div class="door"></div>
+        <div class="npc">🧔</div>
+        <div class="cap" style="right:26%;top:6px">💡 吸顶灯（右半顶部）</div>
+        <div class="switchdot" style="left:49%;top:64px"></div>
+        <div class="cap glow" style="left:38%;top:40px">开关在明暗分界墙上，暗中自发光——一眼可见「黑暗里有个可点的东西」</div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#9aa0ad">最像现代家里：进门摸开关。开关位于照亮区边缘，黑暗中它自己微微发光 beckoning。点了 → 吸顶灯亮 → 整个右半暖光。</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>右半吊灯（垂线+灯罩）+ 灯旁拉绳</h3>
+      <div class="room">
+        <div class="lightbeam"></div>
+        <div class="floor"></div>
+        <div class="door"></div>
+        <div class="npc">🧔</div>
+        <div class="cap" style="right:22%;top:2px">🕯 吊灯（垂线+圆罩）</div>
+        <div class="cap glow" style="right:14%;top:52px">拉绳垂到手边</div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#9aa0ad">复古一点的现代：垂吊灯罩+金色拉绳，拉绳在暗中发着微光。点拉绳 → "Open" → 吊灯摇曳着亮起（可加轻微摆动动画，最有戏剧感）。</p>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>灯管/灯带（现代感最强）+ 触摸式开关条</h3>
+      <div class="room">
+        <div class="lightbeam"></div>
+        <div class="floor"></div>
+        <div class="door"></div>
+        <div class="npc">🧔</div>
+        <div class="cap" style="right:12%;top:8px;border-radius:3px">▭▭▭ 右半顶部灯带</div>
+        <div class="cap glow" style="left:47%;top:44px;border-radius:9px">▮ 触摸开关条</div>
+      </div>
+      <p style="margin-top:8px;font-size:13px;color:#9aa0ad">最未来感：顶部 LED 灯带沿右半墙线铺设，墙上一条竖向触摸开关（呼吸微光）。点亮时灯带逐段亮起（线性扫光，1.2s 光潮的现代版）。</p>
+    </div>
+  </div>
+</div>

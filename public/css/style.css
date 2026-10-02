@@ -114,3 +114,16 @@ h2{font-size:34px;font-weight:700}
 /* 触摸加固（Task 13 评审 E）：拖拽禁浏览器手势 + 禁过度滚动 */
 #hotbar .cell,#craft-row .slot{touch-action:none}
 body{overscroll-behavior:none}
+
+/* ===== v2：E 键手持版 ===== */
+#hud-avatar{position:absolute;left:22px;top:20px;z-index:30;display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:20px}
+#avatar-fig{width:56px;height:64px}
+.hand-slot{width:44px;height:44px;border-radius:12px;border:2px dashed var(--stroke);display:flex;align-items:center;justify-content:center}
+.hand-slot .glyph{font-size:16px;font-weight:700}
+.hand-slot.stone-v .glyph{color:var(--vowel)}
+.hand-slot.stone-c .glyph{color:var(--cons)}
+.hand-slot.item{border-style:solid;background:rgba(255,255,255,.08)}
+.hand-slot.item img{width:34px;height:34px}
+#craft-row{display:flex;gap:6px;padding:6px 8px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid var(--stroke);margin-left:12px}
+#craft-row .slot{width:46px;height:46px;border-radius:11px;font-size:16px}
+#hintbar{bottom:104px}

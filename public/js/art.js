@@ -82,7 +82,7 @@ export function drawRune(ctx, glyph, cx, cy, size, color = PAL.glowRune, lw = nu
 }
 
 // —— 手绘图标库（厚描边 Q 版，规格 §9C，禁 emoji）——
-export const ICON_TYPES = ['hello', 'water', 'fire', 'hat', 'light', 'open', 'gem'];
+export const ICON_TYPES = ['hello', 'water', 'fire', 'hat', 'light', 'open', 'switch', 'gem'];
 
 function ink(ctx, s) { ctx.lineWidth = Math.max(3, s * 0.09); ctx.strokeStyle = PAL.ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
 
@@ -165,6 +165,27 @@ const ICON_DRAW = {
     ctx.moveTo(cx - s * 0.2, cy + s * 0.48); ctx.lineTo(cx - s * 0.2, cy + s * 0.05);
     ctx.arc(cx, cy + s * 0.05, s * 0.2, Math.PI, 0);
     ctx.lineTo(cx + s * 0.2, cy + s * 0.48); ctx.closePath(); ctx.fill();
+  },
+  switch(ctx, cx, cy, s) { // 开关象形（v2 open 词具）：面板 + 扳把 + 通电纹
+    ink(ctx, s);
+    ctx.fillStyle = '#d8d3c6';
+    ctx.beginPath();
+    const w = s * 0.6, h = s * 0.82, x0 = cx - w / 2, y0 = cy - h / 2, r = s * 0.12;
+    ctx.moveTo(x0 + r, y0); ctx.arcTo(x0 + w, y0, x0 + w, y0 + h, r); ctx.arcTo(x0 + w, y0 + h, x0, y0 + h, r);
+    ctx.arcTo(x0, y0 + h, x0, y0, r); ctx.arcTo(x0, y0, x0 + w, y0, r); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#7bd88f';
+    ctx.save();
+    ctx.translate(cx, cy + s * 0.08);
+    ctx.rotate(-0.5);
+    ctx.fillRect(-s * 0.09, -s * 0.2, s * 0.18, s * 0.34);
+    ctx.strokeRect(-s * 0.09, -s * 0.2, s * 0.18, s * 0.34);
+    ctx.restore();
+    ctx.strokeStyle = PAL.glowRune; ctx.lineWidth = Math.max(2, s * 0.05);
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.16, cy - s * 0.3); ctx.lineTo(cx - s * 0.02, cy - s * 0.22);
+    ctx.lineTo(cx - s * 0.1, cy - s * 0.12); ctx.lineTo(cx + s * 0.06, cy - s * 0.04);
+    ctx.stroke();
   },
   gem(ctx, cx, cy, s) { // 菱形宝石（声音石袋）
     ink(ctx, s);
