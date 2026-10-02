@@ -95,10 +95,10 @@ h2{font-size:34px;font-weight:700}
 .rune-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:12px}
 .rune-card{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;border-radius:18px;
   background:rgba(255,255,255,.05);border:1px solid var(--stroke);cursor:pointer}
-.rune-card .rune{font-size:34px;line-height:1;color:rgba(255,255,255,.16)}
+.rune-card:not(.lit){cursor:default}
 .rune-card .ipa{font-size:13px;margin:0}
-.rune-card.lit .rune{color:var(--teal);text-shadow:0 0 14px var(--teal);animation:runeBreath 2.6s ease-in-out infinite}
-@keyframes runeBreath{0%,100%{text-shadow:0 0 8px rgba(84,224,200,.5)}50%{text-shadow:0 0 22px var(--teal)}}
+.rune-card.lit canvas{animation:runeBreathC 2.6s ease-in-out infinite}
+@keyframes runeBreathC{0%,100%{filter:drop-shadow(0 0 5px rgba(84,224,200,.45))}50%{filter:drop-shadow(0 0 16px #54e0c8)}}
 .rune-card.lit img{width:26px;height:26px}
 .rune-card .sleep{font-size:11px;color:rgba(255,255,255,.28)}
 .rune-endcard{grid-column:1/-1;text-align:center;color:var(--dim);padding:20px;font-size:15px}
