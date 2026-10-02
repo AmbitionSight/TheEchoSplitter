@@ -970,6 +970,20 @@ test('Sfx：假 AudioContext 上创建振荡器并排包络', () => {
   assert.ok(made.length >= 3);
   assert.ok(osc.every(o => o.started === 1));
 });
+
+test('女声名含 male 子串不得获得大叔加分（回归）', () => {
+  const genderless = { name: 'Google US English', lang: 'en-US', localService: false };
+  const femaleUk = { name: 'Google UK English Female', lang: 'en-GB', localService: false };
+  assert.ok(scoreVoice(femaleUk, 'uncle') < scoreVoice(genderless, 'uncle'));
+  assert.ok(scoreVoice(femaleUk, 'child') > scoreVoice(genderless, 'child'));
+});
+
+test('speak 对非字符串输入也 resolve（resolve-only 契约）', async () => {
+  const s = new Speech(null, null);
+  await s.speak(undefined, {});
+  await s.speak(null, {});
+  assert.ok(true);
+});
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -992,7 +1006,8 @@ export function scoreVoice(v, role) {
   let s = 10;
   if (/gb|uk/.test(lang)) s += 2; else if (/us/.test(lang)) s += 1;
   if (v.localService) s += 2;
-  const male = MALE.test(name), female = FEMALE.test(name);
+  const female = FEMALE.test(name);
+  const male = !female && MALE.test(name);
   if (role === 'uncle' || role === 'door') { if (male) s += 4; if (female) s -= 3; }
   if (role === 'child') { if (female) s += 4; if (male) s -= 3; }
   return s;
@@ -1008,7 +1023,7 @@ export function pickVoices(list) {
 }
 
 export function estimateMs(text, rate = 1) {
-  const words = text.trim().split(/\s+/).filter(Boolean).length || 1;
+  const words = String(text ?? '').trim().split(/\s+/).filter(Boolean).length || 1;
   return Math.max(650, (words * 380) / rate);
 }
 

@@ -81,3 +81,17 @@ test('Sfx：假 AudioContext 上创建振荡器并排包络', () => {
   assert.ok(made.length >= 3);
   assert.ok(osc.every(o => o.started === 1));
 });
+
+test('女声名含 male 子串不得获得大叔加分（回归）', () => {
+  const genderless = { name: 'Google US English', lang: 'en-US', localService: false };
+  const femaleUk = { name: 'Google UK English Female', lang: 'en-GB', localService: false };
+  assert.ok(scoreVoice(femaleUk, 'uncle') < scoreVoice(genderless, 'uncle'));
+  assert.ok(scoreVoice(femaleUk, 'child') > scoreVoice(genderless, 'child'));
+});
+
+test('speak 对非字符串输入也 resolve（resolve-only 契约）', async () => {
+  const s = new Speech(null, null);
+  await s.speak(undefined, {});
+  await s.speak(null, {});
+  assert.ok(true);
+});
