@@ -612,15 +612,34 @@ function start(content) {
   }
 
   function drawEHint(x, t) {
-    const hx = t.x, hy = t.y - (t.kind === 'stone' ? 34 : 60);
+    const pulse = Math.sin(view.t * 3.2) * 0.5 + 0.5;
+    const stone = t.kind === 'stone';
+    // —— 地面软光环：脉动椭圆，绝不遮挡物件本体 ——
     x.save();
-    x.globalAlpha = 0.85 + Math.sin(view.t * 4) * 0.15;
-    x.fillStyle = 'rgba(28,31,40,.85)';
-    x.beginPath(); x.arc(hx, hy, 14, 0, 7); x.fill();
-    x.lineWidth = 2; x.strokeStyle = PAL.glowRune; x.stroke();
-    x.fillStyle = '#fff';
-    x.font = 'bold 14px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('E', hx, hy + 1);
+    x.translate(t.x, t.y + (stone ? 14 : 8));
+    x.scale(1, 0.38);
+    const rr = (stone ? 26 : 44) + pulse * 9;
+    const gg = x.createRadialGradient(0, 0, rr * 0.25, 0, 0, rr);
+    gg.addColorStop(0, 'rgba(84,224,200,.32)');
+    gg.addColorStop(0.72, 'rgba(84,224,200,.15)');
+    gg.addColorStop(1, 'rgba(84,224,200,0)');
+    x.fillStyle = gg;
+    x.beginPath(); x.arc(0, 0, rr, 0, 7); x.fill();
+    x.restore();
+    // —— 小键帽徽章：斜挂右上方，轻微浮动 ——
+    const kx = t.x + (stone ? 25 : 36);
+    const ky = t.y - (stone ? 24 : 52) + Math.sin(view.t * 2.6) * 2.5;
+    x.save();
+    x.translate(kx, ky);
+    x.rotate(0.1);
+    x.fillStyle = 'rgba(24,27,36,.92)';
+    x.beginPath();
+    if (x.roundRect) x.roundRect(-11, -11, 22, 22, 6); else x.rect(-11, -11, 22, 22);
+    x.fill();
+    x.lineWidth = 1.5; x.strokeStyle = PAL.glowRune; x.stroke();
+    x.fillStyle = '#F5F5F7';
+    x.font = 'bold 12px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText('E', 0, 0.5);
     x.restore();
   }
 
