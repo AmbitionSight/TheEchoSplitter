@@ -2339,14 +2339,14 @@ export function drawPlayer(x, p, t) {
   x.beginPath();
   x.moveTo(-13, -8); x.quadraticCurveTo(-15, -34, 0, -36); x.quadraticCurveTo(15, -34, 13, -8); x.closePath();
   x.fill(); thick(x); x.stroke();
-  // 头 + 兜帽
-  x.fillStyle = '#f2c99b';
-  x.beginPath(); x.arc(0, -48, 15, 0, 7); x.fill(); x.stroke();
+  // 兜帽（先画：蓝环+下颌垂布，框住脸）+ 头
   x.fillStyle = '#4a7bd4';
   x.beginPath();
   x.arc(0, -50, 17, Math.PI * 0.85, Math.PI * 2.15);
-  x.quadraticCurveTo(-18, -38, -10, -34); x.quadraticCurveTo(0, -28, 10, -34); x.quadraticCurveTo(18, -38, 17, -50);
+  x.quadraticCurveTo(0, -26, -15.15, -42.28);   // 从弧终点经下颌垂布回到弧起点（精确闭合）
   x.closePath(); x.fill(); x.stroke();
+  x.fillStyle = '#f2c99b';
+  x.beginPath(); x.arc(0, -48, 15, 0, 7); x.fill(); x.stroke();
   // 脸
   x.fillStyle = PAL.ink;
   x.beginPath(); x.arc(4, -48, 1.9, 0, 7); x.fill();
