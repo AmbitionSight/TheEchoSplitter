@@ -56,6 +56,10 @@ export function gameEvent(g, ev, arg = null) {
     case 'HOLD_ITEM': {
       const word = arg;
       if (!g.inv.items.has(word)) return [];
+      if (g.hand?.kind === 'item' && g.hand.word === word) {
+        g.hand = null;                                   // 再点一次 = 放下
+        return [{ t: 'hand' }];
+      }
       g.hand = { kind: 'item', word };
       return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' }, { t: 'hint', key: 'give' }];
     }
