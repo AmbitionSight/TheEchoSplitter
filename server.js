@@ -27,7 +27,7 @@ export function createServer({ auth = true } = {}) {
     try {
       if (auth && !authorized(req)) {
         res.writeHead(401, {
-          'WWW-Authenticate': 'Basic realm="EchoStone", charset="UTF-8"',
+          'WWW-Authenticate': 'Basic realm="EchoSplitter", charset="UTF-8"',
           'Content-Type': 'text/plain; charset=utf-8'
         });
         return res.end('401');
@@ -64,7 +64,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const PORT = Number(process.env.PORT || 3001);
   const AUTH = process.env.AUTH !== '0';                    // AUTH=0 关闭认证（本机 3000 用）
   createServer({ auth: AUTH }).listen(PORT, '0.0.0.0', () => {
-    console.log(`回响之石  端口 ${PORT}  认证: ${AUTH ? '开（PanPan）' : '关'}`);
+    console.log(`析声者  端口 ${PORT}  认证: ${AUTH ? '开（PanPan）' : '关'}`);
     for (const ip of lanIPs()) console.log(`  内网:   http://${ip}:${PORT}`);
   });
 }

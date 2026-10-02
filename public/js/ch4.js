@@ -1,4 +1,4 @@
-// 回响之石 · 第四章：超级拼装（log / rope / raft / pole）
+// 析声者 · 第四章：超级拼装（log / rope / raft / pole）
 import { createInventory, addStone } from './hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord,
          chapterOnE, syncHeld, dropBackExtra, stepWorldStones } from './chapter.js';

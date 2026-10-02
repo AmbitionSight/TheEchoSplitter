@@ -1,4 +1,4 @@
-// —— 回响之石 · 第一间房：hello 教学 + open 开关主线（E 键手持交互）——
+// —— 析声者 · 第一间房：hello 教学 + open 开关主线（E 键手持交互）——
 import { createInventory, isVowel } from './hotbar.js';
 import { createDoor, doorEvent } from './door.js';
 import { pickupStone, bankHeld, holdItem, craftWord, cap, syncHeld } from './chapter.js';
@@ -11,6 +11,7 @@ export function createGame(content) {
     inv: createInventory(),
     stonesPicked: 0, lit: false,
     hand: null,                        // {kind:'stone',ipa} | {kind:'item',word} | null
+    heard: new Set(),                  // 回声物件听过的音（声音层；与拼词层的 everPicked 分开，不污染播种）
     door: createDoor(), usedTargets: new Set(),
     helloDropped: false, helloReminded: false, switchOn: false,
     teaseClock: 0
@@ -50,8 +51,17 @@ export function gameEvent(g, ev, arg = null) {
   switch (ev) {
     case 'INTERACT': {
       const id = arg;
-      if (id === 'cat') return [{ t: 'cat' }];
-      if (c.ambience[id]) return [{ t: 'sfx', name: c.ambience[id].sfx }];
+      if (id === 'cat') {
+        const out = [{ t: 'meow' }];              // 喵一声+竖耳（壳的 meow 分支；原 {t:'cat'} 是无人处理的死指令）
+        if (c.ambience.cat?.echo) out.push({ t: 'echo', ipas: c.ambience.cat.echo, say: c.ambience.cat.say });   // 回声物件
+        return out;
+      }
+      if (c.ambience[id]) {                     // 回声物件：底部亮音素 + 念整词；不掉石不进库存
+        const a = c.ambience[id];
+        const out = [{ t: 'sfx', name: a.sfx }];
+        if (a.echo) out.push({ t: 'echo', ipas: a.echo, say: a.say });
+        return out;
+      }
       if (id === 'npc') {
         g.helloReminded = true;
         g.teaseClock = 0;
@@ -61,7 +71,7 @@ export function gameEvent(g, ev, arg = null) {
         if (!g.helloDropped) {
           g.helloDropped = true;
           return [
-            { t: 'speak', who: 'uncle', text: c.flows.hello.linesFirst[0] },
+            { t: 'speak', who: 'uncle', text: c.flows.hello.linesFirst[0], slow: true },   // 慢速、去口语：一句干净的 Hello，声音按节奏剥落成石
             { t: 'drop', word: 'hello' },
             { t: 'hint', key: 'hand' },
             { t: 'beat', beat: 'explore' }
@@ -74,7 +84,7 @@ export function gameEvent(g, ev, arg = null) {
           g.switchOn = true; g.lit = true;
           return [
             { t: 'sfx', name: 'clack' },
-            { t: 'speak', who: 'door', text: c.flows.open.listen[0] },
+            { t: 'speak', who: 'door', text: c.flows.open.listen[0], slow: true },   // 石门低缓念（规格 §3 拍节 12）
             { t: 'illuminate' },
             { t: 'drop', word: 'open' },
             { t: 'hint', key: 'litUp' },
@@ -347,11 +357,17 @@ export const kit = {
   syncHeld,
 
   runExtras: {
-    drop(w, ins) {
+    drop(w, ins) {                 // 节奏掉落：声音按音素时长依次落地成石，从左到右排成一条「声音顺序线」
       const src = w.content.flows[ins.word].drop;
       const phon = w.content.words[ins.word].phonemes;
-      phon.forEach(([ipa], i) => w.stones.push(makeStone(ipa, src[0], src[1], i * 0.13)));
-      w.stones.slice(-phon.length).forEach((s, i) => { s.floorY = src[1] + 26 + (i % 3) * 16; });
+      const total = phon.reduce((s, [, ms]) => s + ms, 0);
+      let cum = 0;
+      phon.forEach(([ipa, ms], i) => {
+        cum += ms;                                        // 这个音说完了 → 落地成石
+        const s = makeStone(ipa, src[0] - 66 + i * 44, src[1], 0.3 + (cum / total) * 1.2, () => 0.5);
+        s.floorY = src[1] + 26;                           // 同一排落地；rand 恒定 → 直上直落不乱序
+        w.stones.push(s);
+      });
     },
     dropBack(w, ins) {
       const p = w.actors.player;
@@ -379,7 +395,7 @@ export const kit = {
   },
 
   summaryMerge(game) {
-    return { everPicked: [...game.inv.everPicked], words: [...game.book], abilities: [], chapter: 1 };
+    return { everPicked: [...game.inv.everPicked], heard: [...game.heard], words: [...game.book], abilities: [], chapter: 1 };
   },
 
   draw(w, x, eTarget) {
@@ -393,7 +409,7 @@ export const kit = {
       if (who === 'cat') drawCat(x, w.actors.cat, view.t);
       if (who === 'player') drawPlayer(x, w.actors.player, view.t, w.atlases);
     }
-    for (const s of w.stones) if (!s.to) drawStone(x, s, view.t);
+    for (const s of w.stones) if (!s.to && s.state !== 'wait') drawStone(x, s, view.t);   // wait=节奏掉落倒计时，先不现身
     drawOverlay(x, sc, view);
     if (ritual.active || view.doorOpen > 0) drawRitualStones(w, x);
     drawEHint(x, eTarget, view.t);

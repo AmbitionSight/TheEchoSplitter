@@ -1,4 +1,4 @@
-// —— 回响之石 · 第二间房：jump（dʒ·ʌ·m·p；p 为第一间房旧识）——
+// —— 析声者 · 第二间房：jump（dʒ·ʌ·m·p；p 为第一间房旧识）——
 import { createInventory } from './hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord,
          chapterOnE, syncHeld, seedBegin, dropExtra, dropBackExtra, stepWorldStones } from './chapter.js';

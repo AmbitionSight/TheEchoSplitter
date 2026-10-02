@@ -39,7 +39,7 @@ test('GET / 返回 index.html', async t => {
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/html/);
   const body = await res.text();
-  assert.ok(body.includes('回响之石'));
+  assert.ok(body.includes('析声者'));
 });
 
 test('静态 js 文件返回正确 MIME，越权路径 403/404', async t => {

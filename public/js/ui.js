@@ -20,6 +20,23 @@ export function createUI({ content, atlases }) {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toastEl.classList.add('hidden'), dur);
   }
+
+  // 回声条：音素石依次亮出 → 整词念出时一起共振；新声音只给一枚小标 + 书钮轻亮（不再弹顶部大提示）
+  const echoEl = el('echo-strip');
+  let echoTimer = 0;
+  function echoStrip(ins, isNew, dur = 3.4) {        // dur：整词念完后半拍自动收起（由壳按估时传入）
+    if (!echoEl) return;
+    const ipas = ins.ipas || [];
+    const mergeAt = ipas.length * 0.12 + 0.35;                    // 词开口的时刻，石群共振
+    echoEl.innerHTML = ipas.map((p, i) =>
+      `<span class="es-stone ${isVowel(p) ? 'v' : 'c'}" style="animation:popIn .4s ${i * 0.12}s ease backwards, esMerge .8s ${mergeAt}s ease">${p}</span>`).join('') +
+      (isNew ? `<span class="es-new" style="animation:popIn .4s .8s ease backwards">已入析声录</span>` : '');
+    echoEl.classList.remove('hidden'); void echoEl.offsetWidth;
+    clearTimeout(echoTimer);
+    echoTimer = setTimeout(() => echoEl.classList.add('hidden'), dur * 1000);
+    const book = document.getElementById('btn-book');
+    if (isNew && book) { book.classList.add('armed'); setTimeout(() => book.classList.remove('armed'), 1600); }
+  }
   function reveal(word) {
     const def = content.words[word];
     el('reveal-stones').innerHTML = def.phonemes.map(([p]) => `<span>${p}</span>`).join('');
@@ -79,5 +96,5 @@ export function createUI({ content, atlases }) {
       slot.className = 'hand-slot item';
     }
   }
-  return { setHint, toast, reveal, summary, updateHand };
+  return { setHint, toast, echoStrip, reveal, summary, updateHand };
 }

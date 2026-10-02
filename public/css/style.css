@@ -127,3 +127,16 @@ body{overscroll-behavior:none}
 #craft-row{display:flex;gap:6px;padding:6px 8px;border-radius:14px;background:rgba(255,255,255,.05);border:1px solid var(--stroke);margin-left:12px}
 #craft-row .slot{width:46px;height:46px;border-radius:11px;font-size:16px}
 #hintbar{bottom:104px}
+
+/* 析声录（图鉴）：计数 */
+#rune-count{color:var(--dim);font-size:15px;letter-spacing:.12em}
+
+/* 回声条：物件的声音原子在底部亮出，念整词时一起共振（词只念不写，铁律 7） */
+#echo-strip{position:absolute;left:50%;bottom:170px;transform:translateX(-50%);z-index:35;display:flex;align-items:center;gap:8px;padding:9px 16px;border-radius:16px;animation:slideUp .45s ease}
+#echo-strip .es-stone{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:700;border:1px solid var(--stroke);background:rgba(255,255,255,.07)}
+#echo-strip .es-stone.v{color:var(--vowel)}
+#echo-strip .es-stone.c{color:var(--cons)}
+#echo-strip .es-new{font-size:12px;color:var(--teal);letter-spacing:.08em;margin-left:6px}
+@keyframes esMerge{30%{box-shadow:0 0 16px var(--teal);border-color:var(--teal);transform:scale(1.12)}}
+.j-name{font-size:15px;letter-spacing:.3em;color:var(--dim);margin-right:2px}

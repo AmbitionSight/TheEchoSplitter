@@ -2,8 +2,10 @@
 // 每关 = 一份 content JSON + 一个 kit（事件机 + 世界 + tick/draw/E 钩子），壳只有这一份。
 import { createHotbar, isVowel } from './hotbar.js';
 import { bankStone, syncCraftSlots } from './workbench.js';
+import { createJournal } from './journal.js';
+import { cap } from './chapter.js';
 import { createUI } from './ui.js';
-import { Speech, Sfx, pickVoices, SpeechQueue } from './audio.js';
+import { Speech, Sfx, pickVoices, SpeechQueue, estimateMs } from './audio.js';
 import { loadProfile, saveProfile, mergeProfile } from './profile.js';
 import { loadAtlases } from './sprites.js';
 
@@ -79,6 +81,9 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
     const conf = (kit.voices?.(voices) || voices).child || {};
     return speechQ.carrier(text, { ...conf, pitch: conf.pitch });
   }
+  function carrierOf(ipa) {                   // 章内载词优先，通用 48 音表兜底（回声/图鉴点读用）
+    return content.carriers[ipa] ?? content.phonemeBook?.carriers?.[ipa] ?? ipa;
+  }
 
   // —— 世界 ——
   const profile = loadProfile(localStorage);
@@ -102,6 +107,16 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
   w.ui = ui; w.hb = hb;
   ui.updateHand(null);
 
+  // —— 析声录（图鉴）：词卡 + 48 符文；点亮 = 本章捡过/听过 ∪ 书档一路攒下的 ——
+  const journal = createJournal({
+    content,
+    speakWord: word => speak(cap(word), 'child'),
+    speakCarrier: ipa => speakCarrier(carrierOf(ipa)),
+    lifetimeHeard: () => [...new Set([...profile.everPicked, ...profile.heard])]
+  });
+  const btnBook = el('btn-book');
+  if (btnBook) btnBook.addEventListener('click', () => journal.toggle(game));
+
   // —— 指令解释器（标准集 + kit 覆盖/扩展） ——
   function run(instructions) {
     for (const ins of instructions) {
@@ -109,6 +124,15 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
       switch (ins.t) {
         case 'speak': speak(ins.text, ins.who, ins.slow); break;
         case 'carrier': sfx.click(); speakCarrier(content.carriers[ins.ipa]); break;
+        case 'echo': {                      // 回声物件：音素石在底部回声条亮出 → 念整词（词只念不写）；新声音悄悄进书
+          const ipas = ins.ipas || [];
+          const added = game.heard ? ipas.filter(p => !game.heard.has(p)) : [];
+          ipas.forEach(p => game.heard?.add(p));
+          const est = ins.say ? estimateMs(ins.say, 0.8) : 900;   // 慢速童声念整词的估时
+          ui.echoStrip({ ...ins }, added.length > 0, ipas.length * 0.12 + 0.35 + est / 1000 + 0.55);
+          if (ins.say) speak(ins.say, 'child', true);
+          break;
+        }
         case 'hint': ui.setHint(ins.key); break;
         case 'beat': game.beat = ins.beat; break;
         case 'bank': bankStone(w, ins); break;               // 合成台存石：进库存后自动进槽（workbench）
@@ -157,6 +181,11 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
   w.keys = keys;
   const KM = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r' };
   addEventListener('keydown', e => {
+    const overlay = document.querySelector('.screen:not(.hidden)');   // 析声录/揭示卡/结算等全屏浮层开着时不接游戏键（防在书后面交互/走动/跳跃）
+    if (overlay) {
+      if (e.code === 'Escape' && overlay.id === 'journal') journal.close();
+      return;
+    }
     if (e.code === 'KeyE') { if (w.started && eTarget) doE(); return; }
     if (e.code === 'Space' && kit.onSpace) { e.preventDefault(); kit.onSpace(w); return; }
     if (KM[e.code]) { keys.add(KM[e.code]); kit.onKey?.(w, KM[e.code]); }

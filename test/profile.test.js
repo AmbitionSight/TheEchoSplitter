@@ -39,3 +39,25 @@ test('neededSeeds：只挑本章词用得上的旧音素', () => {
   assert.deepEqual(neededSeeds(ch3, ['h', 'ə', 'l', 'əʊ', 'p', 'n']).sort(), ['p', 'əʊ']);
   assert.deepEqual(neededSeeds(ch2, []), []);                          // 无书档（新玩家）不带
 });
+
+test('heard：回声听过的音跨关并集，与 everPicked 分开存（拼词播种不受污染）', () => {
+  let p = mergeProfile(createProfile(), { everPicked: ['h'], heard: ['w', 'ɔː'], chapter: 1 });
+  p = mergeProfile(p, { everPicked: ['dʒ'], heard: ['w', 'æ'], chapter: 2 });
+  assert.deepEqual(p.heard.sort(), ['æ', 'w', 'ɔː'].sort());
+  assert.deepEqual(p.everPicked.sort(), ['dʒ', 'h'].sort());
+  const store = { getItem: () => JSON.stringify(p), setItem() {} };
+  assert.deepEqual(loadProfile(store).heard.sort(), ['æ', 'w', 'ɔː'].sort());   // 读写不丢
+});
+
+test('旧存档键迁移：读到 echo-stone-profile 旧档即沿用，保存时写入新键 echo-splitter-profile', () => {
+  const p = mergeProfile(createProfile(), { everPicked: ['h'], words: ['hello'], chapter: 1 });
+  let written = null;
+  const store = {
+    getItem: k => k === 'echo-stone-profile' ? JSON.stringify(p) : null,
+    setItem: (k, v) => { written = [k, v]; }
+  };
+  const loaded = loadProfile(store);                       // 新键不存在 → 回退读旧键
+  assert.deepEqual(loaded.words, ['hello']);
+  saveProfile(store, loaded);
+  assert.equal(written[0], 'echo-splitter-profile');       // 保存写新键，完成迁移
+});

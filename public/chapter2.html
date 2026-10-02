@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>回响之石 · 第二间房</title>
+<title>析声者 · 第二间房</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -12,7 +12,7 @@
 
   <div id="title" class="screen center glass hidden">
     <div class="rune-float" aria-hidden="true">ᛚ</div>
-    <h1>回响之石</h1>
+    <h1>析声者</h1>
     <p class="sub">ROOM TWO</p>
     <button id="btn-start" class="btn primary">开 始</button>
   </div>
@@ -42,6 +42,7 @@
         <div class="slot" data-slot="2"></div>
         <div class="slot" data-slot="3"></div>
       </div>
+      <button class="rune-btn" id="btn-book" title="析声录">ᛚ</button>
     </div>
   </div>
 
@@ -66,6 +67,22 @@
     <button id="notes-close" class="btn primary">回到走廊</button>
   </div>
 
+  <div id="journal" class="screen glass hidden">
+    <div class="journal-head glass">
+      <span class="j-name">析声录</span>
+      <div class="seg">
+        <button class="seg-btn active" data-tab="words">词语</button>
+        <button class="seg-btn" data-tab="runes">声音</button>
+      </div>
+      <span id="rune-count">0/48</span>
+      <button id="journal-close" class="btn small ghost">合上</button>
+    </div>
+    <div class="journal-body">
+      <div id="journal-words"></div>
+      <div id="journal-runes" class="hidden"></div>
+    </div>
+  </div>
+  <div id="echo-strip" class="glass hidden"></div>
   <div id="toast" class="glass hidden"></div>
 </div>
 <div id="drag-ghost" class="hidden"></div>

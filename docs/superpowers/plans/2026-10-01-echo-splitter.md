@@ -1,8 +1,10 @@
-# 回响之石（The Echo Stone）第一章 实施计划
+# 析声者（The Echo Splitter）第一章 实施计划
+
+> 注：本项目原名「回响之石 / The Echo Stone」，2026-10-03 更名为析声者。文中旧名均指同一项目。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 按 `docs/superpowers/specs/2026-10-01-echo-stone-design.md` 从零实现可玩的网页英语解谜游戏第一章：碰物拾音素 → 工具栏合成词具 → 用词点亮黑暗、打开石门。
+**Goal:** 按 `docs/superpowers/specs/2026-10-01-echo-splitter-design.md` 从零实现可玩的网页英语解谜游戏第一章：碰物拾音素 → 工具栏合成词具 → 用词点亮黑暗、打开石门。
 
 **Architecture:** 零依赖 Node ESM 服务器（静态托管 + /api/chapter1）+ 原生 JS/Canvas 前端。所有 `public/js/*.js` 为 ES 模块，**顶层禁止任何 DOM/window 访问**（DOM 只出现在函数体内），因此 Node 可直接 import 做单元测试（node:test 内置，零安装）。纯逻辑（事件机/合成/库存/物理/碰撞/门状态）与渲染严格分离：纯函数先 TDD，渲染任务靠浏览器目检。
 
@@ -34,7 +36,7 @@ Expected: `v18` 或更高（需要 node:test 与内置 fetch）。低于 18 先�
 `package.json`（`type: module` 只为让 Node 以 ESM 跑测试/服务器，不引入依赖，符合规格「零安装」）：
 ```json
 {
-  "name": "echo-stone",
+  "name": "the-echo-splitter",
   "private": true,
   "type": "module",
   "scripts": { "start": "node server.js", "test": "node --test" }
@@ -52,7 +54,7 @@ node_modules/
 ```json
 {
   "meta": {
-    "title": "回响之石", "titleEn": "THE ECHO STONE",
+    "title": "析声者", "titleEn": "THE ECHO SPLITTER",
     "intro": ["你的语言被偷走了。", "你走进一间陌生的石室，只有一个声音在等你。", "碰一碰这里的东西——声音会掉出来。"]
   },
   "words": {
@@ -144,7 +146,7 @@ test('GET / 返回 index.html（后续任务创建后才会通过）', async () 
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/html/);
   const body = await res.text();
-  assert.ok(body.includes('回响之石'));
+  assert.ok(body.includes('析声者'));
   server.close();
 });
 
@@ -250,7 +252,7 @@ export function createServer() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const PORT = Number(process.env.PORT || 3000);
-  createServer().listen(PORT, () => console.log(`回响之石 http://localhost:${PORT}`));
+  createServer().listen(PORT, () => console.log(`析声者 http://localhost:${PORT}`));
 }
 ```
 
@@ -284,7 +286,7 @@ git commit -m "feat: 零依赖服务器与 chapter1 内容（含内容不变量�
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>回响之石 · The Echo Stone</title>
+<title>析声者 · The Echo Splitter</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -293,8 +295,8 @@ git commit -m "feat: 零依赖服务器与 chapter1 内容（含内容不变量�
 
   <div id="title" class="screen center glass hidden">
     <div class="rune-float" aria-hidden="true">ᚫ</div>
-    <h1>回响之石</h1>
-    <p class="sub">THE ECHO STONE</p>
+    <h1>析声者</h1>
+    <p class="sub">THE ECHO SPLITTER</p>
     <button id="btn-start" class="btn primary">开 始</button>
   </div>
 
@@ -589,7 +591,7 @@ Run: `node --test`
 Expected: 全部 pass（Task 1 的两条 server 测试此时转绿）。
 
 Run: `node server.js` → 打开 `http://localhost:3000`
-Expected: 深色舞台居中；毛玻璃标题卡：青色 ᚫ 上下浮动、「回响之石 / THE ECHO STONE」、蓝色开始按钮，点击有按压缩放；点开始 → 序章三句 + 「点击继续」呼吸；点击后顶部出现开发 toast。Ctrl+C 停服务器。
+Expected: 深色舞台居中；毛玻璃标题卡：青色 ᚫ 上下浮动、「析声者 / THE ECHO SPLITTER」、蓝色开始按钮，点击有按压缩放；点开始 → 序章三句 + 「点击继续」呼吸；点击后顶部出现开发 toast。Ctrl+C 停服务器。
 
 - [ ] **Step 8: Commit**
 
@@ -2002,7 +2004,7 @@ Expected: 45 pass（35 旧 + 10 新），全绿，clean exit。
 - [ ] **Step 6: Commit**
 
 ```bash
-git add public/js/main.js test/game.test.js docs/superpowers/plans/2026-10-01-echo-stone.md
+git add public/js/main.js test/game.test.js docs/superpowers/plans/2026-10-01-echo-splitter.md
 git commit -m "feat: 游戏事件机（碰/拾/拼/用/门/提示/跳拍）纯逻辑与全套测试（含 hello-末位门醒修正）"
 ```
 
@@ -3475,7 +3477,7 @@ Run: `node server.js` → `http://localhost:3000`，逐条核对：
 - [ ] **Step 4: Commit**
 
 ```bash
-git add public/js/main.js public/js/audio.js public/js/ui.js public/js/hotbar.js public/css/style.css test/game.test.js docs/superpowers/plans/2026-10-01-echo-stone.md
+git add public/js/main.js public/js/audio.js public/js/ui.js public/js/hotbar.js public/css/style.css test/game.test.js docs/superpowers/plans/2026-10-01-echo-splitter.md
 git commit -m "feat: 主循环全接线（输入/交互/指令解释器/门仪式/调试钩子）+ 评审遗留九项修正（门后风声/jump防双拾取/仪式期静默/touch加固/揭示兜底等）"
 ```
 
@@ -3490,7 +3492,7 @@ git commit -m "feat: 主循环全接线（输入/交互/指令解释器/门仪�
 
 ## 执行方式（Execution Handoff）
 
-计划已保存到 `docs/superpowers/plans/2026-10-01-echo-stone.md`。两种执行方式：
+计划已保存到 `docs/superpowers/plans/2026-10-01-echo-splitter.md`。两种执行方式：
 
 1. **子代理驱动（推荐）**——每个任务派一个全新子代理实现，任务间由我审查，迭代快
 2. **本会话内联执行**——用 executing-plans 批量执行，检查点处停下审查

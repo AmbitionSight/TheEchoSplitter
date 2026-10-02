@@ -146,13 +146,15 @@ test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应；再点�
   assert.deepEqual(g.hand, { kind: 'item', word: 'hello' });
 });
 
-test('氛围物：只出音效指令，永不掉石', () => {
+test('氛围物：音效 + 回声指令，永不掉石', () => {
   const g = createGame(content);
   for (const id of ['well', 'brazier', 'hatstand', 'sprout']) {
     const out = gameEvent(g, 'INTERACT', id);
-    assert.ok(out.length === 1 && out[0].t === 'sfx', `${id} 应只出音效`);
+    assert.ok(out[0].t === 'sfx', `${id} 首条应为音效`);
+    assert.ok(out.length === 2 && out[1].t === 'echo' && Array.isArray(out[1].ipas), `${id} 应带回声指令`);
+    assert.ok(!out.some(i => i.t === 'drop'), `${id} 不得掉词`);
   }
-  assert.ok(gameEvent(g, 'INTERACT', 'cat').some(i => i.t === 'cat'));
+  assert.ok(gameEvent(g, 'INTERACT', 'cat').some(i => i.t === 'meow'));   // 喵+竖耳（规格验收）
 });
 
 test('TICK 卡关提示链：捡石 → 开关 → 合成 → 去门', () => {
@@ -180,4 +182,20 @@ test('jump 调试拍：hello / lit / door-open / summary 状态正确且不重�
   jump(g, 'summary');
   assert.equal(g.door.state, 'opened');
   assert.equal(g.stonesPicked, 8);
+});
+
+test('回声物件：碰井 = 水声 + w·ɔː·t·ə 回声指令；不掉石不进库存', () => {
+  const g = createGame(content);
+  assert.deepEqual(gameEvent(g, 'INTERACT', 'well'),
+    [{ t: 'sfx', name: 'water' }, { t: 'echo', ipas: ['w', 'ɔː', 't', 'ə'], say: 'Water.' }]);
+  assert.equal(g.inv.everPicked.size, 0);       // 声音层与拼词层分开
+  assert.equal(g.inv.stones.size, 0);
+  assert.equal(g.heard.size, 0);                // 入书发生在壳的 echo 指令，事件机只发指令
+});
+
+test('回声物件：猫也是回声点（m·iː·aʊ），跟在猫指令后', () => {
+  const g = createGame(content);
+  const out = gameEvent(g, 'INTERACT', 'cat');
+  assert.equal(out[0].t, 'meow');
+  assert.deepEqual(out[1], { t: 'echo', ipas: ['m', 'iː', 'aʊ'], say: 'Meow.' });
 });

@@ -1,5 +1,5 @@
 {
-  "name": "echo-stone",
+  "name": "the-echo-splitter",
   "private": true,
   "type": "module",
   "scripts": { "start": "node server.js", "test": "node --test" }

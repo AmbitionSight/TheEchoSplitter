@@ -53,3 +53,15 @@ test('回归：鼠标点石头，走到后自动拾取', () => {
   assert.equal(w.stones.length, 0);
   assert.deepEqual(w.game.hand, { kind: 'stone', ipa: 'h' });
 });
+
+test('节奏掉落：石头按音素时长依次弹出，从左到右排成声音顺序线', () => {
+  const w = makeW();
+  kit.runExtras.drop(w, { t: 'drop', word: 'hello' });
+  const ss = w.stones.slice(-4);
+  assert.deepEqual(ss.map(s => s.x), [334, 378, 422, 466]);          // drop[0]=400：一条 44px 间距的线
+  const at = ss.map(s => -s.t);                                       // makeStone 的 t=-delay
+  assert.ok(at[0] < at[1] && at[1] < at[2] && at[2] < at[3], '依次弹出');
+  assert.ok(Math.abs(at[3] - 1.5) < 1e-9);                            // 最后一块（最长的 əʊ）在 1.5s
+  assert.ok(at[3] - at[2] > at[1] - at[0], '音素越长，间隔越大（70/90/80/200ms 的节奏）');
+  assert.ok(ss.every(s => s.vx === 0 && s.floorY === 526));           // 直上直落、同一排落地，顺序不被打乱
+});

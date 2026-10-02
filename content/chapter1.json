@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "回响之石", "titleEn": "THE ECHO STONE", "chapter": 1,
+    "title": "析声者", "titleEn": "THE ECHO SPLITTER", "chapter": 1,
     "intro": ["你的语言被偷走了。", "你走进一间陌生的石室，只有一个声音在等你。", "碰一碰这里的东西，声音会掉出来。"]
   },
   "words": {
@@ -10,15 +10,15 @@
                 "use": { "target": "door", "effect": "unlock", "once": true } }
   },
   "flows": {
-    "hello": { "lines": ["Hello! Hello!"], "linesFirst": ["Hello! Yes, you!"], "drop": [400, 500] },
+    "hello": { "lines": ["Hello! Hello!"], "linesFirst": ["Hello."], "drop": [400, 500] },
     "open":  { "listen": ["Open."], "drop": [700, 430] }
   },
   "ambience": {
-    "well":     { "sfx": "water" },
-    "brazier":  { "sfx": "crackle" },
-    "hatstand": { "sfx": "hatPuff" },
-    "sprout":   { "sfx": "glowTick" },
-    "cat":      { "sfx": "meow" }
+    "well":     { "sfx": "water",    "echo": ["w", "ɔː", "t", "ə"], "say": "Water." },
+    "brazier":  { "sfx": "crackle",  "echo": ["f", "aɪ", "ə"], "say": "Fire." },
+    "hatstand": { "sfx": "hatPuff",  "echo": ["h", "æ", "t"], "say": "Hat." },
+    "sprout":   { "sfx": "glowTick", "echo": ["l", "aɪ", "t"], "say": "Light." },
+    "cat":      { "sfx": "meow",     "echo": ["m", "iː", "aʊ"], "say": "Meow." }
   },
   "switch": { "pos": [660, 282], "litDrop": [720, 440] },
   "bench":  { "pos": [640, 616] },
@@ -41,7 +41,8 @@
     ],
     "runes": { "iː":"ᛃ","ɪ":"ᛂ","e":"ᛖ","æ":"ᚫ","ɑː":"ᚨ","ɒ":"ᚬ","ɔː":"ᚢ","ʊ":"ᚭ","uː":"ᛇ","ʌ":"ᛜ","ə":"ᚪ","ɜː":"ᛠ",
                 "eɪ":"ᛄ","aɪ":"ᛁ","ɔɪ":"ᛤ","əʊ":"ᚩ","aʊ":"ᛥ","ɪə":"ᛡ","eə":"ᛧ","ʊə":"ᛨ",
-                "p":"ᛈ","b":"ᛒ","t":"ᛏ","d":"ᛞ","k":"ᚳ","g":"ᚷ","f":"ᚠ","v":"ᚡ","θ":"ᚦ","ð":"ᚧ","s":"ᛌ","z":"ᛋ","ʃ":"ᛢ","ʒ":"ᛣ","tʃ":"ᚲ","dʒ":"ᚵ","ts":"ᚶ","dz":"ᚸ","tr":"ᚺ","dr":"ᚼ","m":"ᛗ","n":"ᚾ","ŋ":"ᛝ","h":"ᚻ","l":"ᛚ","r":"ᚱ","j":"ᛅ","w":"ᚹ" }
+                "p":"ᛈ","b":"ᛒ","t":"ᛏ","d":"ᛞ","k":"ᚳ","g":"ᚷ","f":"ᚠ","v":"ᚡ","θ":"ᚦ","ð":"ᚧ","s":"ᛌ","z":"ᛋ","ʃ":"ᛢ","ʒ":"ᛣ","tʃ":"ᚲ","dʒ":"ᚵ","ts":"ᚶ","dz":"ᚸ","tr":"ᚺ","dr":"ᚼ","m":"ᛗ","n":"ᚾ","ŋ":"ᛝ","h":"ᚻ","l":"ᛚ","r":"ᚱ","j":"ᛅ","w":"ᚹ" },
+    "carriers": { "h":"Huh.", "ə":"Uh.", "l":"All.", "əʊ":"Oh.", "p":"P.", "n":"N.", "w":"Woo.", "ɔː":"Aw.", "t":"T.", "f":"F.", "aɪ":"I.", "æ":"A.", "m":"Mm.", "iː":"Ee.", "aʊ":"Ow." }
   },
   "hints": {
     "hello": "他在喊你。过去按 E。",

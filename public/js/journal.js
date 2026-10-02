@@ -14,19 +14,23 @@ export function waveSegments(phonemes, width) {
   });
 }
 
-export function createJournal({ content, speakWord, speakCarrier }) {
+export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard = () => [] }) {
   const el = id => document.getElementById(id);
   const root = el('journal'), wordsBox = el('journal-words'), runesBox = el('journal-runes');
   const pb = content.phonemeBook;
 
+  // 点亮 = 本章捡过的石 ∪ 本章听过的回声 ∪ 书档一路攒下的（跨关只增不减）
+  const heardSet = g => new Set([...g.inv.everPicked, ...(g.heard ?? []), ...lifetimeHeard()]);
+
   function renderWords(g) {
+    const heard = heardSet(g);
     wordsBox.innerHTML = '';
     for (const word of g.book) {
       const def = content.words[word];
       const card = document.createElement('div');
       card.className = 'word-card';
       const ipaHtml = def.phonemes.map(([p]) =>
-        `<span style="${g.inv.everPicked.has(p) ? '' : 'opacity:.35'}">${p}</span>`).join('<b> · </b>');
+        `<span style="${heard.has(p) ? '' : 'opacity:.35'}">${p}</span>`).join('<b> · </b>');
       card.innerHTML = `
         <img src="${iconURL(def.icon)}" alt="">
         <div class="wc-mid">
@@ -39,7 +43,7 @@ export function createJournal({ content, speakWord, speakCarrier }) {
       const cv = card.querySelector('canvas'), x = cv.getContext('2d');
       for (const s of waveSegments(def.phonemes, 360)) {
         const h = isVowel(s.ipa) ? 40 : 24;
-        x.fillStyle = g.inv.everPicked.has(s.ipa) ? '#0A84FF' : 'rgba(255,255,255,.14)';
+        x.fillStyle = heard.has(s.ipa) ? '#0A84FF' : 'rgba(255,255,255,.14)';
         x.beginPath();
         x.roundRect ? x.roundRect(s.x, (56 - h) / 2, s.w, h, 8) : x.rect(s.x, (56 - h) / 2, s.w, h);
         x.fill();
@@ -50,13 +54,14 @@ export function createJournal({ content, speakWord, speakCarrier }) {
 
   function renderRunes(g) {
     runesBox.innerHTML = '';
+    const heard = heardSet(g);
     let picked = 0;
     for (const group of pb.groups) {
       const grid = document.createElement('div');
       grid.className = 'rune-grid';
       grid.style.gridTemplateColumns = group.items.length > 10 ? 'repeat(8,1fr)' : 'repeat(8,1fr)';
       for (const ipa of group.items) {
-        const lit = g.inv.everPicked.has(ipa);
+        const lit = heard.has(ipa);
         if (lit) picked++;
         const cell = document.createElement('div');
         cell.className = 'rune-card' + (lit ? ' lit' : '');

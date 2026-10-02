@@ -1,4 +1,4 @@
-// —— 回响之石 · 第三间房：rope（r·əʊ·p；əʊ/p 为旧识凝石）——
+// —— 析声者 · 第三间房：rope（r·əʊ·p；əʊ/p 为旧识凝石）——
 import { createInventory } from './hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord,
          chapterOnE, syncHeld, seedBegin, dropExtra, dropBackExtra, stepWorldStones } from './chapter.js';

@@ -1,20 +1,22 @@
-// —— 声音书档：跨关携带「已学会的音素 / 已拼出的词 / 已解锁的能力」（localStorage）——
+// —— 声档：跨关携带「已学会的音素 / 已拼出的词 / 已解锁的能力」（localStorage）——
 // 纯逻辑层：读写经参数注入，浏览器与 Node 测试皆可用。
 
-const KEY = 'echo-stone-profile';
+const KEY = 'echo-splitter-profile';
+const LEGACY_KEY = 'echo-stone-profile';   // 旧名时期的存档键：读到即沿用，下次保存写入新键
 
 export function createProfile() {
-  return { everPicked: [], words: [], abilities: [], chaptersDone: [] };
+  return { everPicked: [], heard: [], words: [], abilities: [], chaptersDone: [] };
 }
 
 export function loadProfile(store) {
   // store: 浏览器传 localStorage；Node 测试传 { getItem } 或 null
   try {
-    const raw = store?.getItem?.(KEY);
+    const raw = store?.getItem?.(KEY) ?? store?.getItem?.(LEGACY_KEY);
     if (!raw) return createProfile();
     const p = JSON.parse(raw);
     return {
       everPicked: [...new Set(p.everPicked || [])],
+      heard: [...new Set(p.heard || [])],
       words: [...new Set(p.words || [])],
       abilities: [...new Set(p.abilities || [])],
       chaptersDone: [...new Set(p.chaptersDone || [])]
@@ -26,10 +28,11 @@ export function saveProfile(store, profile) {
   try { store?.setItem?.(KEY, JSON.stringify(profile)); } catch { /* 隐私模式等：静默 */ }
 }
 
-// 关卡结算时合并进度（并集，永不丢失）
-export function mergeProfile(oldP, { everPicked = [], words = [], abilities = [], chapter = null }) {
+// 关卡结算时合并进度（并集，永不丢失）。heard=回声物件听过的音（声音层），与 everPicked（拼词层）分开，互不污染播种
+export function mergeProfile(oldP, { everPicked = [], heard = [], words = [], abilities = [], chapter = null }) {
   const p = {
     everPicked: [...new Set([...oldP.everPicked, ...everPicked])],
+    heard: [...new Set([...oldP.heard, ...heard])],
     words: [...new Set([...oldP.words, ...words])],
     abilities: [...new Set([...oldP.abilities, ...abilities])],
     chaptersDone: [...new Set([...oldP.chaptersDone, ...(chapter ? [chapter] : [])])]

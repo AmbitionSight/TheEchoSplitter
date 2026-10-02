@@ -25,7 +25,7 @@ test('v2 双词：hello/open 音素都有载词与卢文；door.ipa 与 open 一
   assert.deepEqual(data.door.ipa, data.words.open.phonemes.map(p => p[0]));
 });
 
-test('流程与物件：hello/open 掉落坐标、开关/合成台位置齐备；氛围物只有音效', () => {
+test('流程与物件：掉落坐标与物件齐备；氛围物=音效+回声（不掉词，回声音有载词与卢文）', () => {
   for (const w of ['hello', 'open']) {
     const f = data.flows[w];
     assert.ok(f, `缺 flows.${w}`);
@@ -37,6 +37,11 @@ test('流程与物件：hello/open 掉落坐标、开关/合成台位置齐备�
   for (const [id, a] of Object.entries(data.ambience)) {
     assert.ok(a.sfx, `${id} 缺 sfx`);
     assert.ok(!a.word && !a.drop, `${id} v2 氛围物不得掉词`);
+    if (a.echo) assert.ok(a.say, `${id} 回声缺所念的词`);
+    for (const ipa of a.echo || []) {          // 回声物件：每个音都要有载词（章表或 48 音通用表）与卢文
+      assert.ok(data.carriers[ipa] || data.phonemeBook.carriers[ipa], `${id}.${ipa} 缺载词`);
+      assert.ok(data.phonemeBook.runes[ipa], `${id}.${ipa} 缺卢文`);
+    }
   }
   assert.equal(data.words.hello.use.target, 'npc');
   assert.equal(data.words.open.use.target, 'door');
