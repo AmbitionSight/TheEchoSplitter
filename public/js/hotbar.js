@@ -64,17 +64,17 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
   let inv = null;
 
   function refreshSlots() {
+    const m = inv ? craftMatch(slots, words, inv) : { word: null, glowDepth: 0 };
+    const d = m.word ? 3 : m.glowDepth;
     slotEls.forEach((s, i) => {
       s.textContent = slots[i] || '';
       s.className = 'slot' + (slots[i] ? ' filled' : '');
       if (crafting.progressiveGlow !== false) {
-        const m = inv ? craftMatch(slots, words, inv) : { word: null, glowDepth: 0 };
-        const d = m.word ? 3 : m.glowDepth;
         s.classList.remove('g1', 'g2', 'g3');
         if (slots.filter(Boolean).length && d > 0 && i < d) s.classList.add(`g${Math.min(3, d)}`);
-        if (m.word) runCraft(m.word);
       }
     });
+    if (m.word) runCraft(m.word);
   }
 
   async function runCraft(word) {
@@ -124,6 +124,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
     const sx = e.clientX, sy = e.clientY;
     let moved = false;
     const move = ev => {
+      if (ev.pointerId !== e.pointerId) return;
       if (!moved && Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) {
         moved = true;
         ghost.classList.remove('hidden');
@@ -135,6 +136,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
       if (moved) { ghost.style.left = `${ev.clientX}px`; ghost.style.top = `${ev.clientY}px`; }
     };
     const up = ev => {
+      if (ev.pointerId !== e.pointerId) return;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', cancel);
@@ -152,7 +154,8 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
         onDropItem(payload.word, ev.clientX, ev.clientY);
       }
     };
-    const cancel = () => {
+    const cancel = ev => {
+      if (ev.pointerId !== e.pointerId) return;
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', cancel);
