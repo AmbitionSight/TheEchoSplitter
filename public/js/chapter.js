@@ -75,8 +75,9 @@ export function chapterOnE(gameEvent, rest = null) {
 }
 
 // 手持显示同步：玩家举石（按元/辅染色）或举词具图标
+// 玩家引用两代世界的形状都兼容：横版 w.player / 第一间房 w.actors.player
 export function syncHeld(w) {
-  const p = w.player, h = w.game.hand;
+  const p = w.player ?? w.actors?.player, h = w.game.hand;
   if (!h) { p.held = null; p.heldVowel = false; p.heldIcon = null; return; }
   if (h.kind === 'stone') { p.held = h.ipa; p.heldVowel = isVowel(h.ipa); p.heldIcon = null; }
   else { p.held = null; p.heldVowel = false; p.heldIcon = w.content.words[h.word].icon; }

@@ -119,6 +119,15 @@ test('syncHeld：空手/举石（元辅分类）/举词具图标', () => {
   assert.equal(w.player.heldIcon, content.words.jump.icon);
 });
 
+test('syncHeld：第一间房世界（player 挂在 actors 下）不抛错（回归：hand 指令曾 TypeError 卡死第一关）', () => {
+  const w = { game: { hand: { kind: 'stone', ipa: 'h' } }, actors: { player: {} }, content };
+  assert.doesNotThrow(() => syncHeld(w));
+  assert.equal(w.actors.player.held, 'h');                // 手持状态写进真正的玩家演员
+  const empty = { game: { hand: null }, actors: { player: {} }, content };
+  assert.doesNotThrow(() => syncHeld(empty));
+  assert.equal(empty.actors.player.held, null);
+});
+
 test('stepWorldStones：飞行石步进落定；keepOut 把落进禁区的石推出', () => {
   const w = { stones: [{ ipa: 'ʌ', x: 800, y: 605, vx: 0, vy: 10, state: 'fly', t: 0, phase: 0 }] };
   const keepOut = x => (x >= 700 && x <= 940) ? 700 - 30 : null;   // 裂隙 700..940 → 推回左缘
