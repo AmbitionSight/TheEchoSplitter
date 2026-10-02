@@ -1625,7 +1625,7 @@ test('首石：工具栏滑入恰好一次；合成 light 聪明路径可行', (
   let all = [];
   for (const w of ['hello', 'fire', 'water']) all = all.concat(collect(g, w)); // l/hello aɪ/fire t/water
   assert.equal(all.filter(i => i.t === 'hotbarShow').length, 1);  // 首颗石时滑入一次
-  for (const [ipa] of ['l', 'aɪ', 't']) all = all.concat(gameEvent(g, 'PICKUP', ipa));
+  for (const ipa of ['l', 'aɪ', 't']) all = all.concat(gameEvent(g, 'PICKUP', ipa));
   const out = gameEvent(g, 'CRAFT', 'light');
   assert.ok(g.inv.items.has('light') && g.book.has('light'));
   assert.ok(out.some(i => i.t === 'resonate' && i.word === 'light'));
@@ -1635,7 +1635,7 @@ test('首石：工具栏滑入恰好一次；合成 light 聪明路径可行', (
 test('USE：词具匹配目标才生效；首次 full、重复轻反应；拖错咕哝', () => {
   const g = createGame(content);
   collect(g, 'hello'); collect(g, 'fire'); collect(g, 'water');
-  for (const [ipa] of ['l', 'aɪ', 't']) gameEvent(g, 'PICKUP', ipa);
+  for (const ipa of ['l', 'aɪ', 't']) gameEvent(g, 'PICKUP', ipa);
   gameEvent(g, 'CRAFT', 'light');
   let out = gameEvent(g, 'USE', { word: 'light', target: 'well' });
   assert.ok(out.some(i => i.t === 'mutter'));
@@ -1657,7 +1657,8 @@ test('门醒需 5 词；点击低语并只掉一次 open 石；全链路到结�
   assert.ok(out.some(i => i.t === 'speak' && i.who === 'door'));
   out = gameEvent(g, 'DOOR_CLICK');
   assert.ok(!out.some(i => i.t === 'drop'));                     // 反复听，不再掉
-  collect(g, 'open');
+  for (const [ipa] of content.words.open.phonemes) gameEvent(g, 'PICKUP', ipa); // 门词无探索点：显式捡门石
+  gameEvent(g, 'CRAFT', 'open');
   out = gameEvent(g, 'USE', { word: 'open', target: 'door' });
   assert.ok(out.some(i => i.t === 'ritualStart'));
   gameEvent(g, 'RITUAL_DONE');
@@ -1674,10 +1675,10 @@ test('乱序合成无死局：收齐全部石后按倒序拼，六词全成（�
     const [id] = Object.entries(content.explorables).find(([, ex]) => ex.word === w);
     if (id === 'hatstand') g.lit = true;
     gameEvent(g, 'INTERACT', id);
-    for (const [ipa] of seq(w)) gameEvent(g, 'PICKUP', ipa);
+    for (const ipa of seq(w)) gameEvent(g, 'PICKUP', ipa);
   }
   gameEvent(g, 'DOOR_CLICK');
-  for (const [ipa] of seq('open')) gameEvent(g, 'PICKUP', ipa);
+  for (const ipa of seq('open')) gameEvent(g, 'PICKUP', ipa);
   for (const w of ['open', 'hat', 'light', 'fire', 'water', 'hello']) {
     gameEvent(g, 'CRAFT', w);
     assert.ok(g.inv.items.has(w), `倒序合成失败: ${w}`);
@@ -1690,7 +1691,7 @@ test('卡关提示：先报未收集词，再报「该拼词了」，门醒后�
   assert.equal(chooseTease(g).kind, 'word');
   for (const w of ['hello', 'water', 'fire', 'light', 'hat']) collect(g, w === 'hat' ? 'hat' : w);
   gameEvent(g, 'DOOR_CLICK');
-  for (const [ipa] of seq('open')) gameEvent(g, 'PICKUP', ipa);
+  for (const ipa of seq('open')) gameEvent(g, 'PICKUP', ipa);
   // 全部来源已碰、门石已捡：只剩拼词
   assert.equal(chooseTease(g).kind, 'craft');
   const g2 = createGame(content);
@@ -1711,6 +1712,19 @@ test('jump 调试拍：lit-right / door-awake / door-open / summary 状态正确
   assert.ok(['opening', 'opened'].includes(g.door.state));
   jump(g, 'summary');
   assert.equal(g.door.state, 'opened');
+});
+
+test('修正（Task 6 评审）：hello 最后入书也立即唤醒门', () => {
+  const g = createGame(content);
+  for (const w of ['water', 'fire', 'light']) collect(g, w);          // 3 词先合成入书
+  gameEvent(g, 'USE', { word: 'light', target: 'lamp' });             // 点亮右侧（hatstand 需 lit）
+  collect(g, 'hat');                                                  // 第 4 词入书
+  assert.equal(g.book.size, 4);
+  assert.equal(g.door.state, 'asleep');
+  const out = gameEvent(g, 'INTERACT', 'npc');                        // hello = 第 5 词，经首点入书
+  assert.equal(g.book.size, 5);
+  assert.equal(g.door.state, 'pulsing');
+  assert.ok(out.some(i => i.t === 'doorAwake'));
 });
 ```
 说明：`collect()` 会按「碰→捡全部→合成」整词走完，hello 的 l 石在流程内已被捡起，故「首石」断言统计整个指令流的 `hotbarShow` 恰好一次。
@@ -1774,6 +1788,14 @@ function teaseOut(g) {
   return [{ t: 'speak', who: 'uncle', text: cap(tease.word), slow: true }, { t: 'pointHotbar' }];
 }
 
+// 词入书后统一查醒门：hello 经首点入书、其余经合成入书，两条路径都必须立即唤醒（Task 6 评审修正）
+function checkDoorAwake(g, out) {
+  if (!g.door.dropped && g.book.size >= 5 && g.door.state === 'asleep') {
+    doorEvent(g.door, 'WORDS_COMPLETE', g.book.size);
+    out.push({ t: 'doorAwake' }, { t: 'hint', key: 'doorAwake' }, { t: 'beat', beat: 'door-awake' });
+  }
+}
+
 export function gameEvent(g, ev, arg = null) {
   const c = g.content;
   switch (ev) {
@@ -1785,12 +1807,14 @@ export function gameEvent(g, ev, arg = null) {
           g.touched.add('npc');
           g.book.add('hello');                                  // 词入书时机①：hello=首点大叔
           g.beat = 'explore-left';
-          return [
+          const out = [
             { t: 'speak', who: 'uncle', text: c.explorables.npc.linesFirst[0] },
             { t: 'drop', word: 'hello' },
             { t: 'hint', key: 'explore' },
             { t: 'beat', beat: 'explore-left' }
           ];
+          checkDoorAwake(g, out);                               // hello=第5词时也在首点瞬间立即醒门
+          return out;
         }
         return teaseOut(g);
       }
@@ -1830,10 +1854,7 @@ export function gameEvent(g, ev, arg = null) {
         { t: 'speak', who: 'child', text: cap(word) },
         { t: 'itemIn', word }
       ];
-      if (!g.door.dropped && g.book.size >= 5 && g.door.state === 'asleep') {
-        doorEvent(g.door, 'WORDS_COMPLETE', g.book.size);
-        out.push({ t: 'doorAwake' }, { t: 'hint', key: 'doorAwake' }, { t: 'beat', beat: 'door-awake' });
-      }
+      checkDoorAwake(g, out);
       if (word === 'open') out.push({ t: 'hint', key: 'door' });
       return out;
     }
@@ -1893,8 +1914,8 @@ export function gameEvent(g, ev, arg = null) {
 export function jump(g, beat) {
   const c = g.content;
   const doWord = word => {
-    const [id] = Object.entries(c.explorables).find(([, ex]) => ex.word === word);
-    let out = gameEvent(g, 'INTERACT', id);
+    const found = Object.entries(c.explorables).find(([, ex]) => ex.word === word);
+    let out = gameEvent(g, 'INTERACT', found?.[0]);            // 门词（open）无探索点：INTERACT 未知 id 返回 []（设计如此）
     for (const [ipa] of c.words[word].phonemes) out = out.concat(gameEvent(g, 'PICKUP', ipa));
     return out.concat(gameEvent(g, 'CRAFT', word));
   };
@@ -1921,18 +1942,18 @@ export function jump(g, beat) {
 - [ ] **Step 4: 跑测试**
 
 Run: `node --test test/game.test.js`
-Expected: 10 pass。若「首石」断言因测试说明中的捡石顺序不成立，按该测试尾部说明调整断言位置（hotbarShow 全程恰好一次）。
+Expected: 10 pass（9 原有 + 1 Task 6 评审修正）。若「首石」断言因测试说明中的捡石顺序不成立，按该测试尾部说明调整断言位置（hotbarShow 全程恰好一次）。
 
 - [ ] **Step 5: 全量回归**
 
 Run: `node --test`
-Expected: 此前所有测试仍 pass。
+Expected: 45 pass（35 旧 + 10 新），全绿，clean exit。
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add public/js/main.js test/game.test.js
-git commit -m "feat: 游戏事件机（碰/拾/拼/用/门/提示/跳拍）纯逻辑与全套测试"
+git add public/js/main.js test/game.test.js docs/superpowers/plans/2026-10-01-echo-stone.md
+git commit -m "feat: 游戏事件机（碰/拾/拼/用/门/提示/跳拍）纯逻辑与全套测试（含 hello-末位门醒修正）"
 ```
 
 ---
