@@ -107,7 +107,7 @@ export function gameEvent(g, ev, arg = null) {
       if (!g.inv.items.has(word)) return [];
       g.hand = { kind: 'item', word };
       return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' },
-              { t: 'hint', key: word === 'open' ? 'openItem' : 'hello' }];
+              { t: 'hint', key: word === 'open' ? 'openItem' : 'helloGive' }];
     }
     case 'BANK': {                      // 合成台：手上的石存入底部物品栏
       if (g.hand?.kind !== 'stone') return [];
@@ -129,7 +129,7 @@ export function gameEvent(g, ev, arg = null) {
         { t: 'speak', who: 'child', text: cap(word) },
         { t: 'itemIn', word }
       ];
-      if (word === 'hello') out.push({ t: 'uncleCheer' });
+      if (word === 'hello') out.push({ t: 'hint', key: 'helloGive' });   // 拿着气泡去见大叔
       if (word === 'open') out.push({ t: 'hint', key: 'openItem' });
       return out;
     }
@@ -147,7 +147,11 @@ export function gameEvent(g, ev, arg = null) {
       }
       const full = !g.usedTargets.has(target);          // greet
       const out = [{ t: 'speak', who: 'child', text: cap(word) }];
-      if (full) { g.usedTargets.add(target); out.push({ t: 'effect', name: 'greet', full: true }); }
+      if (full) {
+        g.usedTargets.add(target);
+        out.push({ t: 'effect', name: 'greet', full: true });
+        if (!g.switchOn) out.push({ t: 'hint', key: 'helloDone' });      // 大叔回礼 → 指向发光开关
+      }
       else out.push({ t: 'effect', name: 'greet', full: false });
       return out;
     }

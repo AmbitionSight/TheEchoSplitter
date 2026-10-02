@@ -214,12 +214,14 @@ export function makeDarkness() {
   const c = document.createElement('canvas');
   c.width = LAYOUT.W; c.height = LAYOUT.H;
   const x = c.getContext('2d');
-  const g = x.createRadialGradient(LIGHT_CENTER.x, LIGHT_CENTER.y, 60, LIGHT_CENTER.x, LIGHT_CENTER.y, 620);
+  // 右半近乎全黑：自边界向右快速压到 0.97（未开灯时灯位无光，不做亮晕）
+  const g = x.createLinearGradient(545, 0, 680, 0);
   g.addColorStop(0, 'rgba(6,7,11,0)');
-  g.addColorStop(0.55, 'rgba(6,7,11,.35)');
-  g.addColorStop(1, 'rgba(6,7,11,.96)');
+  g.addColorStop(1, 'rgba(6,7,11,.97)');
   x.fillStyle = g;
-  x.fillRect(0, 0, LAYOUT.W, LAYOUT.H);
+  x.fillRect(545, 0, 135, LAYOUT.H);
+  x.fillStyle = 'rgba(6,7,11,.97)';
+  x.fillRect(680, 0, LAYOUT.W - 680, LAYOUT.H);
   const fade = x.createLinearGradient(430, 0, 560, 0);               // 左半不受暗角
   fade.addColorStop(0, 'rgba(6,7,11,1)'); fade.addColorStop(1, 'rgba(6,7,11,0)');
   x.globalCompositeOperation = 'destination-out';
@@ -286,7 +288,7 @@ function drawTorch(x, tx, ty, lit, t, seed) {
 export function drawScene(x, sc, view) {
   const { t } = view;
   x.drawImage(sc.static, 0, 0);
-  const dim = 0.08 + view.lit * 0.92;                                       // 剪影 8% → 全亮
+  const dim = 0.05 + view.lit * 0.95;                                       // 剪影 5% → 全亮
   // —— 暗区物件（帽架/右墙火把/木门）：按 lit 淡入 ——
   x.save();
   x.globalAlpha = dim;

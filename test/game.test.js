@@ -62,7 +62,8 @@ test('全流程：hello 教学合成（大叔庆祝）→ 开关（Open+掉石+�
   out = out.concat(gameEvent(g, 'CRAFT', 'hello'));
   assert.ok(g.inv.items.has('hello') && g.book.has('hello'));
   assert.ok(out.some(i => i.t === 'resonate' && i.word === 'hello'));
-  assert.ok(out.some(i => i.t === 'uncleCheer'));
+  assert.ok(!out.some(i => i.t === 'uncleCheer'));                     // v2：不自动庆祝——要拿着气泡给大叔
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'helloGive'));
   // 开关
   out = gameEvent(g, 'INTERACT', 'switch');
   assert.equal(g.lit, true);
@@ -109,6 +110,7 @@ test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应', () => {
   gameEvent(g, 'HOLD_ITEM', 'hello');
   let out = gameEvent(g, 'INTERACT', 'npc');                            // 手持 hello 碰大叔 = USE
   assert.ok(out.some(i => i.t === 'effect' && i.name === 'greet' && i.full === true));
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'helloDone'));   // 回礼后指向发光开关
   gameEvent(g, 'HOLD_ITEM', 'hello');
   out = gameEvent(g, 'INTERACT', 'npc');
   assert.ok(out.some(i => i.t === 'effect' && i.full === false));
