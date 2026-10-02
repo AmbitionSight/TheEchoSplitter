@@ -120,6 +120,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
 
   // —— 统一拖拽：轻点=点读；拖动=幽灵；DOM 内投槽 / 跨层投画布 ——
   function startDrag(e, cell, payload) {
+    if (e.button > 0) return;                                 // 鼠标右/中键不发起拖拽（Task 13 评审 E）
     e.preventDefault();
     const sx = e.clientX, sy = e.clientY;
     let moved = false;

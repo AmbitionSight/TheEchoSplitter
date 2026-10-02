@@ -110,3 +110,7 @@ h2{font-size:34px;font-weight:700}
 #reveal-stones span:nth-child(2){animation-delay:.15s}#reveal-stones span:nth-child(3){animation-delay:.3s}#reveal-stones span:nth-child(4){animation-delay:.45s}
 #reveal-word{font-size:88px;font-weight:800;letter-spacing:.28em;color:var(--gold);text-shadow:0 0 40px rgba(255,209,102,.6);animation:wordPop .8s .8s ease backwards}
 @keyframes wordPop{0%{transform:scale(2.4);opacity:0}60%{transform:scale(.95);opacity:1}100%{transform:scale(1)}}
+
+/* 触摸加固（Task 13 评审 E）：拖拽禁浏览器手势 + 禁过度滚动 */
+#hotbar .cell,#craft-row .slot{touch-action:none}
+body{overscroll-behavior:none}

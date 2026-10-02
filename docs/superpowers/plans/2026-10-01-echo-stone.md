@@ -520,6 +520,10 @@ h2{font-size:34px;font-weight:700}
 #reveal-stones span:nth-child(2){animation-delay:.15s}#reveal-stones span:nth-child(3){animation-delay:.3s}#reveal-stones span:nth-child(4){animation-delay:.45s}
 #reveal-word{font-size:88px;font-weight:800;letter-spacing:.28em;color:var(--gold);text-shadow:0 0 40px rgba(255,209,102,.6);animation:wordPop .8s .8s ease backwards}
 @keyframes wordPop{0%{transform:scale(2.4);opacity:0}60%{transform:scale(.95);opacity:1}100%{transform:scale(1)}}
+
+/* 触摸加固（Task 13 评审 E）：拖拽禁浏览器手势 + 禁过度滚动 */
+#hotbar .cell,#craft-row .slot{touch-action:none}
+body{overscroll-behavior:none}
 ```
 
 - [ ] **Step 6: 写 main.js 启动壳（本任务不含游戏循环）**
@@ -1110,6 +1114,7 @@ export class Sfx {
   choir()   { [261, 329, 392, 523].forEach((f, i) => this.tone({ f, t: i * 0.12, dur: 2.2, vol: 0.07 })); }
   meow()    { this.tone({ f: 700, f2: 1100, dur: 0.18, vol: 0.11 }); this.tone({ f: 1100, f2: 600, t: 0.18, dur: 0.3, vol: 0.09 }); }
   crackle() { for (let i = 0; i < 3; i++) this.noise({ t: Math.random() * 0.4, dur: 0.05, vol: 0.04, freq: 2500 }); }
+  wind()    { this.noise({ dur: 0.9, vol: 0.08, freq: 420 }); this.noise({ t: 0.15, dur: 0.7, vol: 0.05, freq: 300 }); } // 重复 open=门后风声（规格 §4，Task 13 评审 A）
 }
 ```
 
@@ -1726,6 +1731,46 @@ test('修正（Task 6 评审）：hello 最后入书也立即唤醒门', () => {
   assert.equal(g.door.state, 'pulsing');
   assert.ok(out.some(i => i.t === 'doorAwake'));
 });
+
+test('TICK 累积 45s 触发提示并复位；仪式/结算期静默（Task 13 评审修正）', () => {
+  const g = createGame(content);
+  let out = [];
+  for (let i = 0; i < 44; i++) out = gameEvent(g, 'TICK', 1);
+  assert.equal(out.length, 0);
+  out = gameEvent(g, 'TICK', 1);
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'uncle'));
+  assert.equal(g.teaseClock, 0);                                // 触发后复位
+  // 仪式/结算期静默
+  const g2 = createGame(content);
+  for (const w of ['hello', 'water', 'fire', 'light']) collect(g2, w);
+  gameEvent(g2, 'USE', { word: 'light', target: 'lamp' });       // 点亮：帽架可碰（hat 需 lit）
+  collect(g2, 'hat');
+  gameEvent(g2, 'DOOR_CLICK');
+  for (const [ipa] of content.words.open.phonemes) gameEvent(g2, 'PICKUP', ipa);
+  gameEvent(g2, 'CRAFT', 'open');
+  gameEvent(g2, 'USE', { word: 'open', target: 'door' });
+  assert.equal(g2.door.state, 'ritual');
+  assert.equal(gameEvent(g2, 'DOOR_CLICK').length, 0);           // 仪式期点门静默
+  for (let i = 0; i < 100; i++) assert.equal(gameEvent(g2, 'TICK', 1).length, 0);
+});
+
+test('CRAFT 未知词静默；unlock 失败不烧 usedTargets、仪式成功才烧（Task 13 评审修正）', () => {
+  const g = createGame(content);
+  assert.equal(gameEvent(g, 'CRAFT', 'nope').length, 0);         // 未知词守卫
+  for (const w of ['hello', 'water', 'fire', 'light']) collect(g, w);
+  gameEvent(g, 'USE', { word: 'light', target: 'lamp' });
+  collect(g, 'hat');                                            // 5 词 → 门 pulsing（尚未点击低语）
+  for (const [ipa] of content.words.open.phonemes) gameEvent(g, 'PICKUP', ipa);
+  gameEvent(g, 'CRAFT', 'open');
+  let out = gameEvent(g, 'USE', { word: 'open', target: 'door' }); // 门未低语：OFFER 失败
+  assert.ok(out.some(i => i.t === 'mutter'));
+  assert.equal(g.door.state, 'pulsing');
+  assert.ok(!g.usedTargets.has('door'));                        // 未烧：仍可重试
+  gameEvent(g, 'DOOR_CLICK');                                   // → whispered
+  out = gameEvent(g, 'USE', { word: 'open', target: 'door' });
+  assert.ok(out.some(i => i.t === 'ritualStart'));
+  assert.ok(g.usedTargets.has('door'));                         // 仪式成功才烧
+});
 ```
 说明：`collect()` 会按「碰→捡全部→合成」整词走完，hello 的 l 石在流程内已被捡起，故「首石」断言统计整个指令流的 `hotbarShow` 恰好一次。
 
@@ -1843,7 +1888,7 @@ export function gameEvent(g, ev, arg = null) {
     }
     case 'CRAFT': {
       const word = arg;
-      if (g.inv.items.has(word)) return [];
+      if (!c.words[word] || g.inv.items.has(word)) return []; // 未知词/已持有：静默（Task 13 评审 D）
       const phon = c.words[word].phonemes.map(p => p[0]);
       if (!canConsume(g.inv, phon)) return [];
       consume(g.inv, phon);
@@ -1865,17 +1910,18 @@ export function gameEvent(g, ev, arg = null) {
       const full = !g.usedTargets.has(target);
       const out = [{ t: 'speak', who: 'child', text: cap(word) }];
       if (full) {
-        g.usedTargets.add(target);
         if (def.effect === 'illuminate') { g.lit = true; g.beat = 'lit-right'; }
         if (def.effect === 'wear') g.hatOn = true;
         if (def.effect === 'bloom') g.bloomed = true;
         if (def.effect === 'ignite') g.torchesLit = true;
         if (def.effect === 'greet') g.greeted = true;
         if (def.effect === 'unlock') {
+          // unlock 只在仪式成功瞬间烧 usedTargets（Task 13 评审 D：失败可重试，不算用过）
           const r = doorEvent(g.door, 'OFFER', 'open');
-          if (r?.ritual) return out.concat([{ t: 'ritualStart' }]);
+          if (r?.ritual) { g.usedTargets.add(target); return out.concat([{ t: 'ritualStart' }]); }
           return [{ t: 'mutter' }];
         }
+        g.usedTargets.add(target);                            // 其余效果：首次即烧（重复使用=轻反应）
         out.push({ t: 'effect', name: def.effect, full: true });
         if (def.effect === 'illuminate') out.push({ t: 'hint', key: 'litUp' }, { t: 'beat', beat: 'lit-right' });
       } else {
@@ -1884,6 +1930,7 @@ export function gameEvent(g, ev, arg = null) {
       return out;
     }
     case 'DOOR_CLICK': {
+      if (g.door.state === 'ritual' || g.door.state === 'opening') return []; // 仪式/开门期静默（Task 13 评审 D）
       const r = doorEvent(g.door, 'CLICK');
       if (!r) return [];
       const out = [{ t: 'speak', who: 'door', text: c.door.listen[0] }];
@@ -1900,6 +1947,7 @@ export function gameEvent(g, ev, arg = null) {
       return [{ t: 'summary' }];
     }
     case 'TICK': {
+      if (['ritual', 'opening', 'opened'].includes(g.door.state) || g.beat === 'summary') return []; // 终局静默（Task 13 评审 D）
       g.teaseClock += arg;
       if (g.teaseClock < 45) return [];
       g.teaseClock = 0;
@@ -1942,7 +1990,7 @@ export function jump(g, beat) {
 - [ ] **Step 4: 跑测试**
 
 Run: `node --test test/game.test.js`
-Expected: 10 pass（9 原有 + 1 Task 6 评审修正）。若「首石」断言因测试说明中的捡石顺序不成立，按该测试尾部说明调整断言位置（hotbarShow 全程恰好一次）。
+Expected: 10 pass（9 原有 + 1 Task 6 评审修正）；Task 13 评审 H 再追加 2 条（TICK 静默/未知词守卫/unlock 烧点）后本文件共 12 pass。若「首石」断言因测试说明中的捡石顺序不成立，按该测试尾部说明调整断言位置（hotbarShow 全程恰好一次）。
 
 - [ ] **Step 5: 全量回归**
 
@@ -2566,6 +2614,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
 
   // —— 统一拖拽：轻点=点读；拖动=幽灵；DOM 内投槽 / 跨层投画布 ——
   function startDrag(e, cell, payload) {
+    if (e.button > 0) return;                                 // 鼠标右/中键不发起拖拽（Task 13 评审 E）
     e.preventDefault();
     const sx = e.clientX, sy = e.clientY;
     let moved = false;
@@ -2906,10 +2955,17 @@ export function createUI({ content }) {
     el('reveal-word').textContent = word.toUpperCase();
     el('reveal-ok').textContent = '把这个词，还给门';
     el('reveal').classList.remove('hidden');
-    return new Promise(res => el('reveal-ok').addEventListener('click', () => {
-      el('reveal').classList.add('hidden');
-      res();
-    }, { once: true }));
+    return new Promise(res => {
+      let settled = false;
+      const done = () => {
+        if (settled) return; settled = true;
+        el('reveal').classList.add('hidden');
+        document.removeEventListener('pointerdown', done);
+        res();
+      };
+      el('reveal-ok').addEventListener('click', done, { once: true });
+      setTimeout(() => { if (!settled) document.addEventListener('pointerdown', done); }, 12000); // 12s 后任意点按兜底（Task 13 评审 F；按钮仍是主路径）
+    });
   }
   function summary(g) {
     el('summary-line').textContent = `你捡起了 ${g.book.size} 个词 · ${g.stonesPicked} 块声音石`;
@@ -2957,14 +3013,14 @@ git commit -m "feat: 提示条/toast/OPEN 揭示卡/结算卡 + 门仪式座位�
 
 - [ ] **Step 1: 替换 boot() 并补充 import**
 
-main.js 顶部 import 区补：
+main.js 顶部 import 区补（`addStone` 已由 Task 7 行声明，hotbar 行不得重复导入同一绑定——ESM 重复声明为 SyntaxError，故并入既有行）：
 ```js
 import { PAL, iconURL } from './art.js';
 import { Speech, Sfx, pickVoices } from './audio.js';
 import { LAYOUT, createScene, initScene, updateScene, drawScene, drawOverlay,
          screenToLogical, moveToward, resolveCollisions, makeStone, stepStone, magnetStep } from './scene.js';
 import { createActors, updateActors, drawPlayer, drawNpc, drawCat, setGesture } from './actors.js';
-import { createHotbar, isVowel, addStone } from './hotbar.js';
+import { createHotbar, isVowel } from './hotbar.js';
 import { createJournal } from './journal.js';
 import { createUI } from './ui.js';
 import { RITUAL_STEP, ritualSeats } from './door.js';
@@ -3042,6 +3098,7 @@ function start(content) {
   });
   const hb = createHotbar({
     words: content.words,
+    crafting: content.crafting,                               // Task 13 评审 C：合成配置透传
     onSpeakCarrier: ipa => { sfx.click(); speak(content.carriers[ipa], 'child'); },
     onSpeakWord: w => { sfx.click(); speak(w[0].toUpperCase() + w.slice(1) + '.', 'child'); },
     onCraft: word => run(gameEvent(game, 'CRAFT', word)),
@@ -3066,9 +3123,10 @@ function start(content) {
   // —— 掉石 ——
   function spawnDrop(word) {
     const src = Object.values(content.explorables).find(e => e.word === word);
+    const [dx, dy] = src ? src.drop : [1145, 460];            // 门词（open）无探索点：四石从门符文处掉落
     const phon = content.words[word].phonemes;
-    phon.forEach(([ipa], i) => stones.push(makeStone(ipa, src.drop[0], src.drop[1], i * 0.13)));
-    stones.slice(-phon.length).forEach((s, i) => { s.floorY = src.drop[1] + 26 + (i % 3) * 16; });
+    phon.forEach(([ipa], i) => stones.push(makeStone(ipa, dx, dy, i * 0.13)));
+    stones.slice(-phon.length).forEach((s, i) => { s.floorY = dy + 26 + (i % 3) * 16; });
   }
 
   // —— 指令解释器（Task 7 词汇表）——
@@ -3078,7 +3136,7 @@ function start(content) {
         case 'speak': speak(ins.text, ins.who, ins.slow); break;
         case 'drop': spawnDrop(ins.word); break;
         case 'hint': ui.setHint(ins.key); break;
-        case 'beat': G.beat = ins.beat; game.beat = ins.beat; break;
+        case 'beat': game.beat = ins.beat; break;             // G.beat 是 getter（直读 game.beat），无需镜像
         case 'hotbarShow': hb.show(); sfx.chime(); break;
         case 'bagPulse': hb.pulseBag(game.stonesPicked); break;
         case 'resonate': sfx.resonate(); hb.refresh(game.inv); break;
@@ -3111,6 +3169,8 @@ function start(content) {
     } else if (name === 'greet') {
       if (full) { sfx.laugh(); setGesture(actors.npc, 'laugh', 1.8); }
       else setGesture(actors.npc, 'wave', 1.2);
+    } else if (name === 'unlock') {                           // Task 13 评审 A：重复 open=门后风声（首次走 ritualStart）
+      if (!full) sfx.wind();
     }
   }
 
@@ -3176,10 +3236,15 @@ function start(content) {
     const dx = actors.player.x - t.x, dy = actors.player.y - t.y, d = Math.hypot(dx, dy) || 1;
     return { x: t.x + (dx / d) * 120, y: t.y + (dy / d) * 120 };
   }
+  // cat 不在 LAYOUT.targets（只登记在障碍表）：点击/走位交互统一经此解析（点击半径放宽到 40）
+  function targetOf(id) {
+    if (id === 'cat') { const o = LAYOUT.obstacles.find(o => o.id === 'cat'); return o ? { x: o.x, y: o.y, r: 40 } : null; }
+    return LAYOUT.targets[id] || null;
+  }
   function hitSceneTarget(p) {
     const ids = ['door', 'hatstand', 'lamp', 'brazier', 'well', 'sprout', 'cat', 'npc'];
     for (const id of ids) {
-      const t = LAYOUT.targets[id];
+      const t = targetOf(id);
       if (!t) continue;
       if (p.x > 800 && !game.lit && id !== 'lamp') continue;          // 暗区不可交互（规格 §6.2）
       if (Math.hypot(p.x - t.x, p.y - t.y) < t.r) return { id, x: t.x, y: t.y };
@@ -3200,8 +3265,8 @@ function start(content) {
     view.t += dt;
     view.doorState = game.door.state;
     view.doorPulse = (Math.sin(view.t * 2.4) + 1) / 2;
-    view.lit = sc.lit;
-    updateScene(sc, dt, game.lit ? 1 : 0);
+    updateScene(sc, dt, game.lit ? 1 : 0);                   // Task 13 评审 G：先推进光照缓动……
+    view.lit = sc.lit;                                       // ……再采样：drawScene/drawOverlay 同帧同值
     updateActors(actors, dt);
 
     // 移动
@@ -3220,7 +3285,7 @@ function start(content) {
         const done = pendingInteract;
         walkTarget = null;
         if (done) {
-          const t = LAYOUT.targets[done] || LAYOUT.targets.npc;
+          const t = targetOf(done) || LAYOUT.targets.npc;
           if (Math.hypot(p.x - t.x, p.y - t.y) < LAYOUT.INTERACT_R) interact(done);
         }
       } else resolveCollisions(p);
@@ -3325,7 +3390,7 @@ function start(content) {
     get beat() { return game.beat; },
     jump(b) {
       started = true; window.__gameLoopOn = true;
-      run(jump(game, b));
+      run(jump(game, b).filter(i => i.t !== 'drop'));        // Task 13 评审 B：drop 已被虚拟拾取，过滤防磁吸双收
       hb.refresh(game.inv); hb.show();
       if (game.stonesPicked) hb.pulseBag(game.stonesPicked);
     },
@@ -3336,6 +3401,7 @@ function start(content) {
     dispatchEvent(new CustomEvent('game:start'));
     G.jump('hello-meet');
   } else {
+    el('title').classList.remove('hidden');                  // HTML 初始 hidden：正常路径先亮标题屏
     el('btn-start').addEventListener('click', () => {
       el('title').classList.add('hidden');
       el('prologue').classList.remove('hidden');
@@ -3350,10 +3416,17 @@ function start(content) {
 
 说明：Task 2 版 `boot()` 里的标题/序章逻辑上移进 `start()`；删除旧的 `game:start` 临时 toast 监听；`loadContent`/`fitStage` 旧实现删除（新 boot 自带）。`jump`（事件机）与 `G.jump`（含 UI 刷新）同名分层：模块内 `jump` 为 Task 7 导出，`G.jump` 调它。
 
+**Task 13 评审修正（全部已并入上方代码）：**
+- **A** `applyEffect` 增加 `unlock` 分支：重复使用 open=门后风声（`sfx.wind()`，镜像 Task 4 块）。
+- **B** `G.jump` 过滤 `drop` 指令：jump 流的 drop 已被虚拟拾取（PICKUP），再 spawnDrop 会被磁吸双收。
+- **C** `createHotbar` 传入 `crafting: content.crafting`（Task 10 评审签名）。
+- **G** 主循环先 `updateScene` 再采样 `view.lit = sc.lit`：drawScene/drawOverlay 同帧用同一个缓动值。
+- **接线期实测修正（原块四处硬伤）：** ① 正常路径缺 `el('title').classList.remove('hidden')`——HTML 初始即 hidden，标题屏永不出现、游戏无法开始；② `run` 的 beat 分支 `G.beat = ins.beat` 对只有 getter 的属性赋值，ESM 严格模式必抛 TypeError（`__errors` 必非空）——G.beat 是直读 `game.beat` 的 getter，删镜像赋值；③ `spawnDrop('open')`：门词无 explorables 条目，`src` 为 undefined 必崩——兜底从门符文 (1145,460) 掉落（即验收「四石从符文掉落」）；④ `hitSceneTarget` 列表含 `cat` 但 `LAYOUT.targets` 无 cat 条目（猫只在障碍表）——猫点击/走位交互全部失效，新增 `targetOf()` 统一解析（走位完成检查同步改用它）。
+
 - [ ] **Step 2: 全量回归**
 
 Run: `node --test`
-Expected: 全部 pass（boot 不在 Node 执行）。
+Expected: 52 pass, 0 fail, clean exit（50 原有 + 2 Task 13 评审 H 新增；boot 不在 Node 执行）。
 
 - [ ] **Step 3: 浏览器全链路验收（对照规格 §13）**
 
@@ -3387,8 +3460,8 @@ Run: `node server.js` → `http://localhost:3000`，逐条核对：
 - [ ] **Step 4: Commit**
 
 ```bash
-git add public/js/main.js
-git commit -m "feat: 主循环全接线（输入/交互/指令解释器/门仪式/调试钩子）——全链路可玩"
+git add public/js/main.js public/js/audio.js public/js/ui.js public/js/hotbar.js public/css/style.css test/game.test.js docs/superpowers/plans/2026-10-01-echo-stone.md
+git commit -m "feat: 主循环全接线（输入/交互/指令解释器/门仪式/调试钩子）+ 评审遗留九项修正（门后风声/jump防双拾取/仪式期静默/touch加固/揭示兜底等）"
 ```
 
 ---
