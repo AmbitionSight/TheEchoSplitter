@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from '../public/js/ch3/cave.js';
 import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites,
-         createScene, initScene, drawScene, drawCrack, drawBoulder } from '../public/js/ch3/render.js';
+         createScene, initScene, drawScene, drawCrack, drawBoulder, drawWater } from '../public/js/ch3/render.js';
 
 // 宽松 canvas 桩（同 test/scene.bg.test.js）：任何方法可调、任何属性可写，只断言「不抛」
 function mockCtx() {
@@ -257,4 +257,43 @@ test('drawBoulder：水平范围不越出 [cx-45, cx+45]', () => {
   const xs = x.__pts.map(p => p[0]);
   assert.ok(Math.min(...xs) >= 515 - 45 - 1, `左 ${Math.min(...xs)}`);
   assert.ok(Math.max(...xs) <= 515 + 45 + 1, `右 ${Math.max(...xs)}`);
+});
+
+// ---- 流动水面 ----
+
+function bankWorld() {
+  return {
+    currentRoom: 'bank',
+    geo: { bank: { groundY: 590, waterX: 760 } },
+    view: { t: 0 },
+    raft: { x: 880, y: 584 }
+  };
+}
+
+test('drawWater：不抛错，有绘制，且随 t 变化（确实在动）', () => {
+  const a = recordingCtx(), b = recordingCtx();
+  drawWater(a, bankWorld(), 0);
+  drawWater(b, bankWorld(), 1.7);
+  assert.ok(a.__calls.fill > 0);
+  assert.notDeepEqual(a.__pts, b.__pts, 't 不同时波点位置应不同');
+});
+
+test('drawWater：同一 t 下输出确定（可复现）', () => {
+  const a = recordingCtx(), b = recordingCtx();
+  drawWater(a, bankWorld(), 2.5);
+  drawWater(b, bankWorld(), 2.5);
+  assert.deepEqual(a.__pts, b.__pts);
+});
+
+test('drawWater：只画在水面 x 范围内（不越到左岸）', () => {
+  const x = recordingCtx();
+  drawWater(x, bankWorld(), 1);
+  for (const [px] of x.__pts) assert.ok(px >= 760 - 1, `波点越到岸上 x=${px}`);
+});
+
+test('drawWater：非岸边房间不绘制任何东西', () => {
+  const x = recordingCtx();
+  const w = bankWorld(); w.currentRoom = 'deep';
+  drawWater(x, w, 1);
+  assert.equal(x.__calls.fill, 0);
 });

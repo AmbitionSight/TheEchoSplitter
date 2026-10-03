@@ -26,11 +26,7 @@ export function drawRoom(w, x) {
     const px = (i * 97 + 31) % SIDE.W;
     x.beginPath(); x.moveTo(px, 70 + (i % 5) * 72); x.lineTo(px + 40, 86 + (i % 5) * 72); x.stroke();
   }
-  if (room === 'bank') {
-    x.fillStyle = '#27343c'; x.fillRect(760, ground - 2, SIDE.W - 760, SIDE.H - ground + 2);
-    x.strokeStyle = 'rgba(130,220,240,.45)';
-    for (let i = 0; i < 9; i++) { x.beginPath(); x.moveTo(770, ground + 28 + i * 24); x.quadraticCurveTo(930, ground + 12 + i * 24, 1120, ground + 30 + i * 24); x.stroke(); }
-  }
+  // 岸边的水面已抽到 drawWater（逐帧动画，不能进烘焙层），由 drawScene 调用
 }
 
 export function drawBankObjects(w, x) {
@@ -411,6 +407,58 @@ export function drawBoulder(x, cx, gy, seed, w = 90) {
 
 // ================= 场景生命周期与岸边预烘焙 =================
 
+// 流动水面（只服务岸边）。水是本关唯一「亮」的元素，承担了原光照层的一部分职责——
+// 但它是材质处理（高光/倒影），不是光源。
+export function drawWater(x, w, t) {
+  if (w.currentRoom !== 'bank') return;
+  const { groundY, waterX } = w.geo.bank;
+  const wW = SIDE.W - waterX;
+  const wH = SIDE.H - groundY;
+
+  const g = x.createLinearGradient(waterX, 0, SIDE.W, 0);   // 底：近岸浅 → 河心深
+  g.addColorStop(0, '#2a3a44');
+  g.addColorStop(1, '#16232c');
+  x.fillStyle = g;
+  x.fillRect(waterX, groundY, wW, wH);
+
+  x.fillStyle = 'rgba(120,160,180,.06)';                    // 倒影：洞顶与裂隙口的竖向拖影
+  x.fillRect(waterX + 40, groundY, 90, wH);
+  x.fillRect(waterX + 220, groundY, 60, wH);
+
+  const SPEED = [0.6, 1.1, 0.35, 1.6];                      // 中：4 层不同速率的流动波
+  const AMP = [3, 2, 5, 1.5];
+  const BASE = [0.22, 0.45, 0.68, 0.86];
+  x.lineWidth = 2;
+  for (let i = 0; i < 4; i++) {
+    const phase = t * SPEED[i];
+    x.strokeStyle = `rgba(130,190,215,${0.10 + i * 0.045})`;
+    x.beginPath();
+    let first = true;
+    for (let px = waterX; px <= SIDE.W; px += 40) {
+      const py = groundY + wH * BASE[i] + Math.sin(px * 0.012 + phase) * AMP[i];
+      if (first) { x.moveTo(px, py); first = false; } else x.lineTo(px, py);
+    }
+    x.stroke();
+  }
+
+  for (let i = 0; i < 8; i++) {                             // 表：岸线泡沫
+    const py = groundY + 6 + i * (wH / 9);
+    x.fillStyle = `rgba(200,230,240,${0.10 + Math.abs(Math.sin(t * 1.4 + i)) * 0.10})`;
+    x.beginPath();
+    x.ellipse(waterX + 3 + Math.sin(t * 0.8 + i) * 4, py, 5, 2, 0, 0, 7);
+    x.fill();
+  }
+
+  const rand = rng(CAVE_SEEDS.bank + 5);                    // 表：高光碎点（种子固定，随时间闪烁）
+  for (let i = 0; i < 26; i++) {
+    const px = waterX + rand() * wW;
+    const py = groundY + rand() * wH;
+    const ph = rand() * 6.28;
+    x.fillStyle = `rgba(220,245,255,${0.08 + Math.abs(Math.sin(t * 2.2 + ph)) * 0.22})`;
+    x.fillRect(px, py, 2, 2);
+  }
+}
+
 export function createScene() {
   return { baked: {} };
 }
@@ -452,8 +500,10 @@ export function initScene(sc, atlases, geo) {
 }
 
 // 有烘焙层就 blit，没有就回退旧路径——裂隙房与深水房本轮尚未迁移，走 drawRoom。
+// 水面逐帧动，不能进烘焙层，所以在背景之后单独画。
 export function drawScene(x, sc, w) {
   const baked = sc.baked?.[w.currentRoom];
   if (baked) x.drawImage(baked, 0, 0);
   else drawRoom(w, x);
+  drawWater(x, w, w.view?.t ?? 0);
 }
