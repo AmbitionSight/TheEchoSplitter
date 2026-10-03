@@ -106,5 +106,43 @@ export function createUI({ content, atlases, signal }) {
       slot.className = 'hand-slot item';
     }
   }
-  return { setHint, toast, echoStrip, reveal, summary, updateHand };
+  // —— 旅途回顾（走马灯）：第三关收尾自动播放；词只出图标不写字（拼写时刻只属于揭示卡）——
+  let rcEl = null, rcTimer = 0, rcIdx = 0, rcData = null;
+  function recapBuild() {
+    if (rcEl) return rcEl;
+    rcEl = document.createElement('div');
+    rcEl.id = 'recap';
+    rcEl.className = 'screen center slab hidden';
+    rcEl.innerHTML = '<p class="rc-day"></p><p class="rc-place"></p><div class="rc-icons"></div><div class="rc-dots"></div>';
+    document.body.appendChild(rcEl);
+    rcEl.addEventListener('click', () => recapNext());
+    return rcEl;
+  }
+  function recapPaint() {
+    const n = rcData.slides.length, end = rcIdx >= n;
+    rcEl.querySelector('.rc-day').textContent = end ? (rcData.title || '') : (rcData.slides[rcIdx].day || '');
+    rcEl.querySelector('.rc-place').textContent = end ? '' : (rcData.slides[rcIdx].place || '');
+    rcEl.querySelector('.rc-icons').innerHTML = end
+      ? `<p class="rc-end">${rcData.end || ''}</p>`
+      : (rcData.slides[rcIdx].words || []).map(w => {
+          const def = content.words[w] ?? content.lexicon?.[w];
+          return def ? `<img src="${iconURL(def.icon)}" alt="">` : '';
+        }).join('');
+    rcEl.querySelector('.rc-dots').innerHTML = Array.from({ length: n + 1 }, (_, i) => `<i class="${i === rcIdx ? 'on' : ''}"></i>`).join('');
+  }
+  function recapNext() {
+    rcIdx++;
+    if (rcIdx > rcData.slides.length) { recapStop(); return; }
+    recapPaint();
+    clearTimeout(rcTimer);
+    rcTimer = setTimeout(recapNext, rcIdx >= rcData.slides.length ? 3600 : 2400);
+  }
+  function recapStop() { clearTimeout(rcTimer); rcEl?.classList.add('hidden'); rcIdx = 0; }
+  function recap(data) {
+    if (!data?.slides?.length || typeof document === 'undefined') return;
+    rcData = data; recapBuild(); rcIdx = 0; recapPaint();
+    clearTimeout(rcTimer); rcTimer = setTimeout(recapNext, 2400);
+  }
+
+  return { setHint, toast, echoStrip, reveal, summary, recap, updateHand };
 }

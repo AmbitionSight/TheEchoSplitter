@@ -93,6 +93,15 @@
     "open":  { "icon": "switch", "phonemes": [["əʊ",160],["p",80],["ə",100],["n",80]] },
     "jump":  { "icon": "jump", "phonemes": [["dʒ",90],["ʌ",80],["m",90],["p",80]] }
   },
+  "recap": {
+    "title": "这一路",
+    "slides": [
+      { "day": "第一天", "place": "石室", "words": ["hello", "open"] },
+      { "day": "第二间房", "place": "裂谷 · 崖壁", "words": ["jump", "rope"] },
+      { "day": "第三间房", "place": "暗河", "words": ["log", "rope", "raft", "pole"] }
+    ],
+    "end": "你把偷走的声音，一个个捡了回来。"
+  },
   "hints": {
     "start": "暗河挡住了去路。岸边的东西，或许能拼出一条路。",
     "bank": "走近合成台，看看记忆里的声音够不够。",

@@ -369,3 +369,18 @@ test('内容：四词、carrier、flow、三房间 geometry 与无 emoji', () =>
   assert.equal(content.geometry.crevice.benchX, 300);
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(JSON.stringify(content)));
 });
+
+test('第三关 recap：三段回顾数据齐备，词都能解析到图标（只出图标不写字）', async () => {
+  const recap = content.recap;
+  assert.equal(recap?.slides?.length, 3, '三段：石室 / 裂谷·崖壁 / 暗河');
+  for (const s of recap.slides) {
+    assert.ok(s.day && s.place, '每段有日名与地点');
+    for (const w of s.words) assert.ok(content.words[w] ?? content.lexicon?.[w], `${w} 缺图标来源`);
+  }
+  assert.ok(recap.end, '有收束句');
+  const ui = await readFile(new URL('../public/js/ui.js', import.meta.url), 'utf8');
+  assert.match(ui, /function recap\(/, 'ui 提供 recap');
+  assert.match(ui, /rc-icons[\s\S]{0,600}<img src=/, '回顾以图标呈现词');
+  const shell = await readFile(new URL('../public/js/shell.js', import.meta.url), 'utf8');
+  assert.match(shell, /content\.recap\)\s*setTimeout|setTimeout\(\(\) => ui\.recap\(content\.recap\)/, '壳在收尾自动播放');
+});

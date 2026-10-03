@@ -188,6 +188,17 @@ body{overscroll-behavior:none}
   display:flex;align-items:center;justify-content:center;touch-action:none}
 #btn-jump img{width:42px;height:42px;pointer-events:none}
 
+/* 旅途回顾走马灯（第三关收尾）：与结算同族；词只出图标不写字 */
+#recap{gap:12px;text-align:center;cursor:pointer}
+#recap .rc-day{font-size:34px;letter-spacing:.22em;text-indent:.22em;color:var(--ink);margin:0}
+#recap .rc-place{color:var(--dim);letter-spacing:.18em;margin:2px 0 8px}
+#recap .rc-icons{display:flex;gap:18px;justify-content:center;align-items:center;min-height:56px}
+#recap .rc-icons img{width:56px;height:56px;image-rendering:pixelated;animation:wordPop .6s ease backwards}
+#recap .rc-end{font-size:19px;color:var(--ink);letter-spacing:.1em;margin:0}
+#recap .rc-dots{display:flex;gap:8px;justify-content:center;margin-top:12px}
+#recap .rc-dots i{width:6px;height:6px;border-radius:50%;background:rgba(233,228,213,.22)}
+#recap .rc-dots i.on{background:var(--teal);box-shadow:0 0 8px rgba(84,224,200,.6)}
+
 /* 屏级元素是暗幕不是石板：透出底下的房间，石板只给内容盒子 */
 .screen.slab{background:rgba(8,9,13,.82);border:none;border-radius:0;box-shadow:none}
 
