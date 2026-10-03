@@ -37,7 +37,7 @@ test('源码里 blit/tile 引用的精灵名都存在于 SPR（防漏表/拼错�
     const src = readFileSync(join(JS_DIR, f), 'utf8');
     for (const m of src.matchAll(/\b(?:blit|tile)\([^,]+,[^,]+,\s*'([a-z_]+)'/g)) used.add(m[1]);
   }
-  assert.ok(used.size >= 8, `解析到的精灵名过少（${used.size}），正则可能失效`);
+  assert.ok(used.size >= 5, `解析到的精灵名过少（${used.size}），正则可能失效`);   // 第二关改程序化砌石/石板后不再引用 wall_base/floor_brick
   for (const n of used) assert.ok(SPR[n], `源码引用了不存在的精灵名: ${n}`);
 });
 
