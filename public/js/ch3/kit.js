@@ -1,6 +1,7 @@
 // —— 析声者 · 第三关浏览器 kit（侧视河程）：自 ch3.js kit 段原样迁入 ——
 import { createGame, startGame, gameEvent, ch3Debug, interact } from './event.js';
-import { drawScene, createScene, initScene, drawBankObjects, drawCreviceObjects, drawDeepObjects, drawBubble, currentGround } from './render.js';
+import { drawScene, createScene, initScene, drawBankObjects, drawCreviceObjects, drawDeepObjects, drawBubble, currentGround,
+         RAFT_DECK } from './render.js';
 import { chapterOnE, syncHeld, dropBackExtra, stepWorldStones } from '../chapter.js';
 import { mount } from '../shell.js';
 import {
@@ -132,7 +133,7 @@ export const kit = {
     const raftParked = game.raftAssembled &&
       (w.currentRoom === 'bank' || (w.currentRoom === 'deep' && game.stalled && !game.poled));
     w.cfg.wall = raftParked
-      ? { X: w.raft.x - 90, W: 180, topY: w.raft.y - 14, blockGround: false, jumpable: true }
+      ? { X: w.raft.x - 90, W: 180, topY: w.raft.y - RAFT_DECK, blockGround: false, jumpable: true }
       : null;
 
     if (w.transition) {
@@ -165,7 +166,7 @@ export const kit = {
       w.view.puffs.push({ x: player.x, y: w.geo.deep.groundY - 10, r: 10, a: 1 });
       w.sfx.water();
       player.x = w.raft.x;
-      player.y = w.raft.y - 14;
+      player.y = w.raft.y - RAFT_DECK;
     }
 
     if (game.embarked && w.currentRoom === 'deep') {
@@ -179,7 +180,7 @@ export const kit = {
       }
       if (!game.stalled || game.poled) {
         player.x = w.raft.x;
-        player.y = w.raft.y - 14;
+        player.y = w.raft.y - RAFT_DECK;
         player.moving = false;                    // 随筏漂行是站立，不播走路动画（筏面上自己走动时才走）
         player.dir = 'right';
       }

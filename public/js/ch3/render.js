@@ -138,45 +138,57 @@ export function drawLog(x, cx, cy, rot = -0.08) {
   x.restore();
 }
 
-// 木筏：木板 + 木纹 + 端面年轮 + 横梁 + 绳索缠绕与绳结。
+// 甲板顶面在 raft.y 之上的高度。kit 摆放玩家（站位、落点、可跳平台 topY）也引用它，
+// 两边同源，避免木筏外形一改玩家就陷进木板里（终审 Important 抓到的正是这个漂移）。
+export const RAFT_DECK = 14;
+
+// 木筏：侧视——三根横放的原木微错开捆成一束，各带端面年轮，绳索绑扎。
+// 不是俯视的平铺甲板：侧看只该看到原木的侧面轮廓与捆扎。
 // state 本轮只有 'parked'（岸边停泊）；'riding'/'poling' 随深水轮实现，
 // 签名留了默认值，drawDeepObjects 的四参调用因此不受影响。
 export function drawRaft(x, cx, cy, t, state = 'parked') {
   const bob = Math.sin(t * 2.2) * (state === 'parked' ? 2 : 4);
-  contactShadow(x, cx, cy + 10, 74, 10);
+  contactShadow(x, cx, cy + RAFT_DECK + 6, 74, 10);
   x.save(); x.translate(cx, cy + bob);
 
-  for (const py of [-30, -14, 2, 18, 34]) {               // 5 根木板
-    x.fillStyle = '#8e5e33'; x.strokeStyle = PAL.ink; x.lineWidth = 4;
-    x.beginPath(); x.roundRect ? x.roundRect(-72, py, 144, 14, 6) : x.rect(-72, py, 144, 14);
+  const LOGS = [-RAFT_DECK, -RAFT_DECK + 14, -RAFT_DECK + 28];   // 三根原木，上下错开半根
+  LOGS.forEach((py, i) => {
+    x.fillStyle = '#9a6536'; x.strokeStyle = PAL.ink; x.lineWidth = 4;
+    x.beginPath(); x.roundRect ? x.roundRect(-72, py, 144, 26, 12) : x.rect(-72, py, 144, 26);
     x.fill(); x.stroke();
+
+    x.fillStyle = '#b07a44';                              // 上缘受光
+    x.beginPath();
+    if (x.roundRect) x.roundRect(-64, py + 3, 128, 6, 3); else x.rect(-64, py + 3, 128, 6);
+    x.fill();
 
     x.strokeStyle = '#6f4327'; x.lineWidth = 2;           // 木纹
     x.beginPath();
-    x.moveTo(-60, py + 4); x.lineTo(-16, py + 5); x.lineTo(28, py + 3); x.lineTo(62, py + 4);
+    x.moveTo(-52, py + 15); x.lineTo(-6, py + 17); x.lineTo(44, py + 14); x.lineTo(62, py + 15);
     x.stroke();
 
-    x.fillStyle = '#d0a064';                              // 左端年轮
-    x.beginPath(); x.ellipse(-72, py + 7, 6, 7, 0, 0, 7); x.fill();
+    x.fillStyle = '#d0a064'; x.strokeStyle = PAL.ink; x.lineWidth = 4;   // 左端年轮
+    x.beginPath(); x.ellipse(-72, py + 13, 8, 13, 0, 0, 7); x.fill(); x.stroke();
     x.strokeStyle = '#6f4327'; x.lineWidth = 2;
-    x.beginPath(); x.ellipse(-72, py + 7, 3, 3.5, 0, 0, 7); x.stroke();
-  }
+    x.beginPath(); x.ellipse(-72, py + 13, 4, 7, 0, 0, 7); x.stroke();
+  });
 
-  x.fillStyle = '#6b4423'; x.strokeStyle = PAL.ink; x.lineWidth = 4;   // 2 根横梁
+  x.fillStyle = '#6b4423'; x.strokeStyle = PAL.ink; x.lineWidth = 4;   // 2 根压条（捆在木束上）
   for (const bx of [-42, 30]) {
     x.beginPath();
-    if (x.roundRect) x.roundRect(bx, -36, 12, 78, 4); else x.rect(bx, -36, 12, 78);
+    if (x.roundRect) x.roundRect(bx, -RAFT_DECK, 10, 5, 2); else x.rect(bx, -RAFT_DECK, 10, 5);
     x.fill(); x.stroke();
   }
 
   x.strokeStyle = '#d5b56b'; x.lineWidth = 3;             // 绳索 X 形缠绕 + 绳结
+  const ropeTop = -RAFT_DECK, ropeBot = -RAFT_DECK + 54;
   for (const bx of [-36, 36]) {
     x.beginPath();
-    x.moveTo(bx - 9, -34); x.lineTo(bx + 9, 42);
-    x.moveTo(bx + 9, -34); x.lineTo(bx - 9, 42);
+    x.moveTo(bx - 9, ropeTop); x.lineTo(bx + 9, ropeBot);
+    x.moveTo(bx + 9, ropeTop); x.lineTo(bx - 9, ropeBot);
     x.stroke();
     x.fillStyle = '#d5b56b';
-    x.beginPath(); x.arc(bx, 4, 3.5, 0, 7); x.fill();
+    x.beginPath(); x.arc(bx, (ropeTop + ropeBot) / 2, 3.5, 0, 7); x.fill();
   }
   x.restore();
 }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from '../public/js/ch3/cave.js';
 import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites,
          createScene, initScene, drawScene, drawCrack, drawBoulder, drawWater,
-         drawRaft, drawLog, drawMooring } from '../public/js/ch3/render.js';
+         drawRaft, drawLog, drawMooring, RAFT_DECK } from '../public/js/ch3/render.js';
 
 // 宽松 canvas 桩（同 test/scene.bg.test.js）：任何方法可调、任何属性可写，只断言「不抛」
 function mockCtx() {
@@ -24,12 +24,14 @@ function mockCtx() {
 function recordingCtx() {
   const calls = { fill: 0, stroke: 0, ellipse: 0, arc: 0, moveTo: 0, lineTo: 0, fillRect: 0, quadraticCurveTo: 0 };
   const pts = [];
+  const rects = [];                                   // roundRect/rect 的实参 [x, y, w, h]
   const grad = { addColorStop() {} };
-  return new Proxy({ __calls: calls, __pts: pts }, {
+  return new Proxy({ __calls: calls, __pts: pts, __rects: rects }, {
     get(t, k) {
       if (k in t) return t[k];
       if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => grad;
       if (k === 'moveTo' || k === 'lineTo') return (px, py) => { calls[k]++; pts.push([px, py]); };
+      if (k === 'roundRect' || k === 'rect') return (...a) => { calls[k]++; rects.push(a.slice(0, 4)); };
       return () => { if (k in calls) calls[k]++; };
     },
     set(t, k, v) { t[k] = v; return true; }
@@ -318,6 +320,16 @@ test('drawRaft：有吃水影（至少一枚椭圆）', () => {
   const x = recordingCtx();
   drawRaft(x, 880, 584, 0);
   assert.ok(x.__calls.ellipse >= 1);
+});
+
+// 甲板顶面必须正好在 local -RAFT_DECK：kit 用同一个常量摆放玩家，
+// 两边一旦漂移，玩家就会陷进木板里（或悬在木板上方）。
+test('drawRaft：甲板顶面 = local -RAFT_DECK，与 kit 的站位偏移同源', () => {
+  const x = recordingCtx();
+  drawRaft(x, 880, 584, 0);
+  const tops = x.__rects.map(r => r[1]);
+  assert.ok(tops.length >= 5, `木板/横梁数 ${tops.length}`);
+  assert.equal(Math.min(...tops), -RAFT_DECK, `最上层构件 y=${Math.min(...tops)}`);
 });
 
 test('drawLog：签名不变，结构细节增加（≥4 次填充）', () => {
