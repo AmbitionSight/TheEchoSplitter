@@ -59,7 +59,7 @@ Each HTML page selects one chapter module:
 - `public/chapter3.html` loads `public/js/ch3.js` (chapter 3, side-view wall and rope).
 - `public/chapter4.html` loads `public/js/ch4.js` (chapter 4, side-view river journey with three rooms).
 
-Chapters 1 and 4 are split into layered modules under `public/js/ch1/` and `public/js/ch4/`. The HTML-facing entries (`main.js`, `ch4.js`) are pure re-export compatibility layers, as is the internal `scene.js` import path; none hold logic, and existing import paths keep working. The layers are strictly one-way — `planners` is the base, `physics` and `render` build on it, and `kit` sits on top — and the event machines are pure, importing only shared modules (`chapter.js`, `hotbar.js`, and for chapter 1 also `door.js`). A new module must never import an entry file.
+Chapters 1 and 4 are split into layered modules under `public/js/ch1/` and `public/js/ch4/`. The HTML-facing entries (`main.js`, `ch4.js`) are pure re-export compatibility layers, as is the internal `scene.js` import path; none hold logic, and existing import paths keep working. Chapter 1's layers are strictly one-way — `planners` is the base, `physics` and `render` build on it, and `kit` sits on top; chapter 4 has the smaller `event`/`render`/`kit` stack. In both, the event machines are pure, importing only `chapter.js` and `hotbar.js` (chapter 1's also imports the chapter-specific `door.js`). A new module must never import an entry file.
 
 - `public/js/ch1/planners.js`: chapter 1 layout, deterministic `rng`, wall/light constants, and the pure masonry/slab planners.
 - `public/js/ch1/physics.js`: chapter 1 collision, screen-to-logical conversion, walk stepping, and phoneme-stone physics.
@@ -87,7 +87,7 @@ Chapters 2 and 3 remain single-file (`ch2.js`, `ch3.js`) with the same two layer
 - `public/js/art.js`: palette, rune stroke data, and Canvas-drawn icons. Do not replace game icons with emoji.
 - `public/js/sprites.js`: sprite atlas metadata and drawing helpers for assets under `public/assets/mi/`.
 - `public/js/scene.js`: pure re-export entry for chapter 1 (its logic now lives in `public/js/ch1/`); kept so existing imports of `scene.js` keep working.
-- `public/js/sideview.js`: shared side-view movement, jumping/climbing, stone physics, and rendering helpers used by chapters 2 and 3.
+- `public/js/sideview.js`: shared side-view movement, jumping/climbing, stone physics, and rendering helpers used by chapters 2, 3, and 4, and by chapter 1's kit for the E hint.
 - `public/js/actors.js`: player, NPC, and cat state/drawing.
 
 ### Content and persistence boundaries
