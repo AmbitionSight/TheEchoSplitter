@@ -36,10 +36,68 @@ export function rng(seed) {
 
 export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
+// —— 墙地带高唯一事实源（渲染/碰撞共用；此前 284/300/292–336/340 四处字面量）——
+export const WALL_SEAM = { face: 284, base: 300, foot: 336, walk: 340 };
+
+// —— 光锚点：静态光源=暗海挖孔=动态光晕，单源（设计稿 §4 光法则）——
+export const LIGHTS = {
+  window:  { x: 330, y: 160, r: 320, s: 0.95 },   // 月窗 sprite 50x40 @ (305,140) 的中心
+  brazier: { x: 520, y: 393, r: 240, s: 0.95 },   // 火盆障碍圆心 (520,395)
+  candle:  { x: 702, y: 455, r: 160, s: 0.85 },   // 蜡烛座 (698..706,456..470)
+  switch:  { x: 660, y: 285, r: 130, s: 0.62 }
+};
+
+// —— 砌石规划（纯函数，种子确定；渲染层照单上色，设计稿 §1）——
+export function masonryPlan(seed, W, faceH) {
+  const r = rng(seed), rows = [];
+  const ROW_H = 42;
+  for (let y = 0, i = 0; y < faceH; y += ROW_H, i++) {
+    const blocks = [];
+    const x0 = i % 2 ? -30 : 0;                    // 错缝：奇数行左移半块
+    let x = x0;
+    while (x < W) {
+      const rem = W - x;
+      let w = 60 + Math.floor(r() * 37);           // 60..96
+      if (rem - w < 60) w = rem;                   // 剩余不足一块时整段收口
+      const moisture = x < 300 ? 0.45 : x > 700 ? 0.12 : 0.22;  // 井区湿气重，苔盛
+      blocks.push({
+        x, y, w, t: 0.9 + r() * 0.2,
+        moss: r() < moisture ? 0.35 + r() * 0.6 : 0,
+        crack: r() < 0.14
+      });
+      x += w;
+    }
+    rows.push({ x0, y, width: W - x0, blocks });
+  }
+  return rows;
+}
+
+// —— 地面大石板规划（150..220 宽，错缝大阶，设计稿 §2）——
+export function slabPlan(seed, W, y0, H) {
+  const r = rng(seed), rows = [];
+  let y = y0, i = 0;
+  while (y < y0 + H) {
+    const h = 96 + Math.floor(r() * 30);
+    const blocks = [];
+    const x0 = i % 2 ? -80 : 0;
+    let x = x0;
+    while (x < W) {
+      const rem = W - x;
+      let w = 150 + Math.floor(r() * 71);          // 150..220
+      if (rem - w < 150) w = rem;
+      blocks.push({ x, y, w, h: Math.min(h, y0 + H - y), t: 0.92 + r() * 0.16, crack: r() < 0.12 });
+      x += w;
+    }
+    rows.push({ x0, y, width: W - x0, blocks });
+    y += h; i++;
+  }
+  return rows;
+}
+
 // —— 碰撞：房间边界 + 圆形障碍（规格 §11.5）——
 export function resolveCollisions(p, pr = 16) {
   p.x = clamp(p.x, 40, LAYOUT.W - 40);
-  p.y = clamp(p.y, 340, LAYOUT.H - 20);
+  p.y = clamp(p.y, WALL_SEAM.walk, LAYOUT.H - 20);
   for (const o of LAYOUT.obstacles) {
     const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy), min = o.r + pr;
     if (d < min) {
