@@ -1,1 +1,21 @@
+# 行尾：所有文本一律 LF（跨平台一致，避免 CRLF 噪声）
 * text=auto eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+
+# 二进制：不参与行尾/编码转换（素材、图标、字体）
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.zip   binary
+
+# 归档与素材包：diff 里不展开
+*.zip -diff
