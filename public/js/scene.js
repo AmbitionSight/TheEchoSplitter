@@ -485,12 +485,16 @@ function flame(x, cx, cy, size, t, seed) {
   x.fillStyle = PAL.fireCore; x.fill();
 }
 
-function glow(x, cx, cy, r, color, alpha) {
-  const g = x.createRadialGradient(cx, cy, 2, cx, cy, r);
+function glow(x, cx, cy, r, color, alpha, ry) {          // ry 可选：竖向拉伸成椭圆光（吸顶灯下垂光带）
+  x.save();
+  x.translate(cx, cy);
+  if (ry) x.scale(1, ry / r);
+  const g = x.createRadialGradient(0, 0, 2, 0, 0, r);
   g.addColorStop(0, color.replace('ALPHA', String(alpha)));
   g.addColorStop(1, color.replace('ALPHA', '0'));
   x.fillStyle = g;
-  x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill();
+  x.beginPath(); x.arc(0, 0, r, 0, 7); x.fill();
+  x.restore();
 }
 
 function drawTorch(x, tx, ty, lit, t, seed) {
@@ -620,7 +624,7 @@ export function drawScene(x, sc, view) {
   drawTorch(x, 140, 190, true, t, 5); drawTorch(x, 300, 190, true, t, 6);                // 左墙火把恒亮
   if (view.lit > 0.02) {                                                                  // 吸顶灯亮起（下垂光带 + 双层光晕，无直边）
     x.save(); x.globalAlpha = view.lit;
-    glow(x, 950, 170, 150, 210, 'rgba(255,224,150,ALPHA)', 0.14);
+    glow(x, 950, 170, 150, 'rgba(255,224,150,ALPHA)', 0.14, 210);   // 下垂光带（宽 150 · 高 210 椭圆）
     glow(x, 950, 58, 340, 'rgba(255,224,150,ALPHA)', 0.46);
     glow(x, 950, 54, 62, 'rgba(255,240,200,ALPHA)', 0.85);
     x.restore();

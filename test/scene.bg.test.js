@@ -1,6 +1,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { WALL_SEAM, LIGHTS, LAYOUT, masonryPlan, slabPlan, resolveCollisions } from '../public/js/scene.js';
+import { WALL_SEAM, LIGHTS, LAYOUT, masonryPlan, slabPlan, resolveCollisions, drawScene, drawOverlay } from '../public/js/scene.js';
+
+// 模拟 2D context：任何方法调用皆安全、任何属性可写（只断言"不抛"，不断言像素）
+function mockCtx() {
+  const grad = { addColorStop() {} };
+  const bag = {};
+  return new Proxy(bag, {
+    get(t, k) {
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => grad;
+      if (typeof k !== 'string') return undefined;
+      return k in t ? t[k] : () => undefined;
+    },
+    set(t, k, v) { t[k] = v; return true; }
+  });
+}
 
 test('WALL_SEAM 带高一致：面<基线<=可行走线，碰撞下界引用同一常量', () => {
   assert.ok(WALL_SEAM.face < WALL_SEAM.base);
@@ -62,5 +76,19 @@ test('LIGHTS 光锚点与视觉光源对齐（窗心=330,160；火盆≈障碍�
   assert.ok(Math.hypot(LIGHTS.brazier.x - bz.x, LIGHTS.brazier.y - bz.y) <= 10);
   for (const k of ['window', 'brazier', 'candle', 'switch']) {
     assert.ok(LIGHTS[k].r > 0 && LIGHTS[k].s > 0 && LIGHTS[k].s <= 1);
+  }
+});
+
+test('drawScene/drawOverlay 冒烟：lit 全程与门开态不抛（模拟 ctx，防 glow 参数错位类死机）', () => {
+  const sc = { static: { width: 1280, height: 720 }, darkness: {}, dust: [], atlases: null, lit: 1 };
+  for (const lit of [0, 0.03, 0.5, 1]) {
+    const views = [
+      { t: 1, lit, doorState: 'closed', doorPulse: 0, doorOpen: 0, bloomed: false, hatOn: false },
+      { t: 1, lit, doorState: 'opened', doorPulse: 0.4, doorOpen: 1, bloomed: true, hatOn: true, benchHot: true, craftSlots: [null, null, null, null], switchOn: true }
+    ];
+    for (const view of views) {
+      assert.doesNotThrow(() => drawScene(mockCtx(), sc, view), `drawScene lit=${lit}`);
+      assert.doesNotThrow(() => drawOverlay(mockCtx(), sc, view), `drawOverlay lit=${lit}`);
+    }
   }
 });
