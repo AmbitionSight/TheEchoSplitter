@@ -134,3 +134,10 @@ test('听声点是实体物件：findE 认得，按 E 走 LISTEN（auto 的火�
   assert.ok(ran.some(i => i.t === 'echo' && i.say === 'Fall.'));
   assert.equal(kit.findE({ ...w, player: { x: 90, y: 600 } }), null);   // 火把是 auto 环境声，不是 E 目标
 });
+
+test('内容：听声点带 sfx、warm 在火把 (90,240)、reveal 齐备', () => {
+  const warm = content.listening.find(s => s.id === 'warm');
+  assert.equal(warm.y, 240); assert.equal(warm.sfx, 'crackle'); assert.equal(warm.auto, true);
+  for (const s of content.listening) assert.ok(s.sfx, `${s.id} 缺 sfx`);
+  assert.ok(content.words.jump.reveal?.ok, 'jump 缺 reveal');
+});

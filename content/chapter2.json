@@ -4,16 +4,17 @@
   "words": {
     "jump": { "icon": "jump", "phonemes": [["dʒ",90],["ʌ",80],["m",90],["p",80]],
                "decoys": ["h","l"],
+               "reveal": { "line": "你拼出了身体早就知道的词", "sub": "文字，是冻住的声音", "ok": "把这个词，用在自己身上" },
                "use": { "target": "player", "effect": "jumpUnlock", "once": true } }
   },
   "flows": {
     "jump": { "listen": ["Jump."], "puzzled": ["Jump?"], "drop": [640, 560] }
   },
   "listening": [
-    { "id": "warm",  "x": 90,  "y": 180, "r": 90, "auto": true, "echo": ["w","ɔː","m"], "say": "Warm." },
-    { "id": "fall",  "x": 690, "y": 580, "r": 84, "echo": ["f","ɔː","l"], "say": "Fall.",
+    { "id": "warm",  "x": 90,  "y": 240, "r": 90, "auto": true, "echo": ["w","ɔː","m"], "say": "Warm.", "sfx": "crackle" },
+    { "id": "fall",  "x": 690, "y": 580, "r": 84, "echo": ["f","ɔː","l"], "say": "Fall.", "sfx": "wind",
       "after": { "echo": ["f","r","iː"], "say": "Free." } },
-    { "id": "shine", "x": 950, "y": 580, "r": 84, "echo": ["ʃ","aɪ","n"], "say": "Shine." }
+    { "id": "shine", "x": 950, "y": 580, "r": 84, "echo": ["ʃ","aɪ","n"], "say": "Shine.", "sfx": "bloom" }
   ],
   "carriers": { "dʒ": "Jge.", "ʌ": "Up.", "m": "Mm.", "p": "P.", "r": "Err." },
   "geometry": { "chasmL": 700, "chasmR": 940, "groundY": 600, "exitX": 1150, "benchX": 420, "spawnX": 140 },

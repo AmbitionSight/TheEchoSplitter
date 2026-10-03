@@ -136,3 +136,13 @@ test('听声点是实体物件：findE 认得，按 E 走 LISTEN（非走过即�
   kit.onE(w, t);
   assert.ok(ran.some(i => i.t === 'echo' && i.say === 'Stone.'));
 });
+
+test('内容：benchX=520、warm 在火把 (240,240)、sfx 与 reveal 齐备', () => {
+  const warm = content.listening.find(s => s.id === 'warm');
+  assert.equal(warm.x, 240); assert.equal(warm.y, 240); assert.equal(warm.sfx, 'crackle'); assert.equal(warm.auto, true);
+  assert.equal(content.geometry.benchX, 520);
+  assert.equal(content.listening.find(s => s.id === 'stone').sfx, 'clack');
+  assert.equal(content.listening.find(s => s.id === 'high').sfx, 'gust');
+  for (const s of content.listening) assert.ok(s.sfx, `${s.id} 缺 sfx`);
+  assert.ok(content.words.rope.reveal?.ok, 'rope 缺 reveal');
+});

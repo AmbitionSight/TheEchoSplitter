@@ -27,6 +27,7 @@
         ]
       ],
       "decoys": ["h", "m"],
+      "reveal": { "line": "你拼出了墙上垂着的那个声音", "sub": "文字，是冻住的声音", "ok": "把这个词，还给绳子" },
       "use": {
         "target": "rope",
         "effect": "mendRope",
@@ -49,9 +50,9 @@
     }
   },
   "listening": [
-    { "id": "warm",  "x": 90,  "y": 180, "r": 90, "auto": true, "echo": ["w","ɔː","m"], "say": "Warm." },
-    { "id": "stone", "x": 780, "y": 300, "r": 70, "echo": ["s","t","əʊ","n"], "say": "Stone." },
-    { "id": "high",  "x": 920, "y": 120, "r": 60, "echo": ["h","aɪ"], "say": "High." }
+    { "id": "warm",  "x": 240, "y": 240, "r": 90, "auto": true, "echo": ["w","ɔː","m"], "say": "Warm.", "sfx": "crackle" },
+    { "id": "stone", "x": 780, "y": 300, "r": 70, "echo": ["s","t","əʊ","n"], "say": "Stone.", "sfx": "clack" },
+    { "id": "high",  "x": 920, "y": 120, "r": 60, "echo": ["h","aɪ"], "say": "High.", "sfx": "gust" }
   ],
   "carriers": {
     "r": "Err.",
@@ -64,7 +65,7 @@
     "groundY": 620,
     "topY": 120,
     "exitX": 980,
-    "benchX": 420,
+    "benchX": 520,
     "spawnX": 140
   },
   "phonemeBook": {
