@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, ropeDebug, startGame, kit } from '../public/js/ch2b.js';
+import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL } from '../public/js/ch2b.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { moveSide, planDropStones } from '../public/js/sideview.js';
@@ -145,4 +145,64 @@ test('内容：benchX=520、warm 在火把 (240,240)、sfx 与 reveal 齐备', (
   assert.equal(content.listening.find(s => s.id === 'high').sfx, 'gust');
   for (const s of content.listening) assert.ok(s.sfx, `${s.id} 缺 sfx`);
   assert.ok(content.words.rope.reveal?.ok, 'rope 缺 reveal');
+});
+
+// ================= Task 13：2b 陈设与塔结构（makeBg，规格 §5.2） =================
+
+test('2b 石刻带常量：8 枚符文 x300–664 y≈310，含 ᚱ/ᚩ/ᛈ；拱口暖光 60→220', () => {
+  assert.equal(RUNE_BAND.runes.length, 8);
+  for (const g of ['ᚱ', 'ᚩ', 'ᛈ']) assert.ok(RUNE_BAND.runes.includes(g), `石刻带缺 ${g}`);
+  assert.equal(RUNE_BAND.x0, 300);
+  assert.equal(RUNE_BAND.x0 + (RUNE_BAND.runes.length - 1) * RUNE_BAND.step, 664);   // 8 枚铺满 300–664
+  assert.equal(RUNE_BAND.y, 310);
+  assert.deepEqual([ARCH_SPILL.x0, ARCH_SPILL.x1], [60, 220]);        // 入口拱暖溢光（出生区照明）
+});
+
+test('2b 陈设与塔结构：入口拱/货堆/残碑/绞盘/塔柱/窗光柱烘进 makeBg（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  for (const k of ['drawArchSide', 'drawCrates', 'drawRuinTablet', 'drawWinch', 'drawPilasters', 'drawWindowShaft']) {
+    assert.ok(src.includes(k), `缺 ${k}`);
+  }
+  const bgAt = src.indexOf('function makeBg');
+  for (const call of ['drawArchSide(x, 60, gy', 'drawArchSpill(x, geo)', 'drawCrates(x, w.atlases, gy)',
+                      'drawRuinTablet(x, 780, 300)', 'drawWinch(x, 908, gy)',
+                      'drawPilasters(x, geo)', 'drawWindowShaft(x, geo)']) {
+    assert.ok(src.indexOf(call, bgAt) !== -1, `静态件 ${call} 应画在 makeBg 内`);
+  }
+  assert.match(src, /drawArchSide\(x, 60, gy, \{ rune: 'ᚱ' \}\)/, '入口拱 (60,620) ᚱ 阴刻（与 2a 出口同构）');
+  assert.match(src, /'crate_big'[\s\S]*?'crate_sm'[\s\S]*?'jars2'/, '货堆 = 大木箱 + 叠小箱 + 陶罐组');
+  assert.match(src, /blit\(x, w\.atlases, 'shelf'/, '木架 blit shelf (1070)');
+  assert.match(src, /blit\(x, w\.atlases, 'tree'/, '盆栽树 blit tree (1180)');
+  assert.match(src, /drawTorchSide\(x, 240, 240/, '左火把 = warm 听声点 (240,240)');
+  assert.match(src, /drawTorchSide\(x, 868, 430/, '绳位火把 (868,430)');
+  assert.match(src, /drawBenchSide\([^;]*\{ candle: true, t: v\.t \}\)/, 'benchX 520 合成台开蜡烛（ch1 同款）');
+  assert.match(src, /blockGround: false/, '塔身壁柱只画不挡走（物理层仍 blockGround:false）');
+});
+
+// 模拟 2D context：任何方法调用皆安全、任何属性可写（只断言"不抛"，不断言像素）
+function mockCtx() {
+  const grad = { addColorStop() {} };
+  const bag = {};
+  return new Proxy(bag, {
+    get(t, k) {
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => grad;
+      if (typeof k !== 'string') return undefined;
+      return k in t ? t[k] : () => undefined;
+    },
+    set(t, k, v) { t[k] = v; return true; }
+  });
+}
+
+test('2b 绘制冒烟：makeBg（含全部新陈设）+ draw 三态不抛（模拟 ctx / 离屏 canvas）', () => {
+  globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => mockCtx() }) };
+  const g = createGame(content, ch2Profile);
+  const cv = { style: {}, addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }) };
+  const w = kit.makeWorld({ content, profile: ch2Profile, game: g, cv, signal: undefined });
+  w.content = content; w.game = g; w.atlases = null;                 // 图集未载：blit 静默兜底
+  const x = mockCtx();
+  assert.doesNotThrow(() => kit.draw(w, x, null), '断绳态 draw');
+  g.mended = true; w.view.ropeMendT = 1.0;
+  assert.doesNotThrow(() => kit.draw(w, x, { kind: 'obj', id: 'rope', x: 912, y: 620 }), '修复态 draw');
+  w.player.climbing = true; w.player.y = 300;
+  assert.doesNotThrow(() => kit.draw(w, x, null), '攀爬态 draw');
 });

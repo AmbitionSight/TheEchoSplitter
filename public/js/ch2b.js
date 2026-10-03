@@ -97,13 +97,14 @@ export function ropeDebug(g, beat) {
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots } from './sideview.js';
-import { PAL } from './art.js';
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots,
+         drawArchSide, groundShadow } from './sideview.js';
+import { PAL, drawRune } from './art.js';
 import { blit, SPR } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { screenToLogical } from './ch1/physics.js';
-import { masonryPlan, slabPlan } from './ch1/planners.js';
-import { paintMasonry, paintSlabs } from './masonry.js';
+import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
+import { shade, paintMasonry, paintSlabs } from './masonry.js';
 
 export const kit = {
   chapter: 2, contentId: '2b', W: SIDE.W, H: SIDE.H, titleRune: 'ᚱ',
@@ -280,8 +281,9 @@ export const kit = {
     if (!w.bg) w.bg = makeBg(w);                                            // 夜空/高墙/地面一次性预渲染
     x.drawImage(w.bg, 0, 0);
     drawRope(x, w, ropeX);
-    drawTorchSide(x, 90, 180, v.t);
-    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots);
+    drawTorchSide(x, 240, 240, v.t);                                         // 左火把 = warm 听声点实体 (240,240)（规格 §5.2#2）
+    drawTorchSide(x, 868, 430, v.t);                                         // 绳位火把 (868,430)：照亮绳根与绞盘（§5.2#6）
+    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
     drawWindow(x, w.atlases, geo.exitX, geo.topY, v.winOpen, game.climbed, v.t);
     x.save();
     if (w.player.climbing) { x.translate(w.player.x, w.player.y); x.rotate(0.12); x.translate(-w.player.x, -w.player.y); }
@@ -303,8 +305,171 @@ export const kit = {
   }
 };
 
+// ================= 2b 陈设（静态件，全部烘进 makeBg；火把火焰/绳/窗/呼吸符文在 draw() 动态层） =================
+
+// 石刻带（规格 §5.2#5）：x300–664 y≈310 八枚暗青阴刻（含 ᚱ 本章音 / ᚩ 窗 / ᛈ rope 的 p）；导出供测试锁坐标
+export const RUNE_BAND = { x0: 300, step: 52, y: 310, runes: ['ᚱ', 'ᛚ', 'ᚩ', 'ᚦ', 'ᛈ', 'ᛞ', 'ᚹ', 'ᚷ'] };
+// 入口拱洞内暖光溢出范围（出生区照明，规格 §5.2#1）
+export const ARCH_SPILL = { x0: 60, x1: 220 };
+
+// 墙挂件落影（软阴影）：火把/残碑等贴墙件
+function wallShadow(x, cx, cy, r) {
+  const g = x.createRadialGradient(cx + 4, cy + 8, 2, cx + 4, cy + 8, r);
+  g.addColorStop(0, 'rgba(0,0,0,.32)');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = g;
+  x.beginPath(); x.arc(cx + 4, cy + 8, r, 0, 7); x.fill();
+}
+
+// 入口拱洞内暖光溢出 60→220（规格 §5.2#1）：洞口暖核 + 沿墙暖洗 + 地面光池
+function drawArchSpill(x, geo) {
+  const { x0, x1 } = ARCH_SPILL, gy = geo.groundY;
+  const mouth = x.createRadialGradient(x0, gy - 96, 8, x0, gy - 96, 170);
+  mouth.addColorStop(0, 'rgba(255,206,130,.22)');
+  mouth.addColorStop(0.55, 'rgba(255,198,112,.10)');
+  mouth.addColorStop(1, 'rgba(255,198,112,0)');
+  x.fillStyle = mouth;
+  x.beginPath(); x.arc(x0, gy - 96, 170, 0, 7); x.fill();
+  const wash = x.createLinearGradient(x0, 0, x1, 0);
+  wash.addColorStop(0, 'rgba(255,198,112,.14)');
+  wash.addColorStop(1, 'rgba(255,198,112,0)');
+  x.fillStyle = wash;
+  x.fillRect(x0, gy - 214, x1 - x0, 214);
+  const pool = x.createRadialGradient(x0 + 20, gy + 2, 6, x0 + 20, gy + 2, 150);
+  pool.addColorStop(0, 'rgba(255,198,112,.16)');
+  pool.addColorStop(1, 'rgba(255,198,112,0)');
+  x.fillStyle = pool;
+  x.beginPath(); x.ellipse(x0 + 40, gy + 4, 130, 26, 0, 0, 7); x.fill();
+}
+
+// 火把铁托架（与 ch1/ch2 同款金属件，垫在火把柄下）
+function drawTorchBracket(x, tx, ty) {
+  x.fillStyle = '#4b4f5a';
+  x.beginPath(); x.moveTo(tx - 10, ty); x.lineTo(tx + 10, ty); x.lineTo(tx + 5, ty + 10); x.lineTo(tx - 5, ty + 10); x.closePath(); x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 1.5; x.stroke();
+}
+
+// 墙面石刻带：凹槽 + 八枚 26px 暗青阴刻（ch1 墙上刻痕同族）
+function drawRuneBand(x) {
+  const { x0, step, y, runes } = RUNE_BAND;
+  const w = (runes.length - 1) * step;
+  x.fillStyle = 'rgba(20,22,30,.32)';                                  // 刻带凹槽
+  x.fillRect(x0 - 34, y - 26, w + 68, 52);
+  x.strokeStyle = 'rgba(10,12,18,.55)'; x.lineWidth = 2;
+  x.strokeRect(x0 - 34, y - 26, w + 68, 52);
+  x.fillStyle = 'rgba(255,240,214,.06)';                               // 凹槽上缘受光
+  x.fillRect(x0 - 34, y - 26, w + 68, 2);
+  runes.forEach((g, i) => drawRune(x, g, x0 + i * step, y, 26, 'rgba(40,66,60,.5)', 3));   // 暗青阴刻，不发光
+}
+
+// 嵌壁残碑（stone 听声点实体，碑心 780,300）+ 石托：残口石牌 + 四枚阴刻（ᛌ ᛏ ᚩ ᚾ = s t əʊ n）
+function drawRuinTablet(x, cx, cy) {
+  wallShadow(x, cx, cy, 56);
+  x.save();
+  x.fillStyle = '#5d5a52';                                             // 石托（承碑的墙上石台）
+  x.beginPath();
+  x.moveTo(cx - 34, cy + 28); x.lineTo(cx + 34, cy + 28);
+  x.lineTo(cx + 26, cy + 46); x.lineTo(cx - 26, cy + 46);
+  x.closePath(); x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 2.5; x.stroke();
+  x.fillStyle = 'rgba(255,240,214,.10)'; x.fillRect(cx - 34, cy + 28, 68, 2);   // 托面受光
+  const r = rng(97);
+  x.fillStyle = shade('#7b7669', -0.02);                               // 碑身（顶缘残口参差）
+  x.beginPath();
+  x.moveTo(cx - 24, cy + 28);
+  x.lineTo(cx - 24, cy - 24);
+  for (let i = 0; i <= 5; i++) x.lineTo(cx - 24 + i * 9.6, cy - 26 - r() * 10);
+  x.lineTo(cx + 24, cy - 24);
+  x.lineTo(cx + 24, cy + 28);
+  x.closePath(); x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 2.5; x.stroke();
+  x.fillStyle = shade('#7b7669', 0.10);                                // 上/左受光
+  x.fillRect(cx - 24, cy - 24, 2, 52); x.fillRect(cx - 24, cy + 26, 48, 2);
+  for (const [g, gx, gy2] of [['ᛌ', cx - 11, cy - 8], ['ᛏ', cx + 11, cy - 8], ['ᚩ', cx - 11, cy + 12], ['ᚾ', cx + 11, cy + 12]]) {
+    drawRune(x, g, gx, gy2, 14, 'rgba(40,66,60,.6)', 2);               // 阴刻 s t əʊ n（残碑上的名字）
+  }
+  x.restore();
+}
+
+// 绞盘与绳尾（签名地标，鼓心 908,620）：底架 + 鼓 + 双铁箍 + 摇柄 + 绕鼓绳尾（修好后正落鼓上）
+function drawWinch(x, cx, gy) {
+  groundShadow(x, cx, gy, 34, 8, 0.30);
+  x.save();
+  x.strokeStyle = PAL.wood2; x.lineWidth = 7; x.lineCap = 'round';     // 底架斜腿
+  x.beginPath(); x.moveTo(cx - 26, gy - 2); x.lineTo(cx - 16, gy - 26); x.stroke();
+  x.beginPath(); x.moveTo(cx + 26, gy - 2); x.lineTo(cx + 16, gy - 26); x.stroke();
+  x.fillStyle = shade(PAL.wood2, 0.10);                                // 鼓（横卧圆木）
+  x.beginPath();
+  if (x.roundRect) x.roundRect(cx - 30, gy - 34, 60, 26, 9); else x.rect(cx - 30, gy - 34, 60, 26);
+  x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 3; x.stroke();
+  x.fillStyle = shade(PAL.wood3, 0);                                   // 鼓面端头
+  x.beginPath(); x.ellipse(cx - 30, gy - 21, 6, 13, 0, 0, 7); x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 2.5; x.stroke();
+  x.strokeStyle = '#4b4f5a'; x.lineWidth = 4;                          // 双铁箍
+  x.beginPath(); x.moveTo(cx - 14, gy - 34); x.lineTo(cx - 14, gy - 8); x.stroke();
+  x.beginPath(); x.moveTo(cx + 14, gy - 34); x.lineTo(cx + 14, gy - 8); x.stroke();
+  x.strokeStyle = '#4b4f5a'; x.lineWidth = 5; x.lineCap = 'round';     // 摇柄（右端拐出）
+  x.beginPath(); x.moveTo(cx + 30, gy - 21); x.lineTo(cx + 44, gy - 21); x.lineTo(cx + 44, gy - 36); x.stroke();
+  x.fillStyle = PAL.wood3;
+  x.beginPath(); x.arc(cx + 44, gy - 40, 4.5, 0, 7); x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 2; x.stroke();
+  x.strokeStyle = '#b98d55'; x.lineWidth = 4;                          // 绕鼓绳尾（§11 绳芯色）
+  for (let i = 0; i < 3; i++) {
+    x.beginPath(); x.ellipse(cx, gy - 21, 24 - i * 7, 11 - i * 3, 0, 0, 7); x.stroke();
+  }
+  x.strokeStyle = '#6e4526'; x.lineWidth = 4; x.lineCap = 'round';     // 散绳尾拖地
+  x.beginPath(); x.moveTo(cx + 12, gy - 12); x.lineTo(cx + 18, gy - 2); x.stroke();
+  x.beginPath(); x.moveTo(cx + 18, gy - 2); x.lineTo(cx + 26, gy - 1); x.stroke();
+  x.restore();
+}
+
+// 货堆（底 300/368）：大木箱 + 叠小箱 + 陶罐组（mi 图集 1:1 整倍，同 2a#4）
+function drawCrates(x, imgs, gy) {
+  groundShadow(x, 300, gy, 30, 7, 0.28);
+  groundShadow(x, 368, gy, 32, 7, 0.28);
+  blit(x, imgs, 'crate_big', 274, gy - 46);
+  blit(x, imgs, 'crate_sm', 284, gy - 46 - 45);                        // 小箱叠在大箱上
+  blit(x, imgs, 'jars2', 338, gy - 34);
+}
+
+// 塔身壁柱 900–1010 y122–620：平面浮雕——只画不挡走（物理层 wall.blockGround=false，见 makeWorld）
+function drawPilasters(x, geo) {
+  const { wallX, wallW, topY, groundY } = geo;
+  x.save();
+  for (const px of [wallX + 10, wallX + wallW - 10]) {                 // 两根边柱（910 / 1000）
+    x.fillStyle = 'rgba(255,240,214,.10)';                             // 柱身受光
+    x.fillRect(px - 7, topY + 8, 14, groundY - topY - 8);
+    x.fillStyle = 'rgba(0,0,0,.26)';                                   // 右侧沉影
+    x.fillRect(px + 4, topY + 8, 3, groundY - topY - 8);
+    x.fillStyle = shade('#7b7669', 0.06);                              // 柱头
+    x.fillRect(px - 11, topY + 2, 22, 12);
+    x.strokeStyle = PAL.ink; x.lineWidth = 1.6; x.strokeRect(px - 11, topY + 2, 22, 12);
+    x.fillStyle = shade('#7b7669', -0.10);                             // 柱脚
+    x.fillRect(px - 11, groundY - 28, 22, 28);
+    x.strokeRect(px - 11, groundY - 28, 22, 28);
+  }
+  x.fillStyle = 'rgba(0,0,0,.30)';                                     // 柱脚暗带（接触影）
+  x.fillRect(wallX, groundY - 6, wallW, 6);
+  x.restore();
+}
+
+// 窗光柱：高窗 (980,120) 的静态冷锥，沿塔面下泄（规格 §5.2#9）
+function drawWindowShaft(x, geo) {
+  const wx = geo.exitX, wy = geo.topY + 6;
+  const g = x.createLinearGradient(0, wy, 0, wy + 330);
+  g.addColorStop(0, 'rgba(190,212,255,.15)');
+  g.addColorStop(1, 'rgba(190,212,255,0)');
+  x.fillStyle = g;
+  x.beginPath();
+  x.moveTo(wx - 22, wy); x.lineTo(wx + 22, wy);
+  x.lineTo(wx + 80, wy + 330); x.lineTo(wx - 80, wy + 330);
+  x.closePath(); x.fill();
+}
+
 function makeBg(w) {
   const { geo } = w;
+  const gy = geo.groundY;
   const c = document.createElement('canvas');
   c.width = SIDE.W; c.height = SIDE.H;
   const x = c.getContext('2d');
@@ -325,6 +490,23 @@ function makeBg(w) {
   const gsh = x.createLinearGradient(0, geo.groundY, 0, SIDE.H);
   gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.40)');
   x.fillStyle = gsh; x.fillRect(0, geo.groundY, SIDE.W, SIDE.H - geo.groundY);
+  // —— 陈设（静态件，规格 §5.2）：入口拱 / 火把托架 / 石刻带 / 残碑 / 塔柱 / 货堆 / 绞盘 / 木架树 ——
+  // （火把火焰、断绳、高窗、ᚩ 呼吸等会动/呼吸的件在 draw() 动态层）
+  drawArchSide(x, 60, gy, { rune: 'ᚱ' });                      // 入口拱：ᚱ 阴刻、不发光（与 2a 出口同构 = 无缝交接暗号）
+  groundShadow(x, 60, gy, 62, 9, 0.30);
+  drawArchSpill(x, geo);                                       // 洞内暖光溢出 60→220（出生区照明）
+  wallShadow(x, 240, 258, 34); drawTorchBracket(x, 240, 266);  // 左火把托架 + 墙影（火焰在 draw()，位置 = warm 听声点）
+  wallShadow(x, 868, 448, 34); drawTorchBracket(x, 868, 456);  // 绳位火把托架 + 墙影（照亮绳根与绞盘）
+  drawRuneBand(x);                                             // 墙面石刻带 x300–664 y≈310（8 枚暗青阴刻）
+  drawRuinTablet(x, 780, 300);                                 // 嵌壁残碑 + 石托（stone 听声点实体）
+  drawPilasters(x, geo);                                       // 塔身壁柱 900–1010 y122–620（平面浮雕，不阻走）
+  drawWindowShaft(x, geo);                                     // 窗光柱：高窗 (980,120) 静态冷锥
+  drawCrates(x, w.atlases, gy);                                // 货堆：木箱×2 + 陶罐组（底 300/368）
+  drawWinch(x, 908, gy);                                       // 绞盘与绳尾（签名地标，鼓心 908,620；盖在壁柱前）
+  groundShadow(x, 1070, gy, 32, 6, 0.26);
+  blit(x, w.atlases, 'shelf', 1070, gy, { ax: 0.5, ay: 1 });   // 木架（底 1070）
+  groundShadow(x, 1180, gy, 20, 5, 0.26);
+  blit(x, w.atlases, 'tree', 1180, gy, { ax: 0.5, ay: 1 });    // 盆栽树（底 1180）
   // 黄昏级色不再烘焙进背景：改到 draw() 角色之后统一压暗
   return c;
 }
