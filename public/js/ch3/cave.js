@@ -48,3 +48,38 @@ export function cavePlan(seed, W, H, opts = {}) {
 
   return { cols, rows, verts, faces };
 }
+
+// —— 三间房的岩面种子（各不相同，岸边本轮先用）——
+export const CAVE_SEEDS = { bank: 41, crevice: 47, deep: 53 };
+
+// —— 洞穴色板：比第一关的暖灰石（#7b7669 / #6b675c）更冷更湿，但明度不更低 ——
+// 本轮不建光源系统，岩壁全靠自身明度差与受光/沉影边立起来，所以基色不能压太暗。
+export const CAVE_PAL = {
+  rockA: '#5c636e',     // 岩面基色（冷灰蓝）
+  rockB: '#4e5560',     // 岩面次级（背光面）
+  rockDark: '#2b3038',  // 岩缝 / 洞底
+  floor: '#565d68',     // 岩床
+  moss: '#3f5c48',      // 苔藓（去饱和绿，不碰青）
+  mossHi: '#4e6b52',    // 苔藓受光尖
+  damp: '#2f3a42'       // 顺壁湿痕
+};
+
+// —— 洞顶钟乳石规划：按 x 均分 count 段，段内抖动中心；y 即 topY（洞顶线）——
+// 抖动后 clamp 回 [0,W]，否则首尾会出画。
+export function stalactitePlan(seed, W, topY, count) {
+  if (count <= 0) return [];
+  const rand = rng(seed);
+  const seg = W / count;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const jitter = (rand() * 2 - 1) * seg * 0.3;
+    out.push({
+      x: clamp((i + 0.5) * seg + jitter, 0, W),
+      y: topY,
+      w: 8 + rand() * 22,
+      h: 40 + rand() * 120,
+      lean: (rand() - 0.5) * 2
+    });
+  }
+  return out;
+}
