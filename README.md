@@ -31,10 +31,9 @@
 需要 Node 18 或更新版本，不用安装任何依赖。
 
 ```bash
-npm start             # http://localhost:3001（默认开 Basic 访问口令）
-AUTH=0 npm start      # 本机关闭口令
+npm start             # http://localhost:3000
 PORT=3002 npm start   # 换端口
-npm test              # 115 个测试
+npm test              # 154 个测试
 ```
 
 浏览器打开：`/` 是第一章，`/chapter2.html` 到 `/chapter4.html` 是后三章。

@@ -18,10 +18,9 @@ node --test test/game.test.js         # run one test file
 node --test test/ch2.test.js test/ch3.test.js  # run several files
 npm start                             # start the server
 PORT=3002 npm start                   # use a different port
-AUTH=0 npm start                      # disable Basic auth for local-only use
 ```
 
-The server listens on port `3001` by default and binds to `0.0.0.0`. Authentication is enabled by default. `npm test` currently runs 155 tests. There is no `npm run build`, lint, or format command.
+The server listens on port `3000` by default and binds to `0.0.0.0`. `npm test` currently runs 154 tests. There is no `npm run build`, lint, or format command.
 
 For browser validation, run `npm start` and open `/` for chapter 1, `/chapter2.html` for chapter 2, `/chapter3.html` for chapter 3, or `/chapter4.html` for chapter 4. The game is designed for a browser because the visual and interaction layers depend on Canvas, DOM, speech synthesis, WebAudio, and pointer input; Node tests cover the importable logic but not the rendered experience.
 
@@ -44,7 +43,6 @@ Useful browser/debug hooks:
 
 - serves files from `public/`;
 - serves `content/chapterN.json` through `/api/chapterN` for single-digit chapter numbers;
-- applies Basic authentication unless the server is created with `auth: false` or launched with `AUTH=0`;
 - supports `PORT` when run directly;
 - prevents static path traversal by constraining resolved paths to `public/`.
 
