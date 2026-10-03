@@ -53,9 +53,6 @@
 
 <br><br>
 
-<img src="docs/screenshots/door-open.png" alt="拼出 OPEN 后门被打开的瞬间" width="480">
-<br><i>拼出 open 的声音，把这个词说给门听</i>
-
 </div>
 
 - **输入**：键盘（方向键/AD 走、<kbd>空格</kbd> 跳、<kbd>E</kbd> 交互）或**纯鼠标 / 触屏**（点哪走哪、点目标自动交互、右下角跳跃键）。
