@@ -45,22 +45,82 @@ export function drawBankObjects(w, x) {
 export function drawCreviceObjects(w, x) {
   const geo = w.geo.crevice;
   drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true, w.view.craftSlots);
-  x.fillStyle = '#10151c'; x.strokeStyle = '#75808b'; x.lineWidth = 8;
-  x.beginPath(); x.moveTo(500, 0); x.lineTo(560, 160); x.lineTo(520, 310); x.lineTo(610, 455); x.lineTo(560, geo.groundY); x.lineTo(820, geo.groundY); x.lineTo(760, 430); x.lineTo(820, 280); x.lineTo(750, 120); x.lineTo(790, 0); x.closePath(); x.fill(); x.stroke();
+
+  drawBigFissure(x, 660, geo.groundY);                 // 贯穿全屏的大裂缝
+
+  // 卡在缝里的原木：横七竖八。第一根必须在 logX（creviceLog 目标锚点），其余是陈设
   drawLog(x, geo.logX, geo.groundY - 16);
-  x.strokeStyle = '#c1a76b'; x.lineWidth = 4;
-  x.beginPath(); x.moveTo(810, 180); x.lineTo(900, 240); x.lineTo(980, 180); x.lineTo(1040, 250); x.stroke();
-  x.beginPath(); x.moveTo(830, 180); x.lineTo(850, 300); x.moveTo(940, 210); x.lineTo(940, 320); x.stroke();
-  x.fillStyle = '#c1a76b'; x.font = '18px system-ui'; x.fillText('◼  ◼  ◼', 820, 365);
-  drawCreviceDoor(x, geo.spawnX, geo.groundY);   // 左壁回程门（进来的门）
+  drawLog(x, geo.logX + 96, geo.groundY - 74, 0.46);
+  drawLog(x, geo.logX + 178, geo.groundY - 40, -0.58);
+  drawLog(x, geo.logX + 244, geo.groundY - 96, 0.22);
+
+  drawRockArt(x, 905, 215);                            // 岩画刻痕（原为 fillText 占位）
+
+  drawCrack(x, geo.spawnX, geo.groundY, CAVE_SEEDS.crevice + 3);   // 回程口（原石拱门）
 }
 
-// 裂隙回程门：石拱 + 暗洞（与岸边门同族，略小）
-function drawCreviceDoor(x, cx, gy) {
-  x.fillStyle = '#5f6a74'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
-  x.beginPath(); x.moveTo(cx - 42, gy); x.lineTo(cx - 28, gy - 108); x.lineTo(cx + 28, gy - 108); x.lineTo(cx + 42, gy); x.closePath(); x.fill(); x.stroke();
-  x.fillStyle = '#0d1219';
-  x.beginPath(); x.moveTo(cx - 19, gy); x.lineTo(cx - 13, gy - 90); x.lineTo(cx + 13, gy - 90); x.lineTo(cx + 19, gy); x.closePath(); x.fill();
+// 贯穿全屏的锯齿大裂缝：左右两缘各一串折点，中间近黑，唇口受光/沉影
+function drawBigFissure(x, cx, gy) {
+  const rand = rng(CAVE_SEEDS.crevice + 4);
+  const N = 17;
+  const edge = (sign) => {
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const k = i / N;                                   // 0 = 洞顶, 1 = 地面
+      // 不规则出刀：正弦会得到一个圆润的大黑团，固定交替又会变成机械锯齿
+      const half = 96 + Math.abs(rand() * 2 - 1) * 108;
+      pts.push([cx + sign * half, k * gy]);
+    }
+    return pts;
+  };
+  const L = edge(-1), R = edge(1);
+
+  x.beginPath();
+  x.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i < L.length; i++) x.lineTo(L[i][0], L[i][1]);
+  for (let i = R.length - 1; i >= 0; i--) x.lineTo(R[i][0], R[i][1]);
+  x.closePath();
+  x.fillStyle = '#0a0d12';
+  x.fill();
+
+  x.save();                                              // 纵深：纯黑会读成一块板，压一层竖向渐变
+  x.clip();
+  const dg = x.createLinearGradient(0, 0, 0, gy);
+  dg.addColorStop(0, 'rgba(0,0,0,.55)');
+  dg.addColorStop(1, 'rgba(26,34,44,.30)');
+  x.fillStyle = dg;
+  x.fillRect(cx - 260, 0, 520, gy);
+  x.restore();
+
+  x.lineWidth = 6; x.lineCap = 'round';                  // 唇口：左缘受光、右缘沉影
+  x.strokeStyle = shade(CAVE_PAL.rockB, 0.26);
+  x.beginPath();
+  x.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i < L.length; i++) x.lineTo(L[i][0], L[i][1]);
+  x.stroke();
+  x.strokeStyle = shade(CAVE_PAL.rockDark, -0.1);
+  x.beginPath();
+  x.moveTo(R[0][0], R[0][1]);
+  for (let i = 1; i < R.length; i++) x.lineTo(R[i][0], R[i][1]);
+  x.stroke();
+}
+
+// 岩画刻痕：原先是 fillText('◼  ◼  ◼') 的文字占位，改为画出来的凿刻
+function drawRockArt(x, cx, cy) {
+  x.strokeStyle = '#c1a76b'; x.lineWidth = 4; x.lineCap = 'round';
+  x.beginPath();
+  x.moveTo(cx - 95, cy + 25); x.lineTo(cx - 5, cy - 35); x.lineTo(cx + 75, cy + 25);
+  x.stroke();
+  x.beginPath();
+  x.moveTo(cx - 40, cy - 5); x.lineTo(cx + 5, cy + 115); x.lineTo(cx + 45, cy - 5);
+  x.stroke();
+  x.beginPath();
+  x.moveTo(cx - 55, cy + 80); x.lineTo(cx + 60, cy + 80);
+  x.stroke();
+  x.fillStyle = '#c1a76b';
+  for (let i = 0; i < 3; i++) {                          // 凿点
+    x.beginPath(); x.arc(cx - 60 + i * 60, cy + 155, 5, 0, 7); x.fill();
+  }
 }
 
 // —— 深水段合成位：石壁上凿出四个圆孔凹槽（不再把合成台摆在河上）——
@@ -97,13 +157,39 @@ function drawWallSockets(x, bx, gy, hot, slots) {
 export function drawDeepObjects(w, x) {
   const geo = w.geo.deep;
   if (w.game.stalled) drawWallSockets(x, geo.benchX, geo.groundY, w.game.hand?.kind === 'stone', w.view.craftSlots);
-  x.fillStyle = 'rgba(120,205,230,.10)'; x.fillRect(0, geo.groundY - 80, SIDE.W, 80);
-  x.strokeStyle = '#c1a76b'; x.lineWidth = 5;
-  x.beginPath(); x.moveTo(geo.muralX - 120, 190); x.lineTo(geo.muralX, 100); x.lineTo(geo.muralX + 110, 190); x.stroke();
-  x.beginPath(); x.moveTo(geo.muralX - 65, 150); x.lineTo(geo.muralX - 20, 270); x.lineTo(geo.muralX + 30, 150); x.stroke();
-  x.beginPath(); x.moveTo(geo.muralX - 80, 230); x.lineTo(geo.muralX + 85, 230); x.stroke();
+  drawPoleMural(x, geo.muralX, 210);                   // 撑篙岩画（原为金线 + 中文标签占位）
   if (w.game.raftAssembled) drawRaft(x, w.raft.x, w.raft.y, w.view.t);
-  x.fillStyle = 'rgba(255,221,140,.5)'; x.font = '18px system-ui'; x.fillText('石壁上的撑篙图', geo.muralX - 88, 310);
+}
+
+// 撑篙岩画：原先是三条金线配一句「石壁上的撑篙图」中文标签——用文字解释画面。
+// 改为把画面本身画出来：一条水线、一只木筏、一个撑篙的人。
+function drawPoleMural(x, cx, cy) {
+  x.strokeStyle = '#c1a76b'; x.lineWidth = 5; x.lineCap = 'round'; x.lineJoin = 'round';
+
+  x.beginPath();                                        // 水线
+  x.moveTo(cx - 120, cy + 78);
+  x.quadraticCurveTo(cx - 40, cy + 68, cx + 20, cy + 78);
+  x.quadraticCurveTo(cx + 70, cy + 86, cx + 118, cy + 76);
+  x.stroke();
+
+  x.beginPath();                                        // 木筏
+  x.moveTo(cx - 58, cy + 70); x.lineTo(cx + 42, cy + 70);
+  x.moveTo(cx - 58, cy + 82); x.lineTo(cx + 42, cy + 82);
+  x.stroke();
+
+  x.beginPath();                                        // 撑篙的人：头 + 身 + 腿
+  x.arc(cx - 12, cy + 6, 11, 0, 7); x.stroke();
+  x.beginPath(); x.moveTo(cx - 12, cy + 17); x.lineTo(cx - 8, cy + 56); x.stroke();
+  x.beginPath(); x.moveTo(cx - 8, cy + 56); x.lineTo(cx - 22, cy + 70); x.stroke();
+  x.beginPath(); x.moveTo(cx - 8, cy + 56); x.lineTo(cx + 4, cy + 70); x.stroke();
+
+  x.beginPath();                                        // 篙：从手里斜插进水里
+  x.moveTo(cx + 22, cy - 6); x.lineTo(cx - 46, cy + 92);
+  x.stroke();
+  x.beginPath(); x.moveTo(cx - 14, cy + 24); x.lineTo(cx + 6, cy + 12); x.stroke();
+
+  x.fillStyle = 'rgba(193,167,107,.55)';                // 凿刻毛面
+  for (let i = 0; i < 5; i++) x.fillRect(cx - 118 + i * 58, cy + 118, 10, 4);
 }
 
 export function drawLog(x, cx, cy, rot = -0.08) {
@@ -492,11 +578,14 @@ export function drawBoulder(x, cx, gy, seed, w = 90) {
 
 // ================= 场景生命周期与岸边预烘焙 =================
 
-// 流动水面（只服务岸边）。水是本关唯一「亮」的元素，承担了原光照层的一部分职责——
+// 流动水面（岸边 + 深水房）。水是本关唯一「亮」的元素，承担了原光照层的一部分职责——
 // 但它是材质处理（高光/倒影），不是光源。
+// 岸边：水从 waterX 到右缘，有岸线；深水：整条暗河，水铺满全宽、没有岸。
 export function drawWater(x, w, t) {
-  if (w.currentRoom !== 'bank') return;
-  const { groundY, waterX } = w.geo.bank;
+  const room = w.currentRoom;
+  if (room !== 'bank' && room !== 'deep') return;
+  const groundY = w.geo[room].groundY;
+  const waterX = room === 'bank' ? w.geo.bank.waterX : 0;
   const wW = SIDE.W - waterX;
   const wH = SIDE.H - groundY;
 
@@ -526,12 +615,14 @@ export function drawWater(x, w, t) {
     x.stroke();
   }
 
-  for (let i = 0; i < 8; i++) {                             // 表：岸线泡沫
-    const py = groundY + 6 + i * (wH / 9);
-    x.fillStyle = `rgba(200,230,240,${0.10 + Math.abs(Math.sin(t * 1.4 + i)) * 0.10})`;
-    x.beginPath();
-    x.ellipse(waterX + 3 + Math.sin(t * 0.8 + i) * 4, py, 5, 2, 0, 0, 7);
-    x.fill();
+  if (room === 'bank') {                                    // 表：岸线泡沫（暗河没有岸）
+    for (let i = 0; i < 8; i++) {
+      const py = groundY + 6 + i * (wH / 9);
+      x.fillStyle = `rgba(200,230,240,${0.10 + Math.abs(Math.sin(t * 1.4 + i)) * 0.10})`;
+      x.beginPath();
+      x.ellipse(waterX + 3 + Math.sin(t * 0.8 + i) * 4, py, 5, 2, 0, 0, 7);
+      x.fill();
+    }
   }
 
   const rand = rng(CAVE_SEEDS.bank + 5);                    // 表：高光碎点（种子固定，随时间闪烁）
@@ -573,11 +664,58 @@ function prerenderBank(geo) {
   return c;
 }
 
+// 裂隙房静态层：干燥的岩壁（湿度整体压低，只有缝口附近略潮）+ 石笋 + 岩床
+function prerenderCrevice(geo) {
+  const groundY = geo.crevice.groundY;
+  const c = document.createElement('canvas');
+  c.width = SIDE.W; c.height = SIDE.H;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+
+  drawCaveWall(x, cavePlan(CAVE_SEEDS.crevice, SIDE.W, groundY, { wetRange: [0.05, 0.3] }), {
+    base: CAVE_PAL.rockA, moss: CAVE_PAL.moss, mossHi: CAVE_PAL.mossHi
+  });
+  drawStalactites(x, stalactitePlan(CAVE_SEEDS.crevice + 1, SIDE.W, 0, 7), 0, CAVE_PAL.rockDark);
+
+  x.save();
+  x.translate(0, groundY);
+  drawCaveFloor(x, cavePlan(CAVE_SEEDS.crevice + 2, SIDE.W, SIDE.H - groundY, { cols: 6, rows: 2, wetRange: [0.05, 0.05] }),
+    { base: CAVE_PAL.floor });
+  x.restore();
+
+  return c;
+}
+
+// 深水房静态层：湿岩壁（整条暗河，湿度最高）+ 石笋 + 岩床
+function prerenderDeep(geo) {
+  const groundY = geo.deep.groundY;
+  const c = document.createElement('canvas');
+  c.width = SIDE.W; c.height = SIDE.H;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+
+  drawCaveWall(x, cavePlan(CAVE_SEEDS.deep, SIDE.W, groundY, { wetRange: [0.26, 0.46] }), {
+    base: CAVE_PAL.rockA, moss: CAVE_PAL.moss, mossHi: CAVE_PAL.mossHi
+  });
+  drawStalactites(x, stalactitePlan(CAVE_SEEDS.deep + 1, SIDE.W, 0, 11), 0, CAVE_PAL.rockDark);
+
+  x.save();
+  x.translate(0, groundY);
+  drawCaveFloor(x, cavePlan(CAVE_SEEDS.deep + 2, SIDE.W, SIDE.H - groundY, { cols: 6, rows: 2, wetRange: [0.05, 0.05] }),
+    { base: CAVE_PAL.floor });
+  x.restore();
+
+  return c;
+}
+
 // boot 时调用（需要 document）。Node 测试环境下直接返回，不产生烘焙层。
+// atlases 本轮未使用（岩壁是纯矢量），保留以对齐第一关 initScene 的形态。
 export function initScene(sc, atlases, geo) {
   if (typeof document === 'undefined') return;
   try {
     sc.baked.bank = prerenderBank(geo);
+    sc.baked.crevice = prerenderCrevice(geo);
+    sc.baked.deep = prerenderDeep(geo);
   } catch (e) {
     // 烘焙失败退回逐帧绘制：房间仍然可见，但记一笔供调试
     if (typeof window !== 'undefined' && window.__errors) window.__errors.push('ch3 bake: ' + e.message);

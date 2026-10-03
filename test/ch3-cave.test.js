@@ -294,11 +294,21 @@ test('drawWater：只画在水面 x 范围内（不越到左岸）', () => {
   for (const [px] of x.__pts) assert.ok(px >= 760 - 1, `波点越到岸上 x=${px}`);
 });
 
-test('drawWater：非岸边房间不绘制任何东西', () => {
+test('drawWater：没有水的房间（裂隙）不绘制任何东西', () => {
   const x = recordingCtx();
-  const w = bankWorld(); w.currentRoom = 'deep';
+  const w = bankWorld(); w.currentRoom = 'crevice';
   drawWater(x, w, 1);
   assert.equal(x.__calls.fill, 0);
+});
+
+test('drawWater：深水房铺满全宽（暗河没有岸，波点从 x=0 起）', () => {
+  const x = recordingCtx();
+  const w = { currentRoom: 'deep', geo: { deep: { groundY: 590 } }, view: { t: 0 } };
+  drawWater(x, w, 1);
+  assert.ok(x.__calls.stroke > 0, '深水房应有水（波是描边；岸线泡沫才用 fill，暗河没有岸）');
+  const xs = x.__pts.map(p => p[0]);
+  assert.ok(Math.min(...xs) <= 1, `波点应从左缘起，实为 ${Math.min(...xs)}`);
+  assert.ok(Math.max(...xs) >= 1279, `波点应铺到右缘，实为 ${Math.max(...xs)}`);
 });
 
 // ---- 木筏 / 原木 / 系泊桩 ----
