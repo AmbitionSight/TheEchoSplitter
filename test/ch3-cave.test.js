@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from '../public/js/ch3/cave.js';
 import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites,
-         createScene, initScene, drawScene, drawCrack } from '../public/js/ch3/render.js';
+         createScene, initScene, drawScene, drawCrack, drawBoulder } from '../public/js/ch3/render.js';
 
 // 宽松 canvas 桩（同 test/scene.bg.test.js）：任何方法可调、任何属性可写，只断言「不抛」
 function mockCtx() {
@@ -231,4 +231,30 @@ test('drawCrack：自定义尺寸生效（h/halfBottom 可覆盖）', () => {
   const xs = x.__pts.map(p => p[0]), ys = x.__pts.map(p => p[1]);
   assert.ok(Math.abs(Math.min(...ys) - 210) < 2, `顶部 y=${Math.min(...ys)}`);
   assert.ok(Math.abs(Math.min(...xs) - 380) < 8, `左缘 x=${Math.min(...xs)}`);
+});
+
+// ---- 洞穴巨石 ----
+
+test('drawBoulder：不抛错，至少一次填充，且落影独立于石体（恰好一枚椭圆）', () => {
+  const x = recordingCtx();
+  drawBoulder(x, 515, 590, 41);
+  assert.ok(x.__calls.fill >= 1);
+  assert.equal(x.__calls.ellipse, 1, '恰好一枚落地影');
+});
+
+test('drawBoulder：同种子确定，异种子不同', () => {
+  const a = recordingCtx(), b = recordingCtx(), c = recordingCtx();
+  drawBoulder(a, 515, 590, 41);
+  drawBoulder(b, 515, 590, 41);
+  drawBoulder(c, 515, 590, 42);
+  assert.deepEqual(a.__pts, b.__pts);
+  assert.notDeepEqual(a.__pts, c.__pts);
+});
+
+test('drawBoulder：水平范围不越出 [cx-45, cx+45]', () => {
+  const x = recordingCtx();
+  drawBoulder(x, 515, 590, 41, 90);
+  const xs = x.__pts.map(p => p[0]);
+  assert.ok(Math.min(...xs) >= 515 - 45 - 1, `左 ${Math.min(...xs)}`);
+  assert.ok(Math.max(...xs) <= 515 + 45 + 1, `右 ${Math.max(...xs)}`);
 });

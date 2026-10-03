@@ -36,9 +36,7 @@ export function drawRoom(w, x) {
 export function drawBankObjects(w, x) {
   const geo = w.geo.bank;
   drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true, w.view.craftSlots);
-  x.fillStyle = '#67727d'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
-  x.beginPath(); x.roundRect ? x.roundRect(565, geo.groundY - 100, 150, 90, 12) : x.rect(565, geo.groundY - 100, 150, 90); x.fill(); x.stroke();
-  x.fillStyle = '#b28a58'; x.fillRect(590, geo.groundY - 70, 100, 12);
+  drawBoulder(x, 515, geo.groundY, CAVE_SEEDS.bank + 4);       // 洞穴巨石（原石墩，向左挪开给裂隙口让位）
   drawCrack(x, geo.doorX, geo.groundY, CAVE_SEEDS.bank + 3);   // 裂隙口（原石拱门）
   if (!w.game.raftAssembled) {              // 并排的原木：组筏后三根并入木筏，只画筏
     const ROTS = [-0.08, 0.06, -0.04];
@@ -353,6 +351,62 @@ export function drawCrack(x, cx, gy, seed, opts = {}) {
     x.lineTo(bx + s, by);
     x.closePath(); x.fill();
   }
+}
+
+// 洞穴巨石：一块从岩壁上崩落的大石，底部贴地、顶部起伏、棱面明暗。
+// 无碰撞、无交互、纯陈设——只为把岸边从「空荡」里拉回来，并给裂隙口让位。
+// 轮廓自建：cavePlan 的边界顶点只做切向抖动、恒在边界上（墙地无缝要靠这个），
+// 画不出独立巨石的起伏剪影，所以这里不用它做外形。
+export function drawBoulder(x, cx, gy, seed, w = 90) {
+  const h = w;
+  const rand = rng(seed);
+  const ox = cx - w / 2, oy = gy - h;
+
+  contactShadow(x, cx, gy + 4, w * 0.55);
+
+  const pts = [[ox + 5, gy], [ox, gy - h * 0.46]];
+  const N = 6;
+  for (let i = 0; i <= N; i++) {                          // 顶缘起伏（底缘贴地是平的）
+    const k = i / N;
+    pts.push([
+      ox + w * (0.06 + 0.88 * k),
+      oy + h * (0.10 + (i % 2 ? 0.20 : 0.04) * (0.55 + rand() * 0.9))
+    ]);
+  }
+  pts.push([ox + w, gy - h * 0.46], [ox + w - 5, gy]);
+
+  const outline = () => {
+    x.beginPath();
+    x.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) x.lineTo(pts[i][0], pts[i][1]);
+    x.closePath();
+  };
+
+  // 比岩壁亮一档：与背景同色系会糊成一片，读不出是块独立的石头
+  outline();
+  x.fillStyle = shade(CAVE_PAL.rockA, 0.18);
+  x.fill();
+  x.lineWidth = 5; x.lineJoin = 'round';                  // 墨线描边——本作矢量道具的统一语言
+  x.strokeStyle = PAL.ink;
+  x.stroke();
+
+  x.save();
+  outline(); x.clip();
+  x.fillStyle = shade(CAVE_PAL.rockA, -0.08);             // 右棱面（背光）
+  x.beginPath();
+  x.moveTo(ox + w * 0.52, oy);
+  x.lineTo(ox + w, oy + h * 0.55);
+  x.lineTo(ox + w, gy);
+  x.lineTo(ox + w * 0.30, gy);
+  x.closePath(); x.fill();
+  x.fillStyle = shade(CAVE_PAL.rockA, 0.32);              // 左棱面（受光）
+  x.beginPath();
+  x.moveTo(ox + w * 0.30, oy);
+  x.lineTo(ox + w * 0.52, oy + h * 0.42);
+  x.lineTo(ox + w * 0.22, gy);
+  x.lineTo(ox, gy);
+  x.closePath(); x.fill();
+  x.restore();
 }
 
 // ================= 场景生命周期与岸边预烘焙 =================
