@@ -75,7 +75,7 @@ test('全流程：E 搬运（p 由记忆补位）→ 合成 jump → 对自己�
   out = gameEvent(g, 'USE', { word: 'jump', target: 'player' });        // 重复：轻反应
   assert.ok(out.some(i => i.t === 'effect' && i.full === false));
   out = gameEvent(g, 'CROSS');
-  assert.ok(out.some(i => i.t === 'hint' && i.key === 'exit'));
+  assert.ok(out.some(i => i.t === 'crossed'));                          // 演出指令；hint 'exit' 由 runExtras.crossed 延后 0.9s
   out = gameEvent(g, 'EXIT');
   assert.ok(out.some(i => i.t === 'summary'));
   assert.equal(g.exited, true);
@@ -236,4 +236,135 @@ test('余烬：双火把各按 0.7–1.4s 节奏上飘，进星星池并带 embe
   const embers = w.view.stars.filter(s => s.kind === 'ember');
   assert.equal(embers.length, 2);
   assert.ok(w.view.emberT.every(t => t >= 0.7 && t < 1.4));      // 下一颗间隔回到 0.7–1.4s
+});
+
+// ================= Task 10：2a 演出与音频（规格 §3.2 / §7） =================
+
+test('LISTEN 音效读 spot.sfx；无 sfx 的听声点回落 glowTick', () => {
+  const g = createGame(content, ch1Profile);
+  assert.ok(gameEvent(g, 'LISTEN', 'warm').some(i => i.t === 'sfx' && i.name === 'crackle'));
+  assert.ok(gameEvent(g, 'LISTEN', 'fall').some(i => i.t === 'sfx' && i.name === 'wind'));
+  assert.ok(gameEvent(g, 'LISTEN', 'shine').some(i => i.t === 'sfx' && i.name === 'bloom'));
+  const gc = createGame({ ...content, listening: [{ id: 'x', x: 0, y: 0, r: 10, echo: [], say: '' }] }, ch1Profile);
+  assert.ok(gameEvent(gc, 'LISTEN', 'x').some(i => i.t === 'sfx' && i.name === 'glowTick'));
+});
+
+test('CRAFT 首次成功追加 revealCard；未集齐与重复合成不再弹', () => {
+  const g = createGame(content, ch1Profile);
+  assert.ok(!gameEvent(g, 'CRAFT', 'jump').some(i => i.t === 'revealCard'));   // 石未齐 → 无卡
+  seedMemory(g.inv, addStone, ch1Profile.everPicked);
+  for (const ipa of ['dʒ', 'ʌ', 'm']) { gameEvent(g, 'PICKUP', ipa); gameEvent(g, 'BANK'); }
+  const out = gameEvent(g, 'CRAFT', 'jump');
+  assert.ok(out.some(i => i.t === 'revealCard' && i.word === 'jump'));
+  assert.ok(!gameEvent(g, 'CRAFT', 'jump').some(i => i.t === 'revealCard'));   // 词具不消耗但只揭示一次
+});
+
+test('CROSS：首次给 crossed 演出指令与 beat，重复不再触发', () => {
+  const g = createGame(content, ch1Profile);
+  const out = gameEvent(g, 'CROSS');
+  assert.ok(out.some(i => i.t === 'crossed'));
+  assert.ok(out.some(i => i.t === 'beat' && i.beat === 'crossed'));
+  assert.deepEqual(gameEvent(g, 'CROSS'), []);
+});
+
+test('调试拍 crossed：teleport 到对岸并触发 crossed 演出', () => {
+  const g = createGame(content, ch1Profile);
+  const out = jumpDebug(g, 'crossed');
+  const tp = out.find(i => i.t === 'teleport');
+  assert.ok(tp && tp.x > content.geometry.chasmR, '先传送到对岸');
+  assert.ok(out.some(i => i.t === 'crossed'));
+});
+
+test('runExtras.revealCard：+0.9s 卡开 chime + ui.reveal(word)', async () => {
+  const sounds = [], cards = [];
+  const w = { sfx: { chime: () => sounds.push('chime') }, ui: { reveal: word => { cards.push(word); return Promise.resolve(); } } };
+  kit.runExtras.revealCard(w, { t: 'revealCard', word: 'jump' });
+  await new Promise(r => setTimeout(r, 50));
+  assert.deepEqual(sounds, []);
+  assert.deepEqual(cards, []);                                // 卡不提前弹
+  await new Promise(r => setTimeout(r, 900));
+  assert.deepEqual(sounds, ['chime']);                        // 揭示卡开 chime（规格 §7.1）
+  assert.deepEqual(cards, ['jump']);
+});
+
+test('runExtras.crossed：22 金星 + 暖晕/雾脉冲/火把涌亮 + 声序 + hint 延后 0.9s', async () => {
+  const sounds = [], spoke = [], hints = [];
+  const w = {
+    geo: { groundY: 600 },
+    view: { stars: [], puffs: [], torchSurge: 0 },            // 同 makeWorld 初值
+    player: { x: 960, y: 600, squash: 0 },
+    sfx: { chime: () => sounds.push('chime'), wind: () => sounds.push('wind') },
+    speak: (text, who) => spoke.push([who, text]),
+    ui: { setHint: key => hints.push(key) }
+  };
+  kit.runExtras.crossed(w, { t: 'crossed' });
+  assert.equal(w.view.stars.length, 22);                      // 22 金星
+  assert.equal(w.view.glowT, 1.2);                            // 预渲染暖晕涌起计时（1.2s 光涌）
+  assert.equal(w.view.torchSurge, 0);                         // 火把池涌亮按 §3.4 排在 t+0.5s
+  assert.ok(w.player.squash > 0);                             // 落地 squash
+  assert.equal(w.view.puffs.length, 2);                       // 尘环
+  assert.deepEqual(sounds, ['chime']);                        // t0 落地 chime
+  assert.deepEqual(hints, []);
+  await new Promise(r => setTimeout(r, 260));
+  assert.deepEqual(spoke, [['child', 'Jump!']]);              // t+0.2s 童声喊 "Jump!"
+  await new Promise(r => setTimeout(r, 220));
+  assert.deepEqual(sounds, ['chime', 'wind']);                // t+0.4s 风一阵
+  assert.ok(w.view.mistPulse > 0);                            // 谷雾被吹散
+  await new Promise(r => setTimeout(r, 120));
+  assert.equal(w.view.torchSurge, 0.8);                       // t+0.5s 对岸火把池 0.8s 涌亮
+  await new Promise(r => setTimeout(r, 400));
+  assert.deepEqual(hints, ['exit']);                          // hint 延后 0.9s
+});
+
+test('runExtras.teleport：调试传送清干净运动态', () => {
+  const w = { player: { x: 0, y: 0, vy: 99, airborne: true, moving: true }, walkTo: { x: 5 } };
+  kit.runExtras.teleport(w, { t: 'teleport', x: 1015, y: 600 });
+  assert.deepEqual([w.player.x, w.player.y], [1015, 600]);
+  assert.deepEqual([w.player.vy, w.player.airborne, w.player.moving, w.walkTo], [0, false, false, null]);
+});
+
+test('runExtras.fell：wind + thud（不再 mutter）+ 尘', () => {
+  const sounds = [];
+  const w = {
+    geo: { groundY: 600, chasmL: 700 },
+    view: { puffs: [] },
+    player: { x: 800, y: 900, vy: 500, airborne: true },
+    sfx: { wind: () => sounds.push('wind'), thud: () => sounds.push('thud'), mutter: () => sounds.push('mutter') }
+  };
+  kit.runExtras.fell(w);
+  assert.deepEqual(sounds, ['wind', 'thud']);
+  assert.ok(w.view.puffs.length > 0);
+  assert.equal(w.player.x, w.geo.chasmL - 90);
+  assert.equal(w.player.airborne, false);
+});
+
+test('起跳 hop / 落地 thud / 掉石 hatPuff：音频接线（规格 §7.1）', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content;
+  const sounds = [];
+  w.sfx = { hop: () => sounds.push('hop'), thud: () => sounds.push('thud'), hatPuff: () => sounds.push('hatPuff'),
+            glowTick: () => sounds.push('glowTick'), click: () => sounds.push('click'), chime: () => sounds.push('chime') };
+  w.ui = { setHint() {} };
+  w.run = () => {};
+  w.cfg.onLand(300);                                          // 普通落地 → thud
+  assert.deepEqual(sounds, ['thud']);
+  g.jumpUnlocked = true;
+  kit.onSpace(w);                                             // 空格起跳 → hop
+  assert.deepEqual(sounds, ['thud', 'hop']);
+  assert.ok(w.player.airborne);
+  kit.runExtras.effect(w, { t: 'effect', name: 'jumpUnlock', full: true });   // use-jump 首次示范跳 → hop
+  assert.deepEqual(sounds, ['thud', 'hop', 'hop']);
+  assert.equal(w.player.vy, -740);
+  kit.runExtras.drop(w, { t: 'drop', word: 'jump' });         // chasm-try 掉石 → hatPuff
+  assert.ok(sounds.includes('hatPuff'));
+  assert.ok(w.stones.length > 0);
+});
+
+test('chapter2.html 的 #reveal 块与 index.html 同构（揭示卡可弹）', async () => {
+  const read = f => readFile(new URL('../public/' + f, import.meta.url), 'utf8');
+  const [idx, ch2] = await Promise.all([read('index.html'), read('chapter2.html')]);
+  const block = s => s.split('<div id="reveal"')[1]?.split('<div id="summary"')[0].replace(/\s+/g, ' ').trim();
+  assert.ok(block(idx), 'index.html 有 #reveal 块');
+  assert.equal(block(ch2), block(idx));
 });

@@ -43,8 +43,11 @@ export function gameEvent(g, ev, arg = null) {
       return bankHeld(g);
     case 'HOLD_ITEM':
       return holdItem(g, arg);
-    case 'CRAFT':
-      return craftWord(g, arg, [{ t: 'hint', key: 'give' }]);
+    case 'CRAFT': {
+      const out = craftWord(g, arg, [{ t: 'hint', key: 'give' }]);
+      if (out.length) out.push({ t: 'revealCard', word: arg });   // 首次合成成功 → +0.9s 揭示卡（规格 §7.3；craftWord 已保证只成功一次）
+      return out;
+    }
     case 'USE': {
       const { word, target } = arg;
       const def = c.words[word]?.use;
@@ -56,7 +59,7 @@ export function gameEvent(g, ev, arg = null) {
     case 'CROSS':
       if (g.crossed) return [];
       g.crossed = true;
-      return [{ t: 'hint', key: 'exit' }, { t: 'beat', beat: 'crossed' }];
+      return [{ t: 'crossed' }, { t: 'beat', beat: 'crossed' }];   // 演出在 runExtras.crossed；hint 'exit' 由它延后 0.9s（规格 §3.2 拍 11）
     case 'FELL':
       return [{ t: 'fell' }, { t: 'hint', key: 'fell' }];
     case 'EXIT': {
@@ -69,7 +72,7 @@ export function gameEvent(g, ev, arg = null) {
       const spot = (c.listening || []).find(s => s.id === arg);
       if (!spot) return [];
       const v = (g.jumpUnlocked && spot.after) ? spot.after : spot;   // 解锁跳跃（能过坑）后回声变化
-      return [{ t: 'sfx', name: 'glowTick' }, { t: 'echo', ipas: v.echo, say: v.say }];
+      return [{ t: 'sfx', name: spot.sfx ?? 'glowTick' }, { t: 'echo', ipas: v.echo, say: v.say }];   // 逐点音色（规格 §7.1）
     }
     case 'TICK': {
       g.teaseClock += arg;
@@ -97,6 +100,10 @@ export function jumpDebug(g, beat) {
       return out.concat(gameEvent(g, 'CRAFT', 'jump'));
     }
     case 'unlocked': return jumpDebug(g, 'crafted').concat(gameEvent(g, 'USE', { word: 'jump', target: 'player' }));
+    case 'crossed': {                                            // 位置依赖拍：先传送到对岸再演出（runExtras.teleport，规格 §3.5）
+      const geo = g.content.geometry;
+      return [{ t: 'teleport', x: geo.chasmR + 20, y: geo.groundY }, ...gameEvent(g, 'CROSS')];
+    }
     default: return [];
   }
 }
@@ -150,12 +157,16 @@ export const kit = {
         t: 0, stars: [], puffs: [], bubbleT: 0, mist: [],
         dust: makeDust(26, 99),                                // 浮尘 26 粒（rng(99) 确定布局，规格 §6.4）
         emberT: [0.4, 1.1],                                    // 双火把余烬计时（每颗间隔 0.7–1.4s）
-        gold: makeGoldMotes(geo)                               // 出口 12 金尘（拱洞内循环上浮）
+        gold: makeGoldMotes(geo),                              // 出口 12 金尘（拱洞内循环上浮）
+        glowT: 0, mistPulse: 0, torchSurge: 0                  // crossed 演出计时（暖晕 1.2s / 雾脉冲 / 火把池 0.8s 涌亮）
       },
       cfg: {
         gap: { L: geo.chasmL, R: geo.chasmR },
         canJump: game.jumpUnlocked,
-        onLand: x => { if (x > geo.chasmR) w.run(gameEvent(game, 'CROSS')); },
+        onLand: x => {                                         // 落地 thud（规格 §7.1）
+          w.sfx.thud();
+          if (x > geo.chasmR) w.run(gameEvent(game, 'CROSS'));
+        },
         onFell: () => w.run(gameEvent(game, 'FELL'))
       }
     };
@@ -168,8 +179,9 @@ export const kit = {
   onBegin(w) { seedBegin(w); },                   // 开局记忆石：只带本章需要的旧音素（p）
 
   onSpace(w) {
-    if (w.game.jumpUnlocked) { sideJump(w); w.sfx.click(); }
-    else if (!w.player.airborne && Math.abs(w.player.x - w.geo.chasmL) < 150) {
+    if (w.game.jumpUnlocked) {
+      if (!w.player.airborne && !w.player.climbing) { sideJump(w); w.sfx.hop(); }   // 起跳 hop（规格 §7.1）
+    } else if (!w.player.airborne && Math.abs(w.player.x - w.geo.chasmL) < 150) {
       w.run(gameEvent(w.game, 'CHASM'));
     }
   },
@@ -178,6 +190,9 @@ export const kit = {
     const { view: v, geo } = w;
     v.t += dt;
     v.bubbleT = Math.max(0, v.bubbleT - dt);
+    v.glowT = Math.max(0, v.glowT - dt);                       // crossed 暖晕：1.2s 光涌后熄
+    v.mistPulse = Math.max(0, v.mistPulse - dt * 0.8);         // 谷雾脉冲（被风吹散后回稳）
+    v.torchSurge = Math.max(0, v.torchSurge - dt / 0.8);       // 对岸火把池 0.8s 涌亮
     w.player.squash = Math.max(0, w.player.squash - dt * 2);
     w.cfg.canJump = w.game.jumpUnlocked;
     updateActors(w.actors, dt);
@@ -232,19 +247,47 @@ export const kit = {
   syncHeld,
 
   runExtras: {
-    drop: dropExtra(w => w.geo.chasmL),
+    drop(w, ins) {                                     // chasm-try 掉石：hatPuff（规格 §7.1）
+      w.sfx.hatPuff();
+      dropExtra(w => w.geo.chasmL)(w, ins);
+    },
     dropBack: dropBackExtra(),
     shrug(w) { w.player.squash = 0.9; },
     bubble(w) { w.view.bubbleT = 2.6; },
-    fell(w) {
-      w.sfx.mutter();
+    fell(w) {                                          // 坠谷：wind（下坠）+ thud（落地）——不再 mutter（规格 §7.1）
+      w.sfx.wind(); w.sfx.thud();
       w.view.puffs.push({ x: w.player.x, y: w.geo.groundY, r: 8, a: 1 });
       w.player.x = w.geo.chasmL - 90; w.player.y = w.geo.groundY - 160;
       w.player.vy = 0; w.player.airborne = false;
     },
+    revealCard(w, ins) {                               // 合成成功后 +0.9s：卡开 chime + 揭示卡（规格 §7.1/§7.3）
+      setTimeout(() => { w.sfx.chime(); w.ui.reveal(ins.word); }, 900);
+    },
+    crossed(w) {                                       // 过坑（核心成就，一次）：规格 §3.2 拍 11 / §3.4
+      const { view: v, player: p } = w;
+      p.squash = 0.9;                                  // t0 落地 squash + 尘环
+      v.puffs.push({ x: p.x - 14, y: w.geo.groundY, r: 8, a: 1 });
+      v.puffs.push({ x: p.x + 14, y: w.geo.groundY, r: 8, a: 1 });
+      v.glowT = 1.2;                                   // 预渲染暖晕 (chasmR+50, groundY−80) r280：1.2s 光涌
+      for (let i = 0; i < 22; i++) {                   // 22 金星
+        v.stars.push({ x: p.x + (Math.random() - 0.5) * 180, y: p.y - 30 - Math.random() * 130, a: 1, r: 2 + Math.random() * 3 });
+      }
+      w.sfx.chime();                                   // t0 落地 chime
+      setTimeout(() => w.speak('Jump!', 'child'), 200);            // t+0.2s 童声喊 "Jump!"
+      setTimeout(() => { w.sfx.wind(); v.mistPulse = 1; }, 400);   // t+0.4s 风一阵 + 谷雾被吹散
+      setTimeout(() => { v.torchSurge = 0.8; }, 500);              // t+0.5s 对岸火把池 0.8s 涌亮（tick 衰减，draw 读）
+      setTimeout(() => w.ui.setHint('exit'), 900);                 // hint 'exit' 延后 0.9s
+    },
+    teleport(w, ins) {                                 // 通用调试传送原语（规格 §3.5）：位置依赖拍截图用
+      w.player.x = ins.x;
+      if (ins.y != null) w.player.y = ins.y;
+      w.player.vy = 0; w.player.airborne = false; w.player.moving = false;
+      w.walkTo = null;
+    },
     effect(w, ins) {
       if (ins.name !== 'jumpUnlock') return;
       if (ins.full) {
+        w.sfx.hop();                                                       // 起跳 hop（规格 §7.1）
         w.player.vy = -740; w.player.airborne = true;                     // 示范跳
         for (let i = 0; i < 10; i++) {
           w.view.stars.push({ x: w.player.x + (Math.random() - 0.5) * 60, y: w.player.y - 60 - Math.random() * 60, a: 1, r: 3 + Math.random() * 3 });
@@ -267,16 +310,17 @@ export const kit = {
     // 断口两侧：苔藓巨石断崖
     drawCliffCluster(x, geo.chasmL, +1, geo.groundY, 71);
     drawCliffCluster(x, geo.chasmR, -1, geo.groundY, 72);
-    x.fillStyle = 'rgba(90,100,120,.14)';
+    x.fillStyle = `rgba(90,100,120,${0.14 + v.mistPulse * 0.2})`;             // 谷雾：crossed 后脉冲变亮变宽（被风吹散）
     for (const m of v.mist) {
       const span = geo.chasmR - geo.chasmL;
       x.beginPath();
-      x.ellipse(geo.chasmL + ((m.o * span + Math.sin(m.ph) * 20 + span) % span), geo.groundY + 26 + Math.sin(m.ph * 1.3) * 8, 34, 10, 0, 0, 7);
+      x.ellipse(geo.chasmL + ((m.o * span + Math.sin(m.ph) * 20 + span) % span), geo.groundY + 26 + Math.sin(m.ph * 1.3) * 8, 34 + v.mistPulse * 14, 10, 0, 0, 7);
       x.fill();
     }
     drawWindBanner(x, 1030, geo.groundY, Math.sin(v.t * 1.6 + 0.7) * 0.06);   // 风幡绕顶摆 ±0.06rad（动态层）
     drawTorchSide(x, L.torchL.x, L.torchL.y, v.t, { r: L.torchL.r, a: L.torchL.s });   // 火把（动态光晕读 LIGHTS2 锚点）
-    drawTorchSide(x, L.torchR.x, L.torchR.y, v.t, { r: L.torchR.r, a: L.torchR.s });
+    drawTorchSide(x, L.torchR.x, L.torchR.y, v.t,                                  // 对岸火把：crossed 后 0.8s 涌亮
+      { r: L.torchR.r * (1 + v.torchSurge * 0.2), a: L.torchR.s * (1 + v.torchSurge * 1.4) });
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
     x.save();
     if (w.player.airborne) { x.translate(w.player.x, w.player.y); x.scale(1, 0.92); x.translate(-w.player.x, -w.player.y); }
@@ -292,6 +336,7 @@ export const kit = {
     drawExitBeacon(w, x);
     drawPuddleGlints(x, 968, 602, v.t);
     drawDust(x, v.dust, v.t, L);
+    drawCrossGlow(w, x);                               // crossed 1.2s 暖晕（预渲染，画在级色之上读作光）
     // 青声元素（听声点脉动 / E 提示）最后画：永远压在级色与一切暖光之上（规格 §6）
     drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
@@ -677,11 +722,33 @@ function makeBg(w) {
   x.fillRect(0, gy, geo.chasmL, 130); x.fillRect(geo.chasmR, gy, SIDE.W - geo.chasmR, 130);
   // 光池烘焙：唯一事实源 LIGHTS2（暖火族一色）——火把/蜡烛/缝口/出口同表同坐标，一次预渲染（规格 §6.2-①）
   for (const t of Object.values(w.lights)) pixelGlow(x, t.x, t.y, t.r, [255, 198, 112], t.s);
+  w.crossGlow = makeCrossGlow(geo);                          // crossed 暖晕一次性预渲染（draw 直接贴图，规格 §3.2 拍 11）
   // 黄昏级色不再烘焙进背景：改到 draw() 角色之后统一压暗（与第一关同法）
   return c;
 }
 
 // ================= 2a 动态陈设（draw() 层：会动/呼吸的件；全部矢量，无逐帧 ImageData） =================
+
+// 过坑暖晕（一次性预渲染）：跨过裂口时在 (chasmR+50, groundY−80) r280 涌起 1.2s（规格 §3.2 拍 11）
+function makeCrossGlow(geo) {
+  const R = 280, c = document.createElement('canvas');
+  c.width = c.height = R * 2;
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(R, R, 6, R, R, R);
+  rg.addColorStop(0, 'rgba(255,214,140,.85)');
+  rg.addColorStop(0.45, 'rgba(255,196,120,.38)');
+  rg.addColorStop(1, 'rgba(255,190,110,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, R * 2, R * 2);
+  return { cv: c, x: geo.chasmR + 50, y: geo.groundY - 80, r: R };   // 当前几何 = (990,520)
+}
+
+function drawCrossGlow(w, x) {
+  const v = w.view, g = w.crossGlow;
+  if (!v.glowT || !g) return;
+  x.globalAlpha = Math.min(1, v.glowT / 0.5);              // 前 0.7s 满档，末 0.5s 淡出
+  x.drawImage(g.cv, g.x - g.r, g.y - g.r);
+  x.globalAlpha = 1;
+}
 
 // 出口金尘：12 粒在拱洞内循环上浮（rng(7) 定布局；规格 §5.1#10「ᚱ 灯塔 + 洞内暖金 + 12 金尘」）
 function makeGoldMotes(geo) {
