@@ -110,11 +110,12 @@ export function jumpDebug(g, beat) {
 
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
-import { SIDE, moveSide, sideJump,
+import { SIDE, moveSide, sideJump, stepWalkTo,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawListenSpots,
          drawArchSide, groundShadow, benchCandle, makeDust, stepDust, drawDust } from './sideview.js';
 import { blit } from './sprites.js';
-import { PAL } from './art.js';
+import { PAL, iconURL } from './art.js';
+import { screenToLogical } from './ch1/physics.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
 import { shade, paintMasonry, paintSlabs, BAYER4, pixelGradientV, pixelGlow } from './masonry.js';
@@ -130,6 +131,66 @@ export function LIGHTS2(geo) {
   };
 }
 
+// —— 过坑自动化（规格 §10）：助跑止点与余量算术（sideJump vy=−740、moveSide 重力 1500）——
+export const CROSS = { runUp: 28, speed: 330 };            // 助跑止点 = chasmL−28；速度显式设 330（缺省 300）
+export function crossMargin(geo, speed = CROSS.speed) {
+  const airT = 2 * 740 / 1500;                             // 滞空 ≈0.99s
+  return speed * airT - (geo.chasmR - (geo.chasmL - CROSS.runUp));   // 射程 ≈326px − 需求 268px ≈ 58px 余量
+}
+
+// —— 指针命中表（纯函数；顺序镜像 findE：石 → 合成台 → 听声点 → 裂谷 → 出口 → 自身）——
+// 本侧点对岸 = 过坑意图：未解锁走到裂口边试一次，已解锁自动助跑跳（规格 §10「点哪走哪 + 点对岸自动跳」）
+export function tapTargetAt(w, p) {
+  const { geo, player, stones } = w;
+  const onLeft = player.x < geo.chasmL;                    // 还在本侧：对岸的一切先读作「过去」
+  let best = null, bd = 1e9;
+  const consider = (d, t, r) => { if (d < bd && d <= r) { bd = d; best = t; } };
+  for (const s of stones) if (s.state === 'idle') {
+    consider(Math.hypot(p.x - s.x, p.y - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, stone: s }, 44);
+  }
+  consider(Math.abs(p.x - geo.benchX), { kind: 'obj', id: 'bench', x: geo.benchX, y: geo.groundY }, 80);
+  for (const spot of (w.content.listening || [])) {        // 听声点：实体物件（auto 的自动响，不占指针）
+    if (spot.auto) continue;
+    if (onLeft && spot.x > geo.chasmL) continue;           // 对岸的听声点隔着裂口：点它 = 过坑
+    consider(Math.hypot(p.x - spot.x, p.y - spot.y), { kind: 'obj', id: spot.id, x: spot.x, y: spot.y }, spot.r);
+  }
+  if (onLeft && p.x >= geo.chasmL) {                       // 裂口/对岸/出口：本侧点它们都是「要过去」
+    consider(0, { kind: 'chasm', x: geo.chasmL - CROSS.runUp, y: geo.groundY }, 0);
+  }
+  consider(Math.abs(p.x - geo.exitX), { kind: 'obj', id: 'exit', x: geo.exitX, y: geo.groundY }, 80);
+  if (w.game.hand?.kind === 'item') {                      // 手持词具：点自己 90px 内 = 对自己用（与拖拽同口径）
+    consider(Math.hypot(p.x - player.x, p.y - (player.y - 40)), { kind: 'obj', id: 'self', x: player.x, y: player.y }, 90);
+  }
+  return best;
+}
+
+// 自动助跑跳：助跑到位后起跳，空中保持右推（落地由 cfg.onLand 收尾，规格 §10）
+function startCross(w) {
+  w.autoCross = true;
+  sideJump(w); w.sfx.hop();
+  w.keys.add('r');
+  w.player.facing = 1; w.player.dir = 'right';
+}
+
+// —— #btn-jump 触屏跳键（规格 §10）：右下圆钮，unlocked 同拍显示；pointerdown → onSpace ——
+function showJumpBtn(w) {
+  if (typeof document === 'undefined') return;
+  const btn = document.getElementById('btn-jump');
+  if (!btn) return;
+  if (!btn.firstChild) btn.innerHTML = `<img src="${iconURL('jump')}" alt="">`;   // 图标只装一次
+  btn.classList.remove('hidden');
+}
+function wireJumpBtn(w, signal) {
+  if (typeof document === 'undefined') return;
+  const btn = document.getElementById('btn-jump');
+  if (!btn) return;
+  btn.addEventListener('pointerdown', () => kit.onSpace(w), { signal });
+  if (w.game.jumpUnlocked) showJumpBtn(w);                 // 书档已解锁：开局即可跳
+}
+
+// hint 'unlocked' 不再绑定空格：键盘/触屏跳键/点对岸自动跳同一条路（规格 §10）
+const HINT_UNLOCKED = '能跳了。跑起来，跳。';
+
 export const kit = {
   chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
 
@@ -143,16 +204,17 @@ export const kit = {
     door: { voice: v.door, pitch: 0.7, rate: 0.8, rateSlow: 0.6 }
   }),
 
-  makeWorld({ content, profile, game }) {
+  makeWorld({ content, profile, game, cv, signal }) {
     const geo = content.geometry;
     const actors = createActors();
     const player = actors.player;
     player.x = geo.spawnX; player.y = geo.groundY; player.dir = 'right';
     player.vy = 0; player.airborne = false; player.squash = 0;
     const w = {
-      actors, player, geo,
+      actors, player, geo, cv,
       lights: LIGHTS2(geo),                                    // 光锚唯一事实源（烘焙光池与动态光晕共用）
       stones: [],
+      walkTo: null, pending: null, autoCross: false,           // 点哪走哪（指针 → walkTo + pending；自动助跑跳）
       view: {
         t: 0, stars: [], puffs: [], bubbleT: 0, mist: [],
         dust: makeDust(26, 99),                                // 浮尘 26 粒（rng(99) 确定布局，规格 §6.4）
@@ -162,9 +224,11 @@ export const kit = {
       },
       cfg: {
         gap: { L: geo.chasmL, R: geo.chasmR },
+        speed: CROSS.speed,                                    // 330：助跑跳余量 ≈58px（规格 §10）
         canJump: game.jumpUnlocked,
         onLand: x => {                                         // 落地 thud（规格 §7.1）
           w.sfx.thud();
+          if (w.autoCross) { w.autoCross = false; w.keys?.delete('r'); }   // 自动跳落地：收回空中右推
           if (x > geo.chasmR) w.run(gameEvent(game, 'CROSS'));
         },
         onFell: () => w.run(gameEvent(game, 'FELL'))
@@ -173,6 +237,7 @@ export const kit = {
     for (let i = 0; i < 14; i++) {
       w.view.mist.push({ o: Math.random(), ph: Math.random() * 6.28, v: 6 + Math.random() * 10 });
     }
+    wireJumpBtn(w, signal);                                    // #btn-jump 触屏跳键（页面无此钮则静默）
     return w;
   },
 
@@ -186,6 +251,24 @@ export const kit = {
     }
   },
 
+  onKey(w) { w.walkTo = null; w.pending = null; },                 // 方向键按下取消走位（规格 §10）
+
+  onPointerDown(w, e, cv) {                                        // 点哪走哪：命中表 → walkTo + pending（tick 到位触发）
+    const p = screenToLogical(e.clientX, e.clientY, cv.getBoundingClientRect());
+    if (!p.inside) return;
+    const t = tapTargetAt(w, p);
+    w.walkTo = { x: Math.max(40, Math.min(SIDE.W - 40, t ? t.x : p.x)) };   // 未命中 = 走到点击 x（钳制）
+    w.pending = t;
+  },
+
+  onDropItem(w, word, cx, cy) {                                    // 拖词具到场景：jump 拖到自己 90px 内 = 对自己用（规格 §10）
+    const p = screenToLogical(cx, cy, w.cv.getBoundingClientRect());
+    if (!p.inside) return;
+    if (word === 'jump' && Math.hypot(p.x - w.player.x, p.y - (w.player.y - 40)) < 90) {
+      w.run(gameEvent(w.game, 'USE', { word, target: 'player' }));
+    } else w.sfx.mutter();                                         // 拖错：目标纹丝不动 + 咕哝
+  },
+
   tick(w, dt) {
     const { view: v, geo } = w;
     v.t += dt;
@@ -197,7 +280,16 @@ export const kit = {
     w.cfg.canJump = w.game.jumpUnlocked;
     updateActors(w.actors, dt);
     moveSide(w, dt);
+    stepWalkTo(w, dt);                                         // 点哪走哪（规格 §10；调在 moveSide 之后）
     if (w.player.moving && (w.keys.has('l') || w.keys.has('r'))) w.player.walkT += dt;  // 行走帧推进（仅水平移动）
+    // 走位到位（≤30px）→ 触发 pending：与按 E 同一条路径；出口无 E 动作，交给下面的 EXIT 判定
+    if (w.pending && (!w.walkTo || Math.abs(w.player.x - w.walkTo.x) <= 30)) {
+      const t = w.pending; w.pending = null; w.walkTo = null;
+      if (t.kind === 'chasm') {                                // 裂口/对岸：未解锁走到边上试一次；已解锁自动助跑跳
+        if (!w.game.jumpUnlocked) w.run(gameEvent(w.game, 'CHASM'));
+        else if (!w.player.airborne && !w.player.climbing) startCross(w);
+      } else if (t.id !== 'exit') w.doE(t);
+    }
     // 走到走廊尽头：不再有门，直接进入下一关
     if (!w.game.exited && w.game.crossed && w.player.x >= geo.exitX - 10) w.run(gameEvent(w.game, 'EXIT'));
     // 保险：石头绝不落在裂隙里
@@ -247,6 +339,9 @@ export const kit = {
   syncHeld,
 
   runExtras: {
+    hint(w, ins) {                                     // hint 'unlocked' 覆盖文案（不再绑定空格，规格 §10）；其余照常走内容键
+      w.ui.setHint(ins.key === 'unlocked' ? HINT_UNLOCKED : ins.key);
+    },
     drop(w, ins) {                                     // chasm-try 掉石：hatPuff（规格 §7.1）
       w.sfx.hatPuff();
       dropExtra(w => w.geo.chasmL)(w, ins);
@@ -256,6 +351,7 @@ export const kit = {
     bubble(w) { w.view.bubbleT = 2.6; },
     fell(w) {                                          // 坠谷：wind（下坠）+ thud（落地）——不再 mutter（规格 §7.1）
       w.sfx.wind(); w.sfx.thud();
+      if (w.autoCross) { w.autoCross = false; w.keys?.delete('r'); }   // 自动跳被中断：收回空中右推，防重生后继续冲谷
       w.view.puffs.push({ x: w.player.x, y: w.geo.groundY, r: 8, a: 1 });
       w.player.x = w.geo.chasmL - 90; w.player.y = w.geo.groundY - 160;
       w.player.vy = 0; w.player.airborne = false;
@@ -282,7 +378,8 @@ export const kit = {
       w.player.x = ins.x;
       if (ins.y != null) w.player.y = ins.y;
       w.player.vy = 0; w.player.airborne = false; w.player.moving = false;
-      w.walkTo = null;
+      w.walkTo = null; w.pending = null;
+      if (w.autoCross) { w.autoCross = false; w.keys?.delete('r'); }
     },
     effect(w, ins) {
       if (ins.name !== 'jumpUnlock') return;
@@ -292,7 +389,8 @@ export const kit = {
         for (let i = 0; i < 10; i++) {
           w.view.stars.push({ x: w.player.x + (Math.random() - 0.5) * 60, y: w.player.y - 60 - Math.random() * 60, a: 1, r: 3 + Math.random() * 3 });
         }
-        w.ui.setHint('unlocked');
+        showJumpBtn(w);                                                    // #btn-jump 与 unlocked 同拍显示（规格 §10）
+        w.ui.setHint(HINT_UNLOCKED);
       } else w.sfx.glowTick();
     }
   },

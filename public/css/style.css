@@ -14,7 +14,7 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:#07080B;font-family:var(--font);color:var(--ink);overflow:hidden;user-select:none}
 #stage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
-#game{width:100%;height:100%;display:block;border-radius:4px}
+#game{width:100%;height:100%;display:block;border-radius:4px;touch-action:none}
 .hidden{display:none!important}
 
 /* 浏览器表面：选区 / 焦点环 / 滚动条与设计同源 */
@@ -182,6 +182,11 @@ h2{font-size:30px;font-weight:600;letter-spacing:.14em}
 /* 触摸加固：拖拽禁浏览器手势 + 禁过度滚动 */
 #hotbar .cell,#craft-row .slot{touch-action:none}
 body{overscroll-behavior:none}
+
+/* 触屏跳键：右下 64px 圆钮（unlocked 同拍显示；图标 = jump，由 ch2.js 装） */
+#btn-jump{position:absolute;right:28px;bottom:32px;z-index:30;width:64px;height:64px;
+  display:flex;align-items:center;justify-content:center;touch-action:none}
+#btn-jump img{width:42px;height:42px;pointer-events:none}
 
 /* 屏级元素是暗幕不是石板：透出底下的房间，石板只给内容盒子 */
 .screen.slab{background:rgba(8,9,13,.82);border:none;border-radius:0;box-shadow:none}

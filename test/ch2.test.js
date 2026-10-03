@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2 } from '../public/js/ch2.js';
+import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2, tapTargetAt, crossMargin } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { planDropStones, drawTorchSide, drawBenchSide, makeDust, stepDust } from '../public/js/sideview.js';
@@ -367,4 +367,140 @@ test('chapter2.html 的 #reveal 块与 index.html 同构（揭示卡可弹）', 
   const block = s => s.split('<div id="reveal"')[1]?.split('<div id="summary"')[0].replace(/\s+/g, ' ').trim();
   assert.ok(block(idx), 'index.html 有 #reveal 块');
   assert.equal(block(ch2), block(idx));
+});
+
+// ================= Task 11：2a 交互（指针/拖拽/跳键，规格 §10） =================
+
+// 逻辑画布 1280×720 的 mock：client 坐标 = 逻辑坐标（scale 1）
+function mockCV() {
+  return { style: {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }) };
+}
+
+test('指针命中表：石/台/听声点/裂谷/出口/自身（顺序镜像 findE）', () => {
+  const geo = content.geometry;
+  const base = {
+    geo, content,
+    player: { x: 140, y: geo.groundY },
+    stones: [{ ipa: 'dʒ', x: 400, y: geo.groundY - 14, state: 'idle' }],
+    game: { hand: null }
+  };
+  assert.equal(tapTargetAt(base, { x: 402, y: 584 }).kind, 'stone');
+  assert.equal(tapTargetAt(base, { x: 470, y: 520 }).id, 'bench');
+  assert.equal(tapTargetAt(base, { x: 690, y: 580 }).id, 'fall');           // 裂口左缘听声点
+  const gap = tapTargetAt(base, { x: 760, y: 380 });                        // 本侧点裂口 = 要过去
+  assert.equal(gap.kind, 'chasm');
+  assert.equal(gap.x, geo.chasmL - 28);                                     // 助跑止点 chasmL−28
+  assert.equal(tapTargetAt(base, { x: 950, y: 580 }).kind, 'chasm');        // 对岸听声点隔着裂口，先读作过坑
+  assert.equal(tapTargetAt(base, { x: 1100, y: 400 }).kind, 'chasm');       // 对岸出口同样先读作过坑
+  const right = { ...base, player: { x: 1000, y: geo.groundY } };           // 过坑后：对岸一切可达
+  assert.equal(tapTargetAt(right, { x: 950, y: 580 }).id, 'shine');
+  assert.equal(tapTargetAt(right, { x: 1150, y: 560 }).id, 'exit');
+  assert.equal(tapTargetAt(base, { x: 300, y: 300 }), null);                // 空处：无目标 → 只走位
+  assert.equal(tapTargetAt(base, { x: 148, y: 560 }), null);                // 空手点自己无目标
+  const held = { ...base, game: { hand: { kind: 'item', word: 'jump' } } };
+  assert.equal(tapTargetAt(held, { x: 148, y: 560 }).id, 'self');           // 手持词具点自己 90px 内
+});
+
+test('过坑余量算术：0.99s × 330 ≈ 326px > 268px 需求，余量 ≈58px', () => {
+  const m = crossMargin(content.geometry);
+  assert.ok(Math.abs(m - 58) < 2, `余量 ${m}px 应 ≈58px`);
+  assert.ok(crossMargin(content.geometry, 300) > 0);                        // 300 也够（≈28px 余量）
+  assert.ok(crossMargin(content.geometry, 250) < 0);                        // 250 不够：这就是显式设 330 的理由
+});
+
+test('kit 导出指针入口：onPointerDown/onDropItem/onKey', () => {
+  assert.equal(typeof kit.onPointerDown, 'function');
+  assert.equal(typeof kit.onDropItem, 'function');
+  assert.equal(typeof kit.onKey, 'function');
+});
+
+test('onPointerDown：点哪走哪 + pending；本侧点对岸钳到助跑止点', () => {
+  const g = createGame(content, ch1Profile);
+  const w = {
+    game: g, content, geo: content.geometry, stones: [],
+    player: { x: 140, y: content.geometry.groundY }
+  };
+  kit.onPointerDown(w, { clientX: 470, clientY: 520 }, mockCV());
+  assert.equal(w.pending.id, 'bench');
+  assert.equal(w.walkTo.x, content.geometry.benchX);
+  kit.onPointerDown(w, { clientX: 1000, clientY: 400 }, mockCV());          // 点对岸
+  assert.equal(w.pending.kind, 'chasm');
+  assert.equal(w.walkTo.x, content.geometry.chasmL - 28);                   // 未解锁也先钳在本侧
+  kit.onPointerDown(w, { clientX: 200, clientY: 300 }, mockCV());           // 空处：走到点击 x（钳制）
+  assert.equal(w.pending, null);
+  assert.equal(w.walkTo.x, 200);
+});
+
+test('onKey 清走位（pending 一并清；键盘接管移动）', () => {
+  const w = { walkTo: { x: 500 }, pending: { kind: 'chasm' } };
+  kit.onKey(w);
+  assert.equal(w.walkTo, null);
+  assert.equal(w.pending, null);
+});
+
+test('走位到位：tick 调 stepWalkTo 后按同一路径 doE（合成台）', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content;
+  w.keys = new Set();
+  w.run = () => {};
+  w.sfx = { thud() {}, hop() {}, click() {}, glowTick() {}, mutter() {}, chime() {}, wind() {}, hatPuff() {} };
+  w.ui = { setHint() {} };
+  const done = [];
+  w.doE = t => done.push(t);
+  kit.onPointerDown(w, { clientX: 420, clientY: 560 }, mockCV());
+  for (let i = 0; i < 120 && !done.length; i++) kit.tick(w, 1 / 60);
+  assert.ok(done.some(t => t.id === 'bench'), '到位后走 doE（与按 E 同一条路径）');
+  assert.equal(w.pending, null);
+  assert.equal(w.walkTo, null);
+});
+
+test('onDropItem：jump 拖到自己 90px 内 = USE(player)，其余 = mutter', () => {
+  const g = createGame(content, ch1Profile);
+  const ran = [], muted = [];
+  const w = {
+    cv: mockCV(), game: g, player: { x: 300, y: content.geometry.groundY },
+    run: ins => ran.push(...ins), sfx: { mutter: () => muted.push(1) }
+  };
+  kit.onDropItem(w, 'jump', 320, 560);
+  assert.ok(ran.some(i => i.t === 'effect' && i.name === 'jumpUnlock' && i.full === true));
+  kit.onDropItem(w, 'jump', 900, 300);                                      // 拖到远处：纹丝不动 + 咕哝
+  assert.deepEqual(muted, [1]);
+});
+
+test('点对岸自动助跑跳：助跑 → 起跳 → 空中右推 → 落对岸触发 CROSS', () => {
+  const g = createGame(content, ch1Profile);
+  g.jumpUnlocked = true;
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content;
+  w.keys = new Set();
+  w.run = () => {};
+  w.sfx = { thud() {}, hop() {}, click() {}, glowTick() {}, mutter() {}, chime() {}, wind() {}, hatPuff() {} };
+  w.ui = { setHint() {} };
+  w.doE = () => {};
+  kit.onPointerDown(w, { clientX: 1100, clientY: 400 }, mockCV());
+  assert.equal(w.pending.kind, 'chasm');
+  assert.equal(w.walkTo.x, content.geometry.chasmL - 28);
+  for (let i = 0; i < 600 && !w.game.crossed; i++) kit.tick(w, 1 / 60);
+  assert.ok(w.game.crossed, '自动跳过坑（CROSS 已触发）');
+  assert.ok(w.player.x > w.geo.chasmR, '落在对岸');
+  assert.ok(!w.keys.has('r') && !w.autoCross, '落地收回空中右推');
+});
+
+test("hint 'unlocked' 文案不再绑定空格（触屏跳键/点对岸同一条路）", () => {
+  const hints = [];
+  const w = { ui: { setHint: k => hints.push(k) } };
+  kit.runExtras.hint(w, { t: 'hint', key: 'unlocked' });
+  kit.runExtras.hint(w, { t: 'hint', key: 'start' });
+  assert.ok(!/空格/.test(hints[0]), `unlocked 提示不应提空格：${hints[0]}`);
+  assert.equal(hints[1], 'start');                                          // 其余提示仍走内容键
+});
+
+test('chapter2.html：#btn-jump 触屏跳键（初始隐藏）与 style.css 接线', async () => {
+  const read = f => readFile(new URL('../public/' + f, import.meta.url), 'utf8');
+  const [html, css, src] = await Promise.all([read('chapter2.html'), read('css/style.css'), read('js/ch2.js')]);
+  assert.match(html, /<button id="btn-jump"[^>]*class="[^"]*hidden/, '#btn-jump 初始隐藏（unlocked 同拍显示）');
+  assert.match(css, /#btn-jump\{/, 'style.css 有 #btn-jump 定位');
+  assert.match(css, /#game\{[^}]*touch-action:none/, '画布禁浏览器手势（点哪走哪）');
+  assert.match(src, /iconURL\('jump'\)/, '跳键图标 = jump');
 });
