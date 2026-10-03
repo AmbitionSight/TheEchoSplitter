@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { createServer } from '../server.js';
 
-const AUTH = 'Basic ' + Buffer.from('PanPan:LeLe').toString('base64');
-const get = url => fetch(url, { headers: { Authorization: AUTH } });
+const get = url => fetch(url);
 
 async function listen() {
   const server = createServer();
@@ -11,16 +10,6 @@ async function listen() {
   const base = `http://127.0.0.1:${server.address().port}`;
   return { server, base };
 }
-
-test('无认证 → 401 + WWW-Authenticate 质询', async t => {
-  const { server, base } = await listen();
-  t.after(() => server.close());
-  const res = await fetch(base + '/');
-  assert.equal(res.status, 401);
-  assert.match(res.headers.get('www-authenticate'), /^Basic /);
-  const bad = await fetch(base + '/', { headers: { Authorization: 'Basic ' + Buffer.from('x:y').toString('base64') } });
-  assert.equal(bad.status, 401);
-});
 
 test('GET /api/chapter1 返回 JSON 且双词齐全', async t => {
   const { server, base } = await listen();

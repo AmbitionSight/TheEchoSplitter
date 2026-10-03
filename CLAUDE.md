@@ -18,10 +18,9 @@ node --test test/game.test.js         # run one test file
 node --test test/ch2.test.js test/ch3.test.js  # run several files
 npm start                             # start the server
 PORT=3002 npm start                   # use a different port
-AUTH=0 npm start                      # disable Basic auth for local-only use
 ```
 
-The server listens on port `3001` by default and binds to `0.0.0.0`. Authentication is enabled by default. `npm test` currently runs 120 tests. There is no `npm run build`, lint, or format command.
+The server listens on port `3000` by default and binds to `0.0.0.0`. `npm test` currently runs 154 tests. There is no `npm run build`, lint, or format command.
 
 For browser validation, run `npm start` and open `/` for chapter 1, `/chapter2.html` for chapter 2, `/chapter3.html` for chapter 3, or `/chapter4.html` for chapter 4. The game is designed for a browser because the visual and interaction layers depend on Canvas, DOM, speech synthesis, WebAudio, and pointer input; Node tests cover the importable logic but not the rendered experience.
 
@@ -44,7 +43,6 @@ Useful browser/debug hooks:
 
 - serves files from `public/`;
 - serves `content/chapterN.json` through `/api/chapterN` for single-digit chapter numbers;
-- applies Basic authentication unless the server is created with `auth: false` or launched with `AUTH=0`;
 - supports `PORT` when run directly;
 - prevents static path traversal by constraining resolved paths to `public/`.
 
@@ -59,10 +57,16 @@ Each HTML page selects one chapter module:
 - `public/chapter3.html` loads `public/js/ch3.js` (chapter 3, side-view wall and rope).
 - `public/chapter4.html` loads `public/js/ch4.js` (chapter 4, side-view river journey with three rooms).
 
-The chapter modules contain two layers in one file:
+Chapters 1 and 4 are split into layered modules under `public/js/ch1/` and `public/js/ch4/`. The HTML-facing entries (`main.js`, `ch4.js`) are pure re-export compatibility layers, as is the internal `scene.js` import path; none hold logic, and existing import paths keep working. Chapter 1's layers are strictly one-way — `planners` is the base, `physics` and `render` build on it, and `kit` sits on top; chapter 4 has the smaller `event`/`render`/`kit` stack. In both, the event machines are pure, importing only `chapter.js` and `hotbar.js` (chapter 1's also imports the chapter-specific `door.js`). A new module must never import an entry file.
 
-1. A pure event machine (`createGame`, `startGame`, `gameEvent`, and a debug jump function), which is directly imported by Node tests.
-2. A browser `kit` passed to `mount()` with chapter geometry, world creation, input handling, ticking, drawing, and mappings from event instructions to visual effects.
+- `public/js/ch1/planners.js`: chapter 1 layout, deterministic `rng`, wall/light constants, and the pure masonry/slab planners.
+- `public/js/ch1/physics.js`: chapter 1 collision, screen-to-logical conversion, walk stepping, and phoneme-stone physics.
+- `public/js/ch1/render.js`: chapter 1 scene creation, per-frame update, and top-down rendering.
+- `public/js/ch1/event.js` and `public/js/ch4/event.js`: the pure, Node-testable event machine (`createGame`, `startGame`, `gameEvent`, and a debug jump function).
+- `public/js/ch1/kit.js` and `public/js/ch4/kit.js`: the browser `kit` passed to `mount()`, with chapter geometry, world creation, input handling, ticking, drawing, and mappings from event instructions to visual effects.
+- `public/js/ch4/render.js`: chapter 4 room and object drawing.
+
+Chapters 2 and 3 remain single-file (`ch2.js`, `ch3.js`) with the same two layers — a pure event machine and a browser kit — in one file.
 
 `public/js/shell.js` is the shared runtime. It loads the chapter JSON, scales the logical canvas, initializes speech and sound, loads persistent profile data and sprite atlases, creates the shared hotbar/UI, interprets standard event instructions, handles keyboard/pointer input, runs the animation loop, and saves chapter summaries. Keep chapter-specific rules in the chapter event machine or kit rather than duplicating them in the shell.
 
@@ -80,8 +84,8 @@ The chapter modules contain two layers in one file:
 - `public/js/journal.js`: the rune book UI (word cards with waveforms + the 48-phoneme rune grid), opened via the hotbar `#btn-book` rune button; lit runes = this chapter's picked/heard sounds ∪ the profile's lifetime sets. Echo objects (`ambience[].echo` in content) are pure listening: touch → carrier speech → rune lights, no stones, no inventory.
 - `public/js/art.js`: palette, rune stroke data, and Canvas-drawn icons. Do not replace game icons with emoji.
 - `public/js/sprites.js`: sprite atlas metadata and drawing helpers for assets under `public/assets/mi/`.
-- `public/js/scene.js`: chapter 1 layout, coordinate conversion, collision, stone physics, and top-down rendering.
-- `public/js/sideview.js`: shared side-view movement, jumping/climbing, stone physics, and rendering helpers used by chapters 2 and 3.
+- `public/js/scene.js`: pure re-export entry for chapter 1 (its logic now lives in `public/js/ch1/`); kept so existing imports of `scene.js` keep working.
+- `public/js/sideview.js`: shared side-view movement, jumping/climbing, stone physics, and rendering helpers used by chapters 2, 3, and 4, and by chapter 1's kit for the E hint.
 - `public/js/actors.js`: player, NPC, and cat state/drawing.
 
 ### Content and persistence boundaries
@@ -92,7 +96,7 @@ Chapter 2 and chapter 3 seed relevant phoneme stones from the profile collected 
 
 ### Testing boundary and module convention
 
-Tests live in `test/` and use `node:test` with `node:assert`. The test suite primarily exercises pure event machines, inventory/crafting, door transitions, physics/collision, content invariants, profile persistence, audio fallbacks, sprite metadata, and server responses.
+Tests live in `test/` and use `node:test` with `node:assert`. The test suite primarily exercises pure event machines, inventory/crafting, door transitions, physics/collision, content invariants, profile persistence, audio fallbacks, sprite metadata, and server responses. For the split chapters, tests import the `ch1/`/`ch4/` modules directly to lock the layer boundaries (e.g. `test/ch1-physics.test.js` imports `public/js/ch1/physics.js`), while other tests still import through the `main.js`/`scene.js`/`ch4.js` compatibility entries.
 
 Keep browser-only global access (`document`, `window`, `localStorage`, Canvas setup, and browser APIs) inside functions or browser entry paths so modules can be imported by Node tests. Inject storage or browser-like dependencies where an existing module already supports it. When changing a chapter event instruction, update both the event-machine tests and the corresponding kit/shell handling if the instruction is not already standard.
 
