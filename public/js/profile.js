@@ -5,7 +5,7 @@ const KEY = 'echo-splitter-profile';
 const LEGACY_KEY = 'echo-stone-profile';   // 旧名时期的存档键：读到即沿用，下次保存写入新键
 
 export function createProfile() {
-  return { everPicked: [], heard: [], words: [], abilities: [], chaptersDone: [] };
+  return { everPicked: [], heard: [], words: [], abilities: [], chaptersDone: [], picks: 0 };
 }
 
 export function loadProfile(store) {
@@ -19,7 +19,8 @@ export function loadProfile(store) {
       heard: [...new Set(p.heard || [])],
       words: [...new Set(p.words || [])],
       abilities: [...new Set(p.abilities || [])],
-      chaptersDone: [...new Set(p.chaptersDone || [])]
+      chaptersDone: [...new Set(p.chaptersDone || [])],
+      picks: p.picks || 0                                  // 旧档无 picks 字段 → 0（向后兼容）
     };
   } catch { return createProfile(); }
 }
@@ -28,14 +29,16 @@ export function saveProfile(store, profile) {
   try { store?.setItem?.(KEY, JSON.stringify(profile)); } catch { /* 隐私模式等：静默 */ }
 }
 
-// 关卡结算时合并进度（并集，永不丢失）。heard=回声物件听过的音（声音层），与 everPicked（拼词层）分开，互不污染播种
-export function mergeProfile(oldP, { everPicked = [], heard = [], words = [], abilities = [], chapter = null }) {
+// 关卡结算时合并进度（并集，永不丢失）。heard=回声物件听过的音（声音层），与 everPicked（拼词层）分开，互不污染播种。
+// picks=声音石拾取数，跨关累加（缺省 0，旧载荷/旧存档向后兼容）
+export function mergeProfile(oldP, { everPicked = [], heard = [], words = [], abilities = [], chapter = null, picks = 0 }) {
   const p = {
     everPicked: [...new Set([...oldP.everPicked, ...everPicked])],
     heard: [...new Set([...oldP.heard, ...heard])],
     words: [...new Set([...oldP.words, ...words])],
     abilities: [...new Set([...oldP.abilities, ...abilities])],
-    chaptersDone: [...new Set([...oldP.chaptersDone, ...(chapter ? [chapter] : [])])]
+    chaptersDone: [...new Set([...oldP.chaptersDone, ...(chapter ? [chapter] : [])])],
+    picks: (oldP.picks || 0) + (picks || 0)                // 累加：2a+2b 两半合计（规格 §12）
   };
   return p;
 }

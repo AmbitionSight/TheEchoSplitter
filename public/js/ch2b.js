@@ -436,7 +436,8 @@ export const kit = {
   },
 
   summaryMerge(game) {
-    return { everPicked: [...game.inv.everPicked], heard: [...game.heard], words: [...game.book], abilities: ['climb'], chapter: 2 };
+    return { everPicked: [...game.inv.everPicked], heard: [...game.heard], words: [...game.book], abilities: ['climb'], chapter: 2,
+             picks: game.stonesPicked };                  // 本章声音石拾取数 → 书档累加（规格 §12）
   },
 
   onFinal(w) {

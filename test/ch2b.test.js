@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil, CATB, tapTargetAt } from '../public/js/ch2b.js';
-import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
+import { createProfile, loadProfile, saveProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { moveSide, planDropStones } from '../public/js/sideview.js';
 
@@ -580,6 +580,53 @@ test('onDropItem：rope 拖到绳带 |x−912|≤45 且 y∈[130,600] = 接绳�
   kit.onDropItem(b.w, 'jump', 912, 300);                       // 非 rope 词
   assert.equal(b.sounds.filter(s => s === 'mutter').length, 3, '拖错：纹丝不动 + 咕哝');
   assert.ok(!b.ran.some(i => i.t === 'effect'), '拖错不接绳');
+});
+
+// ================= Task 18：2b 章末结算（规格 §3.3 拍 11 / §7.4 / §12） =================
+
+test('summaryMerge 含 picks：本章声音石拾取数进结算载荷（规格 §12）', () => {
+  const g = createGame(content, ch2Profile);
+  assert.equal(kit.summaryMerge(g).picks, 0, '未拾取：0');
+  seedMemory(g.inv, addStone, ch2Profile.everPicked);
+  gameEvent(g, 'ROPE');                                        // 首次听断绳：掉 r + 干扰 h/m
+  gameEvent(g, 'PICKUP', 'r');
+  const payload = kit.summaryMerge(g);
+  assert.equal(payload.picks, 1, '捡起 1 块 → picks=1');
+  assert.equal(payload.chapter, 2);
+  assert.deepEqual(payload.abilities, ['climb'], '结算给下一关攀爬能力');
+});
+
+test('书档 picks 累加（两半合计）、缺省 0、旧档向后兼容（规格 §12）', () => {
+  assert.equal(createProfile().picks, 0, '新档从 0 起');
+  let p = mergeProfile(createProfile(), { everPicked: ['dʒ'], words: ['jump'], chapter: 2, picks: 2 });   // 2a：2 块
+  assert.equal(p.picks, 2);
+  p = mergeProfile(p, { everPicked: ['r'], words: ['rope'], chapter: 2, picks: 3 });                     // 2b：3 块
+  assert.equal(p.picks, 5, '两半合计 = 累加');
+  p = mergeProfile(p, { everPicked: ['k'], chapter: 3 });                                                // 旧载荷无 picks
+  assert.equal(p.picks, 5, '缺省 0：不 NaN、不覆盖');
+  const legacy = { everPicked: ['h'], heard: [], words: ['hello'], abilities: [], chaptersDone: [1] };   // 旧存档无 picks 字段
+  const store = { getItem: () => JSON.stringify(legacy), setItem() {} };
+  const loaded = loadProfile(store);
+  assert.equal(loaded.picks, 0, '旧档读出 0（向后兼容）');
+  assert.equal(mergeProfile(loaded, { picks: 4, chapter: 2 }).picks, 4);
+  const rt = { m: null, getItem() { return this.m; }, setItem(k, v) { this.m = v; } };                   // 往返不丢
+  saveProfile(rt, p);
+  assert.equal(loadProfile(rt).picks, 5);
+});
+
+test('finish() 路径：summaryFirst 先出结算卡、再由 [下一间房 →] 按钮交接（源码断言，规格 §7.4）', async () => {
+  assert.equal(kit.summaryFirst, true, '2b 章末先出结算卡（Task 16 已置位）');
+  assert.equal(kit.next?.chapter, 3, '交接仍指向 ch3（动态 import 契约）');
+  const src = await readFile(new URL('../public/js/shell.js', import.meta.url), 'utf8');
+  assert.match(src, /const showSummary = !kit\.next \|\| kit\.summaryFirst/, 'summaryFirst 决定是否出卡');
+  assert.match(src, /ui\.summary\(game, \{ words: \[\.\.\.game\.book\], stones: payload\.picks \?\? game\.stonesPicked \}\)/, '出卡读 picks');
+  assert.match(src, /if \(kit\.next && !kit\.summaryFirst\) \{ onHandoff\?\.\(kit\.next\); return; \}/, '仅非 summaryFirst 才静默交接');
+  assert.match(src, /walk\.onclick = \(\) => onHandoff\?\.\(kit\.next\)/, '[下一间房 →] 按钮触发交接');
+  const iSummary = src.indexOf('ui.summary(game,');
+  const iGate = src.indexOf('if (kit.next && !kit.summaryFirst)');
+  const iBtn = src.indexOf('walk.onclick = () => onHandoff?.(kit.next)');
+  assert.ok(iSummary !== -1 && iGate !== -1 && iBtn !== -1, '三段齐备');
+  assert.ok(iSummary < iGate && iGate < iBtn, '顺序：先出卡 → 跳过静默交接 → 按钮再交接');
 });
 
 test('#btn-jump：页面有钮、有 jump 能力即显示（mock document）', async () => {
