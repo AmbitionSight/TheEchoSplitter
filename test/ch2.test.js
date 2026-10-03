@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2 } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
-import { planDropStones, drawTorchSide, drawBenchSide } from '../public/js/sideview.js';
+import { planDropStones, drawTorchSide, drawBenchSide, makeDust, stepDust } from '../public/js/sideview.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter2.json', import.meta.url), 'utf8'));
 const ch1Profile = mergeProfile(createProfile(), {
@@ -197,4 +197,43 @@ test('2a 光法则单源：光池烘焙读表、蜡烛陈设开启（源码断�
   assert.match(src, /Object\.values\(w\.lights\)/, 'makeBg 光池循环锚点表');
   assert.ok(!/pixelGlow\(x, 90, 240/.test(src), '火把光池不得再硬编码');
   assert.match(src, /candle: true/, 'ch2 合成台开启 ch1 同款蜡烛陈设');
+});
+
+test('2a 动态层与粒子：金尘/水光/幡摆/浮尘 26/余烬复用星星池（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2.js', import.meta.url), 'utf8');
+  assert.match(src, /makeDust\(26, 99\)/, '浮尘 26 粒、rng(99) 确定布局');
+  assert.match(src, /stepDust\(/, '浮尘在动态层步进（y<160 回 700）');
+  assert.match(src, /kind:'ember'/, '余烬复用星星池并打 kind 标');
+  assert.match(src, /drawWindBanner\(x, 1030, geo\.groundY,/, '风幡绕顶摆动在动态层（±0.06rad）');
+  assert.match(src, /drawPuddleGlints/, '水洼 2 闪粒');
+  assert.match(src, /drawExitBeacon/, '出口 ᚱ 呼吸 + 12 金尘');
+});
+
+test('浮尘 helper：rng(99) 确定布局、y<160 回 700（规格 §6.4）', () => {
+  const a = makeDust(26, 99), b = makeDust(26, 99);
+  assert.equal(a.length, 26);
+  assert.deepEqual(a[0], b[0]);                                  // 同种子同布局（可复现）
+  assert.ok(a.every(d => d.y >= 160 && d.y <= 700));
+  const d = a[0]; d.y = 161; d.v = 1000;
+  stepDust(a, 0.1);
+  assert.equal(d.y, 700);                                        // 上浮出顶 → 回到底部
+});
+
+test('makeWorld：浮尘 26 / 出口金尘 12 / 双火把余烬计时就绪', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  assert.equal(w.view.dust.length, 26);
+  assert.equal(w.view.gold.length, 12);
+  assert.equal(w.view.emberT.length, 2);
+});
+
+test('余烬：双火把各按 0.7–1.4s 节奏上飘，进星星池并带 ember 标', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content;                               // 壳在 makeWorld 后补挂（同 shell.js）
+  w.keys = new Set(); w.run = () => {}; w.sfx = { click() {}, glowTick() {}, mutter() {} };
+  kit.tick(w, 1.5);                                              // 一次性推进 1.5s：两颗必出（间隔上限 1.4s）
+  const embers = w.view.stars.filter(s => s.kind === 'ember');
+  assert.equal(embers.length, 2);
+  assert.ok(w.view.emberT.every(t => t >= 0.7 && t < 1.4));      // 下一颗间隔回到 0.7–1.4s
 });

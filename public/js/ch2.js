@@ -105,7 +105,7 @@ export function jumpDebug(g, beat) {
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawListenSpots,
-         drawArchSide, groundShadow, benchCandle } from './sideview.js';
+         drawArchSide, groundShadow, benchCandle, makeDust, stepDust, drawDust } from './sideview.js';
 import { blit } from './sprites.js';
 import { PAL } from './art.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
@@ -146,7 +146,12 @@ export const kit = {
       actors, player, geo,
       lights: LIGHTS2(geo),                                    // 光锚唯一事实源（烘焙光池与动态光晕共用）
       stones: [],
-      view: { t: 0, stars: [], puffs: [], bubbleT: 0, mist: [] },
+      view: {
+        t: 0, stars: [], puffs: [], bubbleT: 0, mist: [],
+        dust: makeDust(26, 99),                                // 浮尘 26 粒（rng(99) 确定布局，规格 §6.4）
+        emberT: [0.4, 1.1],                                    // 双火把余烬计时（每颗间隔 0.7–1.4s）
+        gold: makeGoldMotes(geo)                               // 出口 12 金尘（拱洞内循环上浮）
+      },
       cfg: {
         gap: { L: geo.chasmL, R: geo.chasmR },
         canJump: game.jumpUnlocked,
@@ -185,6 +190,12 @@ export const kit = {
       x => (x >= geo.chasmL && x <= geo.chasmR) ? geo.chasmL - 30 - Math.random() * 40 : null);
     for (const m of v.mist) m.ph += dt * m.v * 0.1;
     v.stars = v.stars.filter(st => (st.a -= dt * 1.2) > 0);
+    stepEmbers(w, dt);                                          // 余烬：每火把 0.7–1.4s 一颗（复用星星池）
+    stepDust(v.dust, dt);                                       // 浮尘：y<160 回 700（rng(99) 布局）
+    for (const m of v.gold) {                                   // 出口金尘上浮循环
+      m.y -= m.v * dt;
+      if (m.y < geo.groundY - 176) m.y = geo.groundY - 6;       // 升到拱顶下 → 回拱底
+    }
     v.puffs = v.puffs.filter(p => { p.r += dt * 40; p.a -= dt * 2; return p.a > 0; });
     // 环境听声点（火把等）：走近自动响，不用按 E
     for (const spot of (w.content.listening || [])) {
@@ -263,6 +274,7 @@ export const kit = {
       x.ellipse(geo.chasmL + ((m.o * span + Math.sin(m.ph) * 20 + span) % span), geo.groundY + 26 + Math.sin(m.ph * 1.3) * 8, 34, 10, 0, 0, 7);
       x.fill();
     }
+    drawWindBanner(x, 1030, geo.groundY, Math.sin(v.t * 1.6 + 0.7) * 0.06);   // 风幡绕顶摆 ±0.06rad（动态层）
     drawTorchSide(x, L.torchL.x, L.torchL.y, v.t, { r: L.torchL.r, a: L.torchL.s });   // 火把（动态光晕读 LIGHTS2 锚点）
     drawTorchSide(x, L.torchR.x, L.torchR.y, v.t, { r: L.torchR.r, a: L.torchR.s });
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
@@ -276,6 +288,11 @@ export const kit = {
     // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
     x.fillStyle = 'rgba(16,18,36,.30)';
     x.fillRect(0, 0, SIDE.W, SIDE.H);
+    // —— 级色之上的动态陈设（发光元素不吃压暗）：出口灯塔 / 水光 / 浮尘 ——
+    drawExitBeacon(w, x);
+    drawPuddleGlints(x, 968, 602, v.t);
+    drawDust(x, v.dust, v.t, L);
+    // 青声元素（听声点脉动 / E 提示）最后画：永远压在级色与一切暖光之上（规格 §6）
     drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
     vignette(x);
@@ -637,7 +654,8 @@ function makeBg(w) {
   pixelGradientV(x, geo.chasmL, geo.chasmR, gy, SIDE.H, [[0, '#33404f'], [0.42, '#1d2634'], [1, '#070a0f']]);
   // 崖台细节：碎石 + 苔簇
   drawLedgeDetail(x, geo, 53);
-  // —— 陈设（静态件，§5.1）：拱门 / 火把托架 / 行囊铺盖 / 货堆 / 石桥残墩 / 水洼 / 风幡 ——
+  // —— 陈设（静态件，§5.1）：拱门 / 火把托架 / 行囊铺盖 / 货堆 / 石桥残墩 / 水洼 ——
+  // （风幡摆动、ᚱ 呼吸、金尘、水光、浮尘、余烬等会动/呼吸的件在 draw() 动态层）
   drawArchSide(x, 60, gy, { rune: 'ᚵ' });                      // 入口拱（ᚵ 阴刻，不发光）
   groundShadow(x, 60, gy, 62, 9, 0.30);
   drawArchSide(x, geo.exitX, gy, { rune: 'ᚱ', runeGlow: 1, runeColor: 'rgba(140,240,220,.6)' });   // 出口拱（呼吸符文与 12 金尘为 draw() 动态层，锚点 (exitX, gy)）
@@ -647,8 +665,7 @@ function makeBg(w) {
   drawBedroll(x, 195, gy);
   drawCrates(x, w.atlases, gy);                                // 货堆：木箱×2 + 陶罐组
   drawBridgePier(x, 658, gy);                                  // 石桥残墩（签名地标）
-  drawPuddle(x, 968, 602);                                     // 水洼（听声点 shine 实体）
-  drawWindBanner(x, 1030, gy);                                 // 风幡
+  drawPuddle(x, 968, 602);                                     // 水洼（听声点 shine 实体；2 闪粒在 draw()）
   x.fillStyle = 'rgba(255,236,200,.09)';                       // 地面顶缘亮线（裂缝两侧）
   x.fillRect(0, gy, geo.chasmL, 2); x.fillRect(geo.chasmR, gy, SIDE.W - geo.chasmR, 2);
   const fsh = x.createLinearGradient(0, gy - 8, 0, gy + 36);   // 墙脚落地阴影
@@ -664,10 +681,69 @@ function makeBg(w) {
   return c;
 }
 
+// ================= 2a 动态陈设（draw() 层：会动/呼吸的件；全部矢量，无逐帧 ImageData） =================
+
+// 出口金尘：12 粒在拱洞内循环上浮（rng(7) 定布局；规格 §5.1#10「ᚱ 灯塔 + 洞内暖金 + 12 金尘」）
+function makeGoldMotes(geo) {
+  const r = rng(7), out = [];
+  for (let i = 0; i < 12; i++) {
+    out.push({ x: geo.exitX - 34 + r() * 68, y: geo.groundY - 8 - r() * 160, v: 12 + r() * 16, ph: r() * 6.28 });
+  }
+  return out;
+}
+
+// 余烬：每火把 0.7–1.4s 一颗，复用星星池（kind:'ember' 供 drawFX 与庆祝金星区分；规格 §6.4）
+function stepEmbers(w, dt) {
+  const v = w.view, srcs = [w.lights.torchL, w.lights.torchR];
+  for (let i = 0; i < srcs.length; i++) {
+    v.emberT[i] -= dt;
+    if (v.emberT[i] > 0) continue;
+    v.emberT[i] = 0.7 + Math.random() * 0.7;
+    const s = srcs[i];
+    v.stars.push({ x: s.x + (Math.random() - 0.5) * 8, y: s.y - 6, a: 1, r: 1.5 + Math.random() * 1.5, kind:'ember' });
+  }
+}
+
+// 出口灯塔：ᚱ 呼吸青（α .35→.7）+ 12 金尘上浮——画在级色之上，读作「光」（规格 §5.1#10 / §3.2 拍 13）
+function drawExitBeacon(w, x) {
+  const { view: v, lights: L } = w;
+  const rx = L.exit.x, ry = L.exit.y - 44;                     // 拱顶符文位（drawArchSide：baseY−230+6）
+  const breathe = 0.5 + Math.sin(v.t * 1.1) * 0.5;
+  const g = x.createRadialGradient(rx, ry, 4, rx, ry, 64);
+  g.addColorStop(0, `rgba(84,224,200,${0.30 * breathe})`);
+  g.addColorStop(1, 'rgba(84,224,200,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(rx, ry, 64, 0, 7); x.fill();
+  x.fillStyle = `rgba(140,240,220,${0.35 + breathe * 0.35})`;  // 呼吸 α .35→.7
+  x.font = '26px serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('ᚱ', rx, ry);
+  x.fillStyle = '#ffd98a';                                     // 洞内暖金：12 金尘上浮
+  for (const m of v.gold) {
+    x.globalAlpha = 0.35 + 0.45 * (0.5 + Math.sin(v.t * 2.1 + m.ph) * 0.5);
+    x.fillRect(m.x + Math.sin(v.t * 1.3 + m.ph) * 2.5 - 1.1, m.y, 2.2, 2.2);
+  }
+  x.globalAlpha = 1;
+}
+
+// 水洼 2 闪粒：两枚错相位的十字星闪（规格 §5.1#7）
+function drawPuddleGlints(x, px, py, t) {
+  for (const [gx, gy, ph] of [[px - 9, py - 4, 0], [px + 11, py - 2, 1.9]]) {
+    const k = Math.max(0, Math.sin(t * 2.4 + ph));
+    if (k < 0.2) continue;
+    x.fillStyle = `rgba(255,238,196,${0.3 + k * 0.6})`;
+    x.fillRect(gx - 3.2, gy - 0.7, 6.4, 1.4);
+    x.fillRect(gx - 0.7, gy - 3.2, 1.4, 6.4);
+  }
+}
+
 function drawFX(w, x) {
   const v = w.view, p = w.player;
   for (const st of v.stars) {
     x.globalAlpha = st.a;
+    if (st.kind === 'ember') {                                 // 余烬：暖橙小星，上飘更远、轻摆
+      x.fillStyle = '#ffb347';
+      x.beginPath(); x.arc(st.x + Math.sin((v.t + st.x) * 5) * 1.4, st.y - (1 - st.a) * 46, st.r, 0, 7); x.fill();
+      continue;
+    }
     x.fillStyle = PAL.gold;
     x.beginPath(); x.arc(st.x, st.y - (1 - st.a) * 30, st.r, 0, 7); x.fill();
   }

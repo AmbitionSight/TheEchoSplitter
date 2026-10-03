@@ -4,6 +4,7 @@ import { shade } from './masonry.js';
 import { isVowel, stoneCount } from './hotbar.js';
 import { drawBenchStones } from './workbench.js';
 import { blit, tile } from './sprites.js';
+import { rng } from './ch1/planners.js';
 
 export const SIDE = { W: 1280, H: 720 };
 
@@ -237,6 +238,29 @@ export function stepWalkTo(w, dt) {
 export function groundShadow(x, cx, gy, rx, ry = 7, a = 0.26) {
   x.fillStyle = `rgba(0,0,0,${a})`;
   x.beginPath(); x.ellipse(cx, gy + 4, rx, ry, 0, 0, 7); x.fill();
+}
+// —— 浮尘池（横版共用；rng 种子确定布局——规格 §6.4：26 粒、y<160 回 700）——
+export function makeDust(n, seed = 99, W = SIDE.W) {
+  const r = rng(seed), dust = [];
+  for (let i = 0; i < n; i++) dust.push({ x: r() * W, y: 160 + r() * 540, v: 6 + r() * 14, ph: r() * 6.28 });
+  return dust;
+}
+export function stepDust(dust, dt, W = SIDE.W) {
+  for (const d of dust) {
+    d.y -= d.v * dt; d.x += Math.sin(d.ph + d.y / 40) * 0.2;
+    if (d.y < 160) { d.y = 700; d.x = (d.x + W * 0.618) % W; }   // 确定性错列回卷，不聚成一柱
+  }
+}
+// 池内暖金 / 池外冷灰：pools = 章节光锚表（{x,y,r}），与烘焙光池/动态光晕同源
+export function drawDust(x, dust, t, pools = null) {
+  const P = pools ? Object.values(pools) : [];
+  for (const d of dust) {
+    const warm = P.some(l => Math.hypot(d.x - l.x, d.y - l.y) < l.r);
+    x.globalAlpha = warm ? 0.18 + Math.abs(Math.sin(d.ph + t)) * 0.3 : 0.10;
+    x.fillStyle = warm ? 'rgba(255,233,168,.5)' : '#8fa6b8';
+    x.fillRect(d.x, d.y, 2.4, 2.4);
+  }
+  x.globalAlpha = 1;
 }
 // 侧视矢量石拱（与 ch1 门拱同族；纯矢量、无章节几何）
 export function drawArchSide(x, cx, baseY, { w = 120, h = 230, opening = 76, mouth = '#141824', rune = null, runeSize = 26, runeColor = 'rgba(30,32,44,.85)', runeGlow = 0 } = {}) {
