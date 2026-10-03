@@ -83,7 +83,7 @@ function bootShell(kit) {
   async function handoff(next) {                                // 淡出 → 拆当前章 → 载下一章 → 淡入
     if (switching) return;
     switching = true;
-    veil.textContent = CHAPTER_DAY[next.chapter] || '';
+    veil.textContent = next.label ?? (CHAPTER_DAY[next.chapter] || '');   // 章可给自定义遮罩文案，缺省按日次
     veil.style.opacity = '1';
     await wait(560);
     try {
@@ -203,12 +203,15 @@ function startShell({ kit, content, el, cv, ctx, atlases, onHandoff }) {
     const payload = kit.summaryMerge(game, w);
     const p = mergeProfile(loadProfile(localStorage), payload);
     saveProfile(localStorage, p);                        // 先存档：无缝交接时下一关开局要读到新 abilities
-    if (kit.next) { onHandoff?.(kit.next); return; }     // 无缝交接：不弹结算页，直接进入下一间房
-    const day = el('summary').querySelector('.day');
-    if (day) day.textContent = CHAPTER_DAY[kit.chapter] || '';
-    ui.summary(game);
+    const showSummary = !kit.next || kit.summaryFirst;   // summaryFirst：章末先弹结算，再由按钮无缝交接
+    if (showSummary) {
+      const day = el('summary').querySelector('.day'); if (day) day.textContent = CHAPTER_DAY[kit.chapter] || '';
+      ui.summary(game, { words: [...game.book], stones: payload.picks ?? game.stonesPicked });
+    }
     const walk = el('btn-walk');
-    const next = CHAPTER_NEXT[kit.chapter];
+    if (kit.next && !kit.summaryFirst) { onHandoff?.(kit.next); return; }   // 无缝交接：不弹结算
+    if (kit.next) { walk.textContent = '下一间房 →'; walk.onclick = () => onHandoff?.(kit.next); return; }
+    const next = CHAPTER_NEXT[kit.chapter];              // 无 kit.next 的章（一/三）：沿用整页跳转或收尾
     if (next) {
       walk.textContent = '下一间房 →';
       walk.onclick = () => { location.href = next; };

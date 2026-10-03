@@ -76,3 +76,26 @@ test('sideview 新增件存在且可调用', () => {
   stepWalkTo(w, 0.1);
   assert.ok(w.player.x > 0 && w.player.x <= 30);
 });
+
+test('shell 导出 summaryFirst 分支与 veil label（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/shell.js', import.meta.url), 'utf8');
+  assert.match(src, /next\.label \?\?/);
+  assert.match(src, /summaryFirst/);
+});
+
+test('shell 保留无 kit.next 章节的既有结算路径（ch1 跳章 / ch3 收尾）', async () => {
+  const src = await readFile(new URL('../public/js/shell.js', import.meta.url), 'utf8');
+  assert.match(src, /CHAPTER_NEXT\[kit\.chapter\]/);                        // ch1：结算后按钮整页跳 chapter2.html
+  assert.match(src, /kit\.onFinal\?\.\(w\)/);                               // ch3：结算后收尾回调
+  assert.match(src, /ui\.summary\(game, \{ words: \[\.\.\.game\.book\]/);    // 结算图标仍取本局词表
+});
+
+test('ui.js：揭示卡参数化与缺省回落（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ui.js', import.meta.url), 'utf8');
+  assert.match(src, /content\.words\[word\]\?\.reveal \?\? \{\}/);
+  assert.match(src, /你用声音打开了门/);                                      // line 缺省
+  assert.match(src, /文字，是冻住的声音/);                                    // sub 缺省
+  assert.match(src, /把这个词，还给门/);                                      // ok 缺省
+  assert.match(src, /if \(!screen\) return/);                                // 章节无 #reveal 时静默
+  assert.match(src, /info\.words/);                                          // summary(game, info) 用 info.words 画图标
+});

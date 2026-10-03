@@ -38,16 +38,21 @@ export function createUI({ content, atlases, signal }) {
     if (isNew && book) { book.classList.add('armed'); setTimeout(() => book.classList.remove('armed'), 1600); }
   }
   function reveal(word) {
-    const def = content.words[word];
-    el('reveal-stones').innerHTML = def.phonemes.map(([p]) => `<span>${p}</span>`).join('');
+    const screen = el('reveal');
+    if (!screen) return Promise.resolve();               // 章节没有揭示卡：静默
+    const rev = content.words[word]?.reveal ?? {};       // 章可给 line/sub/ok；缺省回落 ch1 原文案
+    el('reveal-stones').innerHTML = (content.words[word]?.phonemes ?? []).map(([p]) => `<span>${p}</span>`).join('');
     el('reveal-word').textContent = word.toUpperCase();
-    el('reveal-ok').textContent = '把这个词，还给门';
-    el('reveal').classList.remove('hidden');
+    const line = screen.querySelector('h2'), sub = screen.querySelector('.sub');
+    if (line) line.textContent = rev.line ?? '你用声音打开了门';
+    if (sub) sub.textContent = rev.sub ?? '文字，是冻住的声音';
+    el('reveal-ok').textContent = rev.ok ?? '把这个词，还给门';
+    screen.classList.remove('hidden');
     return new Promise(res => {
       let settled = false;
       const done = () => {
         if (settled) return; settled = true;
-        el('reveal').classList.add('hidden');
+        screen.classList.add('hidden');
         document.removeEventListener('pointerdown', done);
         res();
       };
@@ -55,9 +60,9 @@ export function createUI({ content, atlases, signal }) {
       setTimeout(() => { if (!settled) document.addEventListener('pointerdown', done, { signal }); }, 12000); // 12s 后任意点按兜底（Task 13 评审 F；按钮仍是主路径）
     });
   }
-  function summary(g) {
+  function summary(g, info = {}) {
     el('summary-line').textContent = `你捡起了 ${g.book.size} 个词 · ${g.stonesPicked} 块声音石`;
-    el('summary-icons').innerHTML = [...g.book]
+    el('summary-icons').innerHTML = (info.words ?? [...g.book])
       .map(w => `<img src="${iconURL(content.words[w].icon)}" alt="">`).join('');
     el('summary').classList.remove('hidden');
   }
