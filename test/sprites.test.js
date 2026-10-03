@@ -83,6 +83,13 @@ test('tile 铺满矩形且不越界绘制', () => {
   }
 });
 
+test('第二章新增 SPR 条目在 mi 图集内', () => {
+  for (const n of ['crate_big', 'crate_sm', 'jars2', 'tree']) {
+    const s = SPR[n]; assert.ok(s, `缺 ${n}`);
+    assert.ok(s.x + s.w <= ATLASES[s.a].w && s.y + s.h <= ATLASES[s.a].h, `${n} 越界`);
+  }
+});
+
 test('drawChar 以脚底为锚（y - 95*scale），flip 时镜像', () => {
   const ctx = fakeCtx();
   drawChar(ctx, { ch: fakeImg }, 'kid', 'down', 1, 500, 600);
