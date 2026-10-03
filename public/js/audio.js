@@ -37,6 +37,9 @@ export class Speech {
       ?? (t => (typeof SpeechSynthesisUtterance !== 'undefined' ? new SpeechSynthesisUtterance(t) : null));
   }
   get ready() { return !!this.synth; }
+  cancel() {                    // 掐断当前语句（onerror/onend/估时兜底都会放行 speak 的 promise）
+    try { this.synth?.cancel(); } catch { /* ignore */ }
+  }
   // 静音热身：开局预触发一次（音量为 0），让移动端把网络音型提前拉好
   warmup() {
     if (!this.synth) return;
@@ -80,6 +83,34 @@ export class Speech {
       try { this.synth.speak(u); if (onStart) onStart(); startPulse(); }
       catch { finish(); }
     });
+  }
+}
+
+// —— 语音双车道队列（回归：连续快速点读曾排成长队，停手后音素声还在响很久）——
+// 台词（line）串行播放，教学台词绝不互掐；点读音素（carrier）「最新优先」：
+// 新点读让排队未播的旧点读到岗即跳过，并只掐断正在播的点读（不动台词）。
+export class SpeechQueue {
+  constructor(speech) {
+    this.speech = speech;
+    this.chain = Promise.resolve();
+    this.cur = null;              // 正在播的条目 { kind: 'line' | 'carrier' }
+    this.carrierGen = 0;          // 点读代际：只有最新一代真正发声
+  }
+  #enqueue(speakFn, kind, gen = 0) {
+    this.chain = this.chain.then(async () => {
+      if (kind === 'carrier' && gen !== this.carrierGen) return;   // 过期点读：直接放行
+      this.cur = { kind };
+      try { await speakFn(); } catch { /* 单条失败不堵队列 */ }
+      this.cur = null;
+    });
+    return this.chain;
+  }
+  line(text, conf) {
+    return this.#enqueue(() => this.speech.speak(text, conf), 'line');
+  }
+  carrier(text, conf) {
+    if (this.cur?.kind === 'carrier') this.speech.cancel?.();      // 只掐点读，不动台词
+    return this.#enqueue(() => this.speech.speak(text, conf), 'carrier', ++this.carrierGen);
   }
 }
 
