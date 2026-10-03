@@ -22,6 +22,27 @@ test('开局：大叔只出声招手，提示「按 E 碰他」', () => {
   assert.ok(out.some(i => i.t === 'hint' && i.key === 'hello'));
 });
 
+test('Hello 超时提醒只触发一次，之后不再自动发声', () => {
+  const g = createGame(content);
+  assert.deepEqual(gameEvent(g, 'TICK', 44), []);
+  const reminder = gameEvent(g, 'TICK', 1);
+  assert.deepEqual(reminder, [{ t: 'speak', who: 'uncle', text: 'Hello! Hello!', slow: true }]);
+  assert.equal(g.helloReminded, true);
+  assert.deepEqual(gameEvent(g, 'TICK', 45), []);
+});
+
+test('主动碰大叔会作废未触发的超时提醒，后续卡关只保留 hint', () => {
+  const g = createGame(content);
+  gameEvent(g, 'TICK', 44);
+  gameEvent(g, 'INTERACT', 'npc');
+  assert.equal(g.helloDropped, true);
+  assert.equal(g.helloReminded, true);
+  assert.equal(g.teaseClock, 0);
+  const out = gameEvent(g, 'TICK', 45);
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'hand'));
+  assert.ok(!out.some(i => i.t === 'speak' && i.who === 'uncle'));
+});
+
 test('首碰大叔：掉 hello 四石 + 提示「按 E 捡」', () => {
   const g = createGame(content);
   const out = gameEvent(g, 'INTERACT', 'npc');
@@ -78,12 +99,15 @@ test('全流程：hello 教学合成（大叔庆祝）→ 开关（Open+掉石+�
   // open
   out = carry(g, 'open');
   out = out.concat(gameEvent(g, 'CRAFT', 'open'));
+  assert.equal(out.filter(i => i.t === 'speak' && i.who === 'child' && i.text === 'Open.').length, 1);
   assert.ok(g.inv.items.has('open'));
   // 拿起词具 → 门
   out = gameEvent(g, 'HOLD_ITEM', 'open');
   assert.deepEqual(g.hand, { kind: 'item', word: 'open' });
+  assert.ok(!out.some(i => i.t === 'speak'));
   out = gameEvent(g, 'USE', { word: 'open', target: 'door' });
   assert.ok(out.some(i => i.t === 'ritualStart'));
+  assert.ok(!out.some(i => i.t === 'speak'));
   assert.equal(g.hand, null);
   gameEvent(g, 'RITUAL_DONE');
   assert.equal(g.door.state, 'opening');
@@ -107,8 +131,10 @@ test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应；再点�
   gameEvent(g, 'INTERACT', 'npc');
   carry(g, 'hello');
   gameEvent(g, 'CRAFT', 'hello');
-  gameEvent(g, 'HOLD_ITEM', 'hello');
-  let out = gameEvent(g, 'INTERACT', 'npc');                            // 手持 hello 碰大叔 = USE
+  let out = gameEvent(g, 'HOLD_ITEM', 'hello');
+  assert.ok(!out.some(i => i.t === 'speak'));
+  out = gameEvent(g, 'INTERACT', 'npc');                            // 手持 hello 碰大叔 = USE
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'child' && i.text === 'Hello.'));
   assert.ok(out.some(i => i.t === 'effect' && i.name === 'greet' && i.full === true));
   assert.ok(out.some(i => i.t === 'hint' && i.key === 'helloDone'));   // 回礼后指向发光开关
   out = gameEvent(g, 'INTERACT', 'npc');                                // 手上仍持有 → 重复使用轻反应

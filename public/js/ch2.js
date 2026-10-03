@@ -62,7 +62,7 @@ export function gameEvent(g, ev, arg = null) {
         return [{ t: 'hand' }];
       }
       g.hand = { kind: 'item', word };
-      return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' }, { t: 'hint', key: 'give' }];
+      return [{ t: 'hand' }, { t: 'hint', key: 'give' }];
     }
     case 'CRAFT': {
       const word = arg;
@@ -83,16 +83,16 @@ export function gameEvent(g, ev, arg = null) {
       const { word, target } = arg;
       const def = c.words[word]?.use;
       if (!def || target !== def.target) return [{ t: 'mutter' }];
-      if (g.jumpUnlocked) return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'effect', name: 'jumpUnlock', full: false }];
+      if (g.jumpUnlocked) return [{ t: 'effect', name: 'jumpUnlock', full: false }];
       g.jumpUnlocked = true;
-      return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'effect', name: 'jumpUnlock', full: true }];
+      return [{ t: 'effect', name: 'jumpUnlock', full: true }];
     }
     case 'CROSS':
       if (g.crossed) return [];
       g.crossed = true;
       return [{ t: 'hint', key: 'exit' }, { t: 'beat', beat: 'crossed' }];
     case 'FELL':
-      return [{ t: 'fell' }, { t: 'meow' }, { t: 'hint', key: 'fell' }];
+      return [{ t: 'fell' }, { t: 'hint', key: 'fell' }];
     case 'EXIT': {
       if (g.exited) return [];
       g.exited = true;
@@ -130,14 +130,15 @@ export function jumpDebug(g, beat) {
 }
 
 // ================= 浏览器 kit（壳 + 横版共用件） =================
-import { mount, CHAPTER_DAY } from './shell.js';
-import { SIDE, shade, moveSide, sideJump, spawnSideStone, stepSideStone,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawWallBack, drawFloorSide } from './sideview.js';
-import { PAL, drawRune } from './art.js';
-import { blit, tile } from './sprites.js';
-import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
+import { mount } from './shell.js';
+import { SIDE, moveSide, sideJump, spawnSideStone, stepSideStone, planDropStones,
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawMossyWall } from './sideview.js';
+import { PAL } from './art.js';
+import { tile } from './sprites.js';
+import { createActors, updateActors, drawPlayer } from './actors.js';
 import { seedMemory, neededSeeds } from './profile.js';
 import { isVowel } from './hotbar.js';
+import { rng } from './scene.js';
 
 const kit = {
   chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
@@ -155,7 +156,6 @@ const kit = {
     const player = actors.player;
     player.x = geo.spawnX; player.y = geo.groundY; player.dir = 'right';
     player.vy = 0; player.airborne = false; player.squash = 0;
-    actors.cat.x = geo.spawnX - 70; actors.cat.y = geo.groundY + 12;
     const w = {
       actors, player, geo,
       stones: [],
@@ -196,12 +196,14 @@ const kit = {
     updateActors(w.actors, dt);
     moveSide(w, dt);
     if (w.player.moving && (w.keys.has('l') || w.keys.has('r'))) w.player.walkT += dt;  // 行走帧推进（仅水平移动）
-    // 猫：过坑后在对岸出现
-    const cat = w.actors.cat;
-    const tx = w.player.x > geo.chasmR ? geo.chasmR + 90
-      : Math.max(geo.spawnX - 70, w.player.x - 80);
-    cat.x += (tx - cat.x) * Math.min(1, dt * 2.5);
-    for (const s of w.stones) if (s.state !== 'idle') stepSideStone(s, dt, geo.groundY);
+    // 走到走廊尽头：不再有门，直接进入下一关
+    if (!w.game.exited && w.game.crossed && w.player.x >= geo.exitX - 10) w.run(gameEvent(w.game, 'EXIT'));
+    for (const s of w.stones) {
+      if (s.state === 'idle') continue;
+      stepSideStone(s, dt, geo.groundY);
+      if (s.state === 'idle' && s.x >= geo.chasmL && s.x <= geo.chasmR)
+        s.x = geo.chasmL - 30 - Math.random() * 40;                         // 保险：石头绝不落在裂隙里
+    }
     for (const m of v.mist) m.ph += dt * m.v * 0.1;
     v.stars = v.stars.filter(st => (st.a -= dt * 1.2) > 0);
     v.puffs = v.puffs.filter(p => { p.r += dt * 40; p.a -= dt * 2; return p.a > 0; });
@@ -215,8 +217,6 @@ const kit = {
       consider(Math.hypot(player.x - s.x, geo.groundY - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, stone: s }, 56);
     }
     consider(Math.abs(player.x - geo.benchX), { kind: 'obj', id: 'bench', x: geo.benchX, y: geo.groundY }, 80);
-    consider(Math.abs(player.x - geo.exitX), { kind: 'obj', id: 'exit', x: geo.exitX, y: geo.groundY }, 80);
-    consider(Math.abs(player.x - w.actors.cat.x), { kind: 'obj', id: 'cat', x: w.actors.cat.x, y: w.actors.cat.y }, 50);
     if (w.game.hand?.kind === 'item') consider(0, { kind: 'obj', id: 'self', x: player.x, y: player.y }, 0);
     return best;
   },
@@ -229,8 +229,6 @@ const kit = {
       w.run(gameEvent(game, 'PICKUP', t.ipa));
     }
     else if (t.id === 'bench') w.run(gameEvent(game, 'BANK'));
-    else if (t.id === 'cat') w.run([{ t: 'meow' }]);
-    else if (t.id === 'exit') w.run(gameEvent(game, 'EXIT'));
     else if (t.id === 'self' && game.hand?.kind === 'item') w.run(gameEvent(game, 'USE', { word: game.hand.word, target: 'player' }));
     else w.sfx.mutter();
   },
@@ -245,9 +243,9 @@ const kit = {
   runExtras: {
     drop(w, ins) {
       const f = w.content.flows[ins.word];
-      w.content.words[ins.word].phonemes.forEach(([ipa], i) => {
-        spawnSideStone(w.stones, ipa, f.drop[0] + i * 46, f.drop[1] - 180, (Math.random() - 0.5) * 40, -120);
-      });
+      for (const s of planDropStones(w.content.words[ins.word], w.game.inv, f.drop, w.geo.chasmL)) {
+        spawnSideStone(w.stones, s.ipa, s.x, f.drop[1] - 180, (Math.random() - 0.5) * 40, -120);
+      }
     },
     dropBack(w, ins) { spawnSideStone(w.stones, ins.ipa, w.player.x - 20, w.geo.groundY - 120, -60, -100); },
     shrug(w) { w.player.squash = 0.9; },
@@ -287,6 +285,9 @@ const kit = {
     const gg = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 220);
     gg.addColorStop(0, '#05060a'); gg.addColorStop(1, '#000');
     x.fillStyle = gg; x.fillRect(geo.chasmL, geo.groundY, geo.chasmR - geo.chasmL, 220);
+    // 断口两侧：苔藓巨石断崖
+    drawCliffCluster(x, w.atlases, geo.chasmL, +1, geo.groundY, 71);
+    drawCliffCluster(x, w.atlases, geo.chasmR, -1, geo.groundY, 72);
     x.fillStyle = 'rgba(90,100,120,.14)';
     for (const m of v.mist) {
       const span = geo.chasmR - geo.chasmL;
@@ -294,15 +295,9 @@ const kit = {
       x.ellipse(geo.chasmL + ((m.o * span + Math.sin(m.ph) * 20 + span) % span), geo.groundY + 26 + Math.sin(m.ph * 1.3) * 8, 34, 10, 0, 0, 7);
       x.fill();
     }
-    x.fillStyle = shade(PAL.stoneD, -0.2);
-    for (const [cx, cy, r] of [[geo.chasmL, geo.groundY + 8, 12], [geo.chasmR, geo.groundY + 8, 12], [geo.chasmL + 26, geo.groundY + 22, 7], [geo.chasmR - 26, geo.groundY + 20, 7]]) {
-      x.beginPath(); x.arc(cx, cy, r, 0, 7); x.fill();
-    }
     drawTorchSide(x, 90, 180, v.t);
     drawTorchSide(x, geo.chasmR + 120, 180, v.t);
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone');
-    drawExit(x, w.atlases, geo.exitX, geo.groundY, game.crossed, v.t);
-    drawCat(x, w.actors.cat, v.t);
     x.save();
     if (w.player.airborne) { x.translate(w.player.x, w.player.y); x.scale(1, 0.92); x.translate(-w.player.x, -w.player.y); }
     if (w.player.squash > 0) { const q = 1 - Math.sin(w.player.squash * Math.PI) * 0.08; x.translate(w.player.x, w.player.y); x.scale(1.06, q); x.translate(-w.player.x, -w.player.y); }
@@ -315,36 +310,117 @@ const kit = {
   }
 };
 
+// —— 裂口断崖：大块苔藓巨石参差咬合（顶面受光、底面没入深渊）+ 路面裂缝 + 碎石 ——
+// dir=+1：左路肩（石块伸向裂口右方）；dir=-1：右路肩（伸向左方）
+const CLIFF_TEX = { wallClean: [1104, 1128], wallMoss: [814, 818], wallHalfMoss: [1128, 1142] };
+function drawCliffCluster(x, imgs, ex, dir, gy, seed) {
+  const r = rng(seed);
+  x.fillStyle = 'rgba(0,0,0,.32)';                         // 巨石压在路缘的接触阴影
+  x.beginPath(); x.ellipse(ex + dir * 6, gy + 7, 34, 6, 0, 0, 7); x.fill();
+  const rocks = [                                          // 三块巨石自上而下咬合路缘（先画底下层）
+    { ox: -10, oy: 86, w: 50, h: 52, moss: 0    },
+    { ox: -14, oy: 40, w: 66, h: 60, moss: 0.5  },
+    { ox: -20, oy: -12, w: 84, h: 72, moss: 1   },
+  ];
+  for (const rk of rocks) {
+    const cx = ex + dir * (rk.ox + rk.w / 2);
+    const cy = gy + rk.oy + rk.h / 2;
+    const rx = rk.w / 2, ry = rk.h / 2;
+    const n = 10, pts = [];
+    for (let i = 0; i < n; i++) {                          // 墩实圆润的巨石轮廓
+      const a = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const j = 0.8 + r() * 0.34;
+      pts.push([cx + Math.cos(a) * rx * j, cy + Math.sin(a) * ry * j]);
+    }
+    x.save();
+    x.beginPath();
+    x.moveTo(pts[0][0], pts[0][1]);
+    for (const [px, py] of pts.slice(1)) x.lineTo(px, py);
+    x.closePath();
+    x.save();
+    x.clip();
+    const sw = Math.round(rk.w * 3.2), shh = Math.round(rk.h * 3.2);
+    if (imgs?.wallClean) {                                 // 石块本体：墙体同材质
+      const [W0, H0] = CLIFF_TEX.wallClean;
+      const sx0 = Math.round(r() * (W0 - sw)), sy0 = Math.round(r() * (H0 - shh));
+      x.drawImage(imgs.wallClean, sx0, sy0, sw, shh, cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h + 16);
+    } else {
+      x.fillStyle = PAL.stoneD;
+      x.fillRect(cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h + 16);
+    }
+    if (imgs?.wallMoss && rk.moss > 0) {                   // 顶面苔藓盖头（两块错位补丁打散直缝）
+      const [W1, H1] = CLIFF_TEX.wallMoss;
+      const mw = Math.round(rk.w * 2.6), mh = Math.round(rk.h * 1.4);
+      for (const [hFrac, aFrac, oyF] of [[0.5, rk.moss, -4], [0.36, rk.moss * 0.65, rk.h * 0.36]]) {
+        x.globalAlpha = aFrac;
+        const mx0 = Math.round(r() * (W1 - mw)), my0 = Math.round(r() * (H1 - mh));
+        x.drawImage(imgs.wallMoss, mx0, my0, mw, mh, cx - rx - 8, cy - ry - 8 + oyF, rk.w + 16, rk.h * hFrac + 8);
+      }
+      x.globalAlpha = 1;
+    }
+    const sh = x.createLinearGradient(0, cy - ry - 8, 0, cy + ry + 8);   // 顶受光、底没入深渊
+    sh.addColorStop(0, 'rgba(255,240,214,.22)');
+    sh.addColorStop(0.42, 'rgba(0,0,0,0)');
+    sh.addColorStop(1, 'rgba(4,5,9,.74)');
+    x.fillStyle = sh;
+    x.fillRect(cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h + 16);
+    x.restore();
+    x.strokeStyle = 'rgba(10,12,18,.9)'; x.lineWidth = 2.5;              // 巨石描边
+    x.stroke();
+    x.restore();
+  }
+  x.strokeStyle = 'rgba(20,24,34,.5)'; x.lineWidth = 1.6;   // 路面裂缝（向路里延伸）
+  for (let c = 0; c < 2; c++) {
+    let cx = ex - dir * (10 + r() * 20), cy = gy + 3 + r() * 5;
+    x.beginPath(); x.moveTo(cx, cy);
+    for (let i = 0; i < 3; i++) { cx -= dir * (10 + r() * 14); cy += (r() - 0.5) * 7; x.lineTo(cx, cy); }
+    x.stroke();
+  }
+  x.fillStyle = 'rgba(186,190,200,.85)';                    // 散落碎石
+  for (let i = 0; i < 5; i++) {
+    x.beginPath();
+    x.ellipse(ex - dir * (8 + r() * 48), gy + 4 + r() * 12, 2.2 + r() * 2.6, 1.6 + r() * 1.5, 0, 0, 7);
+    x.fill();
+  }
+  x.fillStyle = 'rgba(210,214,224,.9)';                     // 石缝碎屑
+  for (let i = 0; i < 3; i++) {
+    x.beginPath();
+    x.ellipse(ex - dir * (4 + r() * 12), gy + 2 + r() * 5, 1.6 + r() * 1.6, 1.2 + r(), 0, 0, 7);
+    x.fill();
+  }
+}
+
 function makeBg(w) {
   const { geo } = w;
   const c = document.createElement('canvas');
   c.width = SIDE.W; c.height = SIDE.H;
   const x = c.getContext('2d');
   x.imageSmoothingEnabled = false;
-  drawWallBack(x, w.atlases, SIDE.W, SIDE.H, 0.42);
+  // 墙：第一关同款青苔墙砖随机拼接 + 顶部渐暗
+  drawMossyWall(x, w.atlases, SIDE.W, geo.groundY - 16, 23);
+  const wsh = x.createLinearGradient(0, 0, 0, geo.groundY - 16);
+  wsh.addColorStop(0, 'rgba(10,12,20,.42)'); wsh.addColorStop(0.6, 'rgba(10,12,20,0)');
+  x.fillStyle = wsh; x.fillRect(0, 0, SIDE.W, geo.groundY - 16);
   // 墙脚踢脚线（裂缝两侧断开）
   tile(x, w.atlases, 'wall_base', 0, geo.groundY - 16, geo.chasmL, 16);
   tile(x, w.atlases, 'wall_base', geo.chasmR, geo.groundY - 16, SIDE.W - geo.chasmR, 16);
-  // 地面（裂缝两侧）：MI 地砖平铺 + 顶缘亮线 + 下部压暗
-  drawFloorSide(x, w.atlases, 0, geo.groundY, geo.chasmL, 130);
-  drawFloorSide(x, w.atlases, geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130);
+  // 地面（裂缝两侧）：第一关同款砖石地砖 + 顶缘亮线 + 下部压暗
+  tile(x, w.atlases, 'floor_brick', 0, geo.groundY, geo.chasmL, 130, 0.25);
+  tile(x, w.atlases, 'floor_brick', geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130, 0.25);
   x.fillStyle = 'rgba(255,236,200,.09)';
   x.fillRect(0, geo.groundY, geo.chasmL, 2); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 2);
+  // 墙脚落地阴影（压住墙/地交界）
+  const fsh = x.createLinearGradient(0, geo.groundY - 8, 0, geo.groundY + 36);
+  fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = fsh; x.fillRect(0, geo.groundY - 8, SIDE.W, 44);
   const gsh = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 130);
   gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.42)');
   x.fillStyle = gsh;
   x.fillRect(0, geo.groundY, geo.chasmL, 130); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130);
+  // 黄昏底色：与第一关同一层压暗，统一氛围
+  x.fillStyle = 'rgba(16,18,36,.30)';
+  x.fillRect(0, 0, SIDE.W, SIDE.H);
   return c;
-}
-
-function drawExit(x, imgs, ex, gy, lit) {
-  blit(x, imgs, 'door', ex - 27, gy - 78);
-  drawRune(x, 'ᚹ', ex, gy - 46, 20, lit ? PAL.glowRune : 'rgba(30,32,44,.85)', 3);
-  if (lit) {
-    const g = x.createRadialGradient(ex, gy - 40, 10, ex, gy - 40, 90);
-    g.addColorStop(0, 'rgba(255,214,130,.25)'); g.addColorStop(1, 'rgba(255,214,130,0)');
-    x.fillStyle = g; x.beginPath(); x.arc(ex, gy - 40, 90, 0, 7); x.fill();
-  }
 }
 
 function drawFX(w, x) {

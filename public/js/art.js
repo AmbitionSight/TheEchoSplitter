@@ -82,7 +82,7 @@ export function drawRune(ctx, glyph, cx, cy, size, color = PAL.glowRune, lw = nu
 }
 
 // —— 手绘图标库（厚描边 Q 版，规格 §9C，禁 emoji）——
-export const ICON_TYPES = ['hello', 'water', 'fire', 'hat', 'light', 'open', 'switch', 'jump', 'rope', 'gem'];
+export const ICON_TYPES = ['hello', 'water', 'fire', 'hat', 'light', 'open', 'switch', 'jump', 'rope', 'log', 'raft', 'pole', 'gem'];
 
 function ink(ctx, s) { ctx.lineWidth = Math.max(3, s * 0.09); ctx.strokeStyle = PAL.ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
 
@@ -220,6 +220,42 @@ const ICON_DRAW = {
     ctx.beginPath(); ctx.moveTo(cx - s * 0.02, cy + s * 0.34); ctx.lineTo(cx + s * 0.08, cy + s * 0.44); ctx.stroke(); // 绳头散絮
     ctx.beginPath(); ctx.moveTo(cx - s * 0.02, cy + s * 0.34); ctx.lineTo(cx - s * 0.12, cy + s * 0.44); ctx.stroke();
   },
+  log(ctx, cx, cy, s) { // 原木：树皮、年轮与端面
+    ink(ctx, s);
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(-0.08);
+    ctx.fillStyle = '#9a6536';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(-s * 0.46, -s * 0.16, s * 0.92, s * 0.32, s * 0.12); else ctx.rect(-s * 0.46, -s * 0.16, s * 0.92, s * 0.32);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#d0a064';
+    ctx.beginPath(); ctx.ellipse(-s * 0.46, 0, s * 0.12, s * 0.16, 0, 0, 7); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#6f4327'; ctx.lineWidth = Math.max(2, s * 0.04);
+    ctx.beginPath(); ctx.ellipse(-s * 0.46, 0, s * 0.06, s * 0.1, 0, 0, 7); ctx.stroke();
+    ctx.restore();
+  },
+  raft(ctx, cx, cy, s) { // 排木与交叉捆绳
+    ink(ctx, s);
+    ctx.fillStyle = '#8e5e33';
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(cx - s * 0.42, cy + i * s * 0.12 - s * 0.06, s * 0.84, s * 0.12, s * 0.04); else ctx.rect(cx - s * 0.42, cy + i * s * 0.12 - s * 0.06, s * 0.84, s * 0.12);
+      ctx.fill(); ctx.stroke();
+    }
+    ctx.strokeStyle = '#d5b56b'; ctx.lineWidth = Math.max(3, s * 0.06);
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.38, cy - s * 0.27); ctx.lineTo(cx + s * 0.38, cy + s * 0.27);
+    ctx.moveTo(cx - s * 0.38, cy + s * 0.27); ctx.lineTo(cx + s * 0.38, cy - s * 0.27);
+    ctx.stroke();
+  },
+  pole(ctx, cx, cy, s) { // 细长木篙与握把
+    ink(ctx, s);
+    ctx.strokeStyle = '#b88a54'; ctx.lineWidth = Math.max(4, s * 0.09);
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.28, cy + s * 0.42); ctx.lineTo(cx + s * 0.28, cy - s * 0.42); ctx.stroke();
+    ctx.strokeStyle = '#e0bd79'; ctx.lineWidth = Math.max(2, s * 0.035);
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.34, cy + s * 0.36); ctx.lineTo(cx + s * 0.22, cy - s * 0.34); ctx.stroke();
+    ctx.fillStyle = '#7a4d2c';
+    ctx.beginPath(); ctx.arc(cx + s * 0.3, cy - s * 0.45, s * 0.08, 0, 7); ctx.fill(); ctx.stroke();
+  },
   gem(ctx, cx, cy, s) { // 菱形宝石（声音石袋）
     ink(ctx, s);
     ctx.fillStyle = PAL.cons;
@@ -234,6 +270,48 @@ const ICON_DRAW = {
 export function drawIcon(ctx, type, cx, cy, size) {
   ctx.save();
   (ICON_DRAW[type] || ICON_DRAW.gem)(ctx, cx, cy, size);
+  ctx.restore();
+}
+
+export function drawCross(ctx, x, y, size = 26) {
+  ctx.save();
+  ctx.strokeStyle = '#e5484d';
+  ctx.lineWidth = Math.max(3, size * 0.16);
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x - size / 2, y - size / 2);
+  ctx.lineTo(x + size / 2, y + size / 2);
+  ctx.moveTo(x + size / 2, y - size / 2);
+  ctx.lineTo(x - size / 2, y + size / 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+export function drawBulb(ctx, x, y, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const glow = ctx.createRadialGradient(x, y, 3, x, y, 42);
+  glow.addColorStop(0, 'rgba(255,220,110,.55)');
+  glow.addColorStop(1, 'rgba(255,220,110,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(x, y, 42, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffdc70';
+  ctx.strokeStyle = PAL.ink;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(x, y - 5, 13, Math.PI * 0.1, Math.PI * 0.9, true);
+  ctx.quadraticCurveTo(x + 12, y + 13, x + 6, y + 16);
+  ctx.lineTo(x - 6, y + 16);
+  ctx.quadraticCurveTo(x - 12, y + 13, x - 13, y - 5);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#d6a94d';
+  ctx.fillRect(x - 6, y + 15, 12, 6);
+  ctx.strokeRect(x - 6, y + 15, 12, 6);
+  ctx.strokeStyle = '#ffdc70';
+  ctx.lineWidth = 3;
+  for (const [dx, dy, ex, ey] of [[0, -28, 0, -37], [-20, -18, -27, -24], [20, -18, 27, -24]]) {
+    ctx.beginPath(); ctx.moveTo(x + dx, y + dy); ctx.lineTo(x + ex, y + ey); ctx.stroke();
+  }
   ctx.restore();
 }
 

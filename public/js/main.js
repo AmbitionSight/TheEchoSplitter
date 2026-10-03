@@ -13,7 +13,7 @@ export function createGame(content) {
     stonesPicked: 0, lit: false,
     hand: null,                        // {kind:'stone',ipa} | {kind:'item',word} | null
     door: createDoor(), usedTargets: new Set(),
-    helloDropped: false, switchOn: false,
+    helloDropped: false, helloReminded: false, switchOn: false,
     teaseClock: 0
   };
 }
@@ -39,8 +39,11 @@ function teaseOut(g) {
   const c = g.content;
   const tease = chooseTease(g);
   if (!tease) return [];
-  if (tease.kind === 'hello') return [{ t: 'speak', who: 'uncle', text: c.flows.hello.lines[0], slow: true }];
-  return [{ t: 'speak', who: 'uncle', text: c.flows.hello.lines[0], slow: true }, { t: 'hint', key: tease.key }];
+  if (tease.kind === 'hello' && !g.helloReminded) {
+    g.helloReminded = true;
+    return [{ t: 'speak', who: 'uncle', text: c.flows.hello.lines[0], slow: true }];
+  }
+  return tease.kind === 'hello' ? [] : [{ t: 'hint', key: tease.key }];
 }
 
 export function gameEvent(g, ev, arg = null) {
@@ -51,6 +54,8 @@ export function gameEvent(g, ev, arg = null) {
       if (id === 'cat') return [{ t: 'cat' }];
       if (c.ambience[id]) return [{ t: 'sfx', name: c.ambience[id].sfx }];
       if (id === 'npc') {
+        g.helloReminded = true;
+        g.teaseClock = 0;
         if (g.hand?.kind === 'item' && g.hand.word === 'hello') {
           return gameEvent(g, 'USE', { word: 'hello', target: 'npc' });
         }
@@ -100,7 +105,7 @@ export function gameEvent(g, ev, arg = null) {
         return [{ t: 'hand' }];
       }
       g.hand = { kind: 'item', word };
-      return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' },
+      return [{ t: 'hand' },
               { t: 'hint', key: word === 'open' ? 'openItem' : 'helloGive' }];
     }
     case 'BANK': {                      // 合成台：手上的石存入底部物品栏
@@ -135,7 +140,7 @@ export function gameEvent(g, ev, arg = null) {
         const r = doorEvent(g.door, 'OFFER', 'open');
         if (r?.ritual) {
           g.usedTargets.add(target); g.hand = null;
-          return [{ t: 'speak', who: 'child', text: cap(word) }, { t: 'hand' }, { t: 'ritualStart' }];
+          return [{ t: 'hand' }, { t: 'ritualStart' }];
         }
         return [{ t: 'mutter' }];
       }
@@ -161,6 +166,7 @@ export function gameEvent(g, ev, arg = null) {
       return [{ t: 'summary' }];
     }
     case 'TICK': {
+      if (!g.helloDropped && g.helloReminded) return [];
       g.teaseClock += arg;
       if (g.teaseClock < 45) return [];
       g.teaseClock = 0;
@@ -473,14 +479,12 @@ function startRitual(w) {
   ritual.active = true; ritual.t = 0; ritual.seated = 0;
   w.sfx.glowTick();
   const seats = ritualSeats(w.content.door.ipa.length);
-  const stones = w.content.door.ipa.map((ipa) => makeStone(ipa, 1145, 460, 0));
+  const stones = w.content.door.ipa.map((ipa) => makeStone(ipa, 1112, 240, 0));
   stones.forEach((s, i) => {
-    s.state = 'idle'; s.from = { x: 1145, y: 460 }; s.to = { x: seats[i][0], y: seats[i][1] }; s.at = i * RITUAL_STEP;
+    s.state = 'idle'; s.from = { x: 1112, y: 240 }; s.to = { x: seats[i][0], y: seats[i][1] }; s.at = i * RITUAL_STEP;
     w.stones.push(s);
   });
   const T = RITUAL_STEP * 4 * 1000;
-  setTimeout(() => w.speak('Open.', 'door', true), T * 0.5);
-  setTimeout(() => w.speak('Open!', 'child'), T * 0.85);
   setTimeout(async () => {
     await w.ui.reveal('open');
     w.run(gameEvent(w.game, 'RITUAL_DONE'));

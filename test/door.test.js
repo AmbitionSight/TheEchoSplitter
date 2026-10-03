@@ -24,5 +24,5 @@ test('仪式座位数据：4 座绕拱，可截取', async () => {
   const { ritualSeats, RITUAL_STEP } = await import('../public/js/door.js');
   assert.equal(RITUAL_STEP, 0.55);
   assert.equal(ritualSeats().length, 4);
-  assert.deepEqual(ritualSeats(2), [[1098, 502], [1116, 396]]);
+  assert.deepEqual(ritualSeats(2), [[1054, 314], [1084, 186]]);
 });

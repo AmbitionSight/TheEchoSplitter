@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { PAL, RUNE_STROKES, ICON_TYPES, drawIcon, drawRune } from '../public/js/art.js';
+import { PAL, RUNE_STROKES, ICON_TYPES, drawIcon, drawRune, drawBulb, drawCross } from '../public/js/art.js';
 
 const data = JSON.parse(await readFile(new URL('../content/chapter1.json', import.meta.url), 'utf8'));
 
@@ -32,12 +32,14 @@ test('48 个卢文字形都有折线数据（0..1 归一，线段合法）', () 
 
 test('PAL 与 ICON_TYPES 齐备', () => {
   for (const k of ['ink','vowel','cons','glowRune','gold','uiBlue']) assert.ok(PAL[k]);
-  assert.deepEqual([...ICON_TYPES].sort(), ['fire','gem','hat','hello','jump','light','open','rope','switch','water']);
+  assert.deepEqual([...ICON_TYPES].sort(), ['fire','gem','hat','hello','jump','light','log','open','pole','raft','rope','switch','water']);
 });
 
 test('drawIcon / drawRune 在桩 ctx 上可执行且确实作画', () => {
   const ctx = makeCtx();
   for (const t of ICON_TYPES) drawIcon(ctx, t, 100, 100, 64);
+  drawBulb(ctx, 100, 100);
+  drawCross(ctx, 100, 100);
   assert.ok(ctx.__calls.moveTo + ctx.__calls.arc > 10);
   const r = makeCtx();
   drawRune(r, data.phonemeBook.runes['ə'], 50, 50, 40, '#fff');

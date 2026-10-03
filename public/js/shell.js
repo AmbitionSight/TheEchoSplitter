@@ -6,8 +6,8 @@ import { Speech, Sfx, pickVoices } from './audio.js';
 import { loadProfile, saveProfile, mergeProfile } from './profile.js';
 import { loadAtlases } from './sprites.js';
 
-export const CHAPTER_NEXT = { 1: 'chapter2.html', 2: 'chapter3.html', 3: null };
-export const CHAPTER_DAY = { 1: '第一天', 2: '第二间房', 3: '第三间房' };
+export const CHAPTER_NEXT = { 1: 'chapter2.html', 2: 'chapter3.html', 3: '/chapter4.html', 4: null };
+export const CHAPTER_DAY = { 1: '第一天', 2: '第二间房', 3: '第三间房', 4: '第四天' };
 
 const cap = w => w[0].toUpperCase() + w.slice(1) + '.';
 

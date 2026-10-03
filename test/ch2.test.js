@@ -3,7 +3,8 @@ import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { createGame, gameEvent, jumpDebug, startGame } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
-import { addStone, stoneCount } from '../public/js/hotbar.js';
+import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
+import { planDropStones } from '../public/js/sideview.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter2.json', import.meta.url), 'utf8'));
 const ch1Profile = mergeProfile(createProfile(), {
@@ -41,6 +42,16 @@ test('空格尝试：耸肩+红叉气泡+童声疑惑+世界低语+只掉一次 
   assert.ok(!out.some(i => i.t === 'drop'));
 });
 
+test('掉落规划：p 已由记忆石补位则不再落地；落点全部在裂口近侧可达处', () => {
+  const inv = createInventory();
+  addStone(inv, 'p');
+  const plan = planDropStones(content.words.jump, inv, content.flows.jump.drop, content.geometry.chasmL);
+  assert.deepEqual(plan.map(s => s.ipa), ['dʒ', 'ʌ', 'm']);            // p 是旧识，不再掉一颗
+  for (const s of plan) assert.ok(s.x < content.geometry.chasmL, `石头 ${s.ipa} 落进裂隙 x=${s.x}`);
+  const fresh = planDropStones(content.words.jump, createInventory(), content.flows.jump.drop, content.geometry.chasmL);
+  assert.deepEqual(fresh.map(s => s.ipa), ['dʒ', 'ʌ', 'm', 'p']);      // 无书档新档：p 仍须实地捡
+});
+
 test('全流程：E 搬运（p 由记忆补位）→ 合成 jump → 对自己用 → 解锁 → 过坑 → 出口结算', () => {
   const g = createGame(content, ch1Profile);
   seedMemory(g.inv, addStone, ch1Profile.everPicked);                   // p 一颗
@@ -53,9 +64,12 @@ test('全流程：E 搬运（p 由记忆补位）→ 合成 jump → 对自己�
   assert.ok(g.inv.items.has('jump') && g.book.has('jump'));
   assert.ok(out.some(i => i.t === 'resonate' && i.word === 'jump'));
   assert.equal(stoneCount(g.inv, 'p'), 0);                              // 全部消耗
+  out = gameEvent(g, 'HOLD_ITEM', 'jump');
+  assert.ok(!out.some(i => i.t === 'speak'));
   out = gameEvent(g, 'USE', { word: 'jump', target: 'well' });          // 用错目标
   assert.ok(out.some(i => i.t === 'mutter'));
   out = gameEvent(g, 'USE', { word: 'jump', target: 'player' });
+  assert.ok(!out.some(i => i.t === 'speak'));
   assert.ok(out.some(i => i.t === 'effect' && i.name === 'jumpUnlock' && i.full === true));
   assert.equal(g.jumpUnlocked, true);
   out = gameEvent(g, 'USE', { word: 'jump', target: 'player' });        // 重复：轻反应
@@ -67,11 +81,11 @@ test('全流程：E 搬运（p 由记忆补位）→ 合成 jump → 对自己�
   assert.equal(g.exited, true);
 });
 
-test('FELL：软重生无惩罚（提示 + 猫叫）；TICK 链按进度给提示', () => {
+test('FELL：软重生无惩罚（提示）；TICK 链按进度给提示', () => {
   const g = createGame(content, ch1Profile);
   const out = gameEvent(g, 'FELL');
   assert.ok(out.some(i => i.t === 'fell'));
-  assert.ok(out.some(i => i.t === 'meow'));
+  assert.ok(!out.some(i => i.t === 'meow'));                          // 猫只在第一关出场
   for (let i = 0; i < 44; i++) gameEvent(g, 'TICK', 1);
   let tease = gameEvent(g, 'TICK', 1);
   assert.ok(tease.some(i => i.t === 'hint'));

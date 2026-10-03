@@ -1,6 +1,6 @@
 // —— 横版共用件：移动/跳跃/攀爬物理核心 + 通用渲染（火把/合成台/石头/E 提示/暗角） ——
 import { PAL } from './art.js';
-import { isVowel } from './hotbar.js';
+import { isVowel, stoneCount } from './hotbar.js';
 import { blit, tile } from './sprites.js';
 
 export const SIDE = { W: 1280, H: 720 };
@@ -35,7 +35,8 @@ export function moveSide(w, dt) {
     if (w.keys.has('l')) { p.x -= sp; p.facing = -1; p.dir = 'left'; }
     if (w.keys.has('r')) { p.x += sp; p.facing = 1; p.dir = 'right'; }
     p.moving = w.keys.size > 0 && !p.airborne;
-    if (wall) {
+    // blockGround:false = 高台/窗语义（第三关）：只保留墙顶平台，窗户以下墙面畅通
+    if (wall && wall.blockGround !== false) {
       const inWallX = p.x > wall.X - 14 && p.x < wall.X + wall.W + 14;
       if (inWallX && p.y > wall.topY + 4) {
         p.x = p.x < wall.X + wall.W / 2 ? wall.X - 14 : wall.X + wall.W + 14;
@@ -72,6 +73,15 @@ export function spawnSideStone(list, ipa, x, y, vx, vy) {
 export function stepSideStone(s, dt, groundY) {
   s.vy += 1300 * dt; s.x += s.vx * dt; s.y += s.vy * dt;
   if (s.y >= groundY - 14 && s.vy > 0) { s.y = groundY - 14; s.vy = 0; s.vx = 0; s.state = 'idle'; }
+}
+
+// 掉落规划（纯函数）：旧识音素已由开局记忆石补位，不再落地（新档无记忆时照掉）；
+// 落点自边界内侧向左散开，保证全部落在可达地面上（第二关边界=裂口左缘，第三关=墙左缘）
+export function planDropStones(wordDef, inv, dropXY, edgeX) {
+  const ax = Math.min(dropXY[0], edgeX - 90);
+  return wordDef.phonemes.map(([ipa]) => ipa)
+    .filter(ipa => stoneCount(inv, ipa) === 0)
+    .map((ipa, i) => ({ ipa, x: ax - i * 46 }));
 }
 
 // —— 通用渲染 ——
@@ -126,6 +136,33 @@ export function drawWallBack(x, imgs, W, H, dim = 0.30) {
   tile(x, imgs, 'wall_face', 0, 0, W, H);
   x.fillStyle = `rgba(10,12,22,${dim})`;
   x.fillRect(0, 0, W, H);
+}
+
+// —— 青苔墙砖墙面（第一/二关同款）：wallClean/moss/halfMoss 随机拼接（同种子同布局） ——
+export function drawMossyWall(x, imgs, W, H, seed = 23) {
+  const textures = [imgs?.wallClean, imgs?.wallMoss, imgs?.wallHalfMoss].filter(Boolean);
+  if (!textures.length) {
+    x.fillStyle = PAL.wallA;
+    x.fillRect(0, 0, W, H);
+    return;
+  }
+  let s = (seed >>> 0) || 1;
+  const r = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  const tileSize = 96;
+  for (let y = 0; y < H; y += tileSize) {
+    for (let px = 0; px < W; px += tileSize) {
+      const image = textures[Math.floor(r() * textures.length)];
+      const wobbleX = (r() - 0.5) * 8, wobbleY = (r() - 0.5) * 8, flip = r() > 0.5;
+      const width = Math.min(tileSize + 8, W - px + 8);
+      const height = Math.min(tileSize + 8, H - y + 8);
+      x.save();
+      x.globalAlpha = 0.92;
+      x.translate(px + wobbleX + (flip ? width : 0), y + wobbleY);
+      x.scale(flip ? -1 : 1, 1);
+      x.drawImage(image, 0, 0, image.width, image.height, 0, 0, width, height);
+      x.restore();
+    }
+  }
 }
 
 // 横版地面：MI 地板平铺（从 groundY 往下）
