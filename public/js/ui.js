@@ -72,8 +72,6 @@ export function createUI({ content, atlases, signal }) {
     el('summary').classList.remove('hidden');
   }
   el('btn-again').addEventListener('click', () => location.reload(), { signal });
-  el('btn-notes').addEventListener('click', () => el('notes').classList.remove('hidden'), { signal });
-  el('notes-close').addEventListener('click', () => el('notes').classList.add('hidden'), { signal });
   el('btn-walk').addEventListener('click', () => el('summary').classList.add('hidden'), { signal });
 
   // —— 左上小人面板（v2：头像 + 手持槽；有素材时用小孩精灵头像）——
@@ -107,7 +105,7 @@ export function createUI({ content, atlases, signal }) {
     }
   }
   // —— 旅途回顾（走马灯）：第三关收尾自动播放；词只出图标不写字（拼写时刻只属于揭示卡）——
-  let rcEl = null, rcTimer = 0, rcIdx = 0, rcData = null;
+  let rcEl = null, rcTimer = 0, rcIdx = 0, rcData = null, rcFired = false;
   function recapBuild() {
     if (rcEl) return rcEl;
     rcEl = document.createElement('div');
@@ -130,6 +128,7 @@ export function createUI({ content, atlases, signal }) {
         }).join('');
     rcEl.querySelector('.rc-dots').innerHTML = Array.from({ length: n + 1 }, (_, i) => `<i class="${i === rcIdx ? 'on' : ''}"></i>`).join('');
     rcEl.classList.remove('hidden');                          // 建出来是 hidden，每帧绘制时亮起（漏这行=永远看不见）
+    if (end && !rcFired) { rcFired = true; confetti(rcEl); }  // 旅途完成：末段撒花（只撒一次）
   }
   function recapNext() {
     rcIdx++;
@@ -138,7 +137,24 @@ export function createUI({ content, atlases, signal }) {
     clearTimeout(rcTimer);
     rcTimer = setTimeout(recapNext, rcIdx >= rcData.slides.length ? 3600 : 2400);
   }
-  function recapStop() { clearTimeout(rcTimer); rcEl?.classList.add('hidden'); rcIdx = 0; }
+  function recapStop() { clearTimeout(rcTimer); rcEl?.classList.add('hidden'); rcIdx = 0; rcFired = false; }
+  // 旅途完成撒花：像素小方块落下（金/青/羊皮纸/辅音蓝，与全剧同一像素语言）
+  function confetti(host) {
+    if (!host || typeof document === 'undefined') return;
+    const layer = document.createElement('div');
+    layer.className = 'cf-layer';
+    const cols = ['#FFD166', '#54E0C8', '#E9E4D5', '#8FC3FF'];
+    for (let i = 0; i < 64; i++) {
+      const p = document.createElement('i');
+      p.style.left = (Math.random() * 100) + '%';
+      p.style.background = cols[i % cols.length];
+      p.style.animationDelay = (Math.random() * 0.9).toFixed(2) + 's';
+      p.style.animationDuration = (2.2 + Math.random() * 1.4).toFixed(2) + 's';
+      layer.appendChild(p);
+    }
+    host.appendChild(layer);
+    setTimeout(() => layer.remove(), 4200);
+  }
   function recap(data) {
     if (!data?.slides?.length || typeof document === 'undefined') return;
     rcData = data; recapBuild(); rcIdx = 0; recapPaint();

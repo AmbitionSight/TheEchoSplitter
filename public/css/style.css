@@ -199,6 +199,11 @@ body{overscroll-behavior:none}
 #recap .rc-dots i{width:6px;height:6px;border-radius:50%;background:rgba(233,228,213,.22)}
 #recap .rc-dots i.on{background:var(--teal);box-shadow:0 0 8px rgba(84,224,200,.6)}
 
+/* 旅途完成撒花：像素小方块落下（金/青/羊皮纸/辅音蓝，与全剧同一像素语言） */
+.cf-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.cf-layer i{position:absolute;top:-12px;width:6px;height:6px;border-radius:1px;animation:cfFall 2.6s linear forwards}
+@keyframes cfFall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(78vh) rotate(540deg);opacity:0}}
+
 /* 屏级元素是暗幕不是石板：透出底下的房间，石板只给内容盒子 */
 .screen.slab{background:rgba(8,9,13,.82);border:none;border-radius:0;box-shadow:none}
 

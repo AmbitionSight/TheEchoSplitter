@@ -389,3 +389,15 @@ test('第三关 recap：绘制时必须去掉 hidden（回归：曾漏这行导�
   const ui = await readFile(new URL('../public/js/ui.js', import.meta.url), 'utf8');
   assert.match(ui, /rcEl\.classList\.remove\('hidden'\)/, 'recapPaint 要亮出 #recap');
 });
+
+test('收尾：设计说明已删净；走马灯末段撒花（只一次）', async () => {
+  for (const p of ['index', 'chapter2', 'chapter2b', 'chapter3']) {
+    const html = await readFile(new URL(`../public/${p}.html`, import.meta.url), 'utf8');
+    assert.ok(!/btn-notes|notes-close|id="notes"/.test(html), `${p} 仍残留设计说明`);
+  }
+  const ui = await readFile(new URL('../public/js/ui.js', import.meta.url), 'utf8');
+  assert.match(ui, /function confetti\(/, '有撒花');
+  assert.match(ui, /end && !rcFired[\s\S]{0,90}confetti\(/, '末段撒花且只一次');
+  const css = await readFile(new URL('../public/css/style.css', import.meta.url), 'utf8');
+  assert.match(css, /@keyframes cfFall/, '撒花动画');
+});
