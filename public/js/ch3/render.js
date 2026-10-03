@@ -32,7 +32,7 @@ export function drawRoom(w, x) {
 export function drawBankObjects(w, x) {
   const geo = w.geo.bank;
   drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true, w.view.craftSlots);
-  drawBoulder(x, 515, geo.groundY, CAVE_SEEDS.bank + 4);       // 洞穴巨石（原石墩，向左挪开给裂隙口让位）
+  drawBoulder(x, 485, geo.groundY, CAVE_SEEDS.bank + 4, 80);   // 洞穴巨石（原石墩）
   drawCrack(x, geo.doorX, geo.groundY, CAVE_SEEDS.bank + 3);   // 裂隙口（原石拱门）
   if (!w.game.raftAssembled) {              // 并排的原木：组筏后三根并入木筏，只画筏
     const ROTS = [-0.08, 0.06, -0.04];
@@ -50,11 +50,11 @@ export function drawCreviceObjects(w, x) {
 
   // 卡在缝里的原木：横七竖八。第一根必须在 logX（creviceLog 目标锚点），其余是陈设
   drawLog(x, geo.logX, geo.groundY - 16);
-  drawLog(x, geo.logX + 96, geo.groundY - 74, 0.46);
-  drawLog(x, geo.logX + 178, geo.groundY - 40, -0.58);
-  drawLog(x, geo.logX + 244, geo.groundY - 96, 0.22);
+  drawLog(x, geo.logX + 72, geo.groundY - 74, 0.46);
+  drawLog(x, geo.logX + 126, geo.groundY - 40, -0.58);
+  drawLog(x, geo.logX + 170, geo.groundY - 96, 0.22);
 
-  drawRockArt(x, 905, 215);                            // 岩画刻痕（原为 fillText 占位）
+  drawCraftMural(x, 975, 200);                         // 配方岩画（原为 fillText 占位）
 
   drawCrack(x, geo.spawnX, geo.groundY, CAVE_SEEDS.crevice + 3);   // 回程口（原石拱门）
 }
@@ -68,7 +68,7 @@ function drawBigFissure(x, cx, gy) {
     for (let i = 0; i <= N; i++) {
       const k = i / N;                                   // 0 = 洞顶, 1 = 地面
       // 不规则出刀：正弦会得到一个圆润的大黑团，固定交替又会变成机械锯齿
-      const half = 96 + Math.abs(rand() * 2 - 1) * 108;
+      const half = 58 + Math.abs(rand() * 2 - 1) * 72;
       pts.push([cx + sign * half, k * gy]);
     }
     return pts;
@@ -105,22 +105,43 @@ function drawBigFissure(x, cx, gy) {
   x.stroke();
 }
 
-// 岩画刻痕：原先是 fillText('◼  ◼  ◼') 的文字占位，改为画出来的凿刻
-function drawRockArt(x, cx, cy) {
-  x.strokeStyle = '#c1a76b'; x.lineWidth = 4; x.lineCap = 'round';
-  x.beginPath();
-  x.moveTo(cx - 95, cy + 25); x.lineTo(cx - 5, cy - 35); x.lineTo(cx + 75, cy + 25);
+// 配方岩画：圆木 ＋ 绳索 ＝ 木筏——把这一关的合成关系画在石壁上。
+// 原先是 fillText('◼  ◼  ◼') 的文字占位，等于用文字当美术。
+function drawCraftMural(x, cx, cy) {
+  const rr = (rx, ry, rw, rh, rad) => {
+    x.beginPath();
+    if (x.roundRect) x.roundRect(rx, ry, rw, rh, rad); else x.rect(rx, ry, rw, rh);
+    x.stroke();
+  };
+  x.strokeStyle = '#c1a76b'; x.lineWidth = 4; x.lineCap = 'round'; x.lineJoin = 'round';
+
+  rr(cx - 196, cy - 16, 92, 32, 16);                     // 圆木：横木 + 两道年轮
+  x.beginPath(); x.arc(cx - 196, cy, 11, 0, 7); x.stroke();
+  x.beginPath(); x.arc(cx - 196, cy, 5, 0, 7); x.stroke();
+
+  x.beginPath();                                         // ＋
+  x.moveTo(cx - 66, cy - 15); x.lineTo(cx - 66, cy + 15);
+  x.moveTo(cx - 81, cy); x.lineTo(cx - 51, cy);
   x.stroke();
-  x.beginPath();
-  x.moveTo(cx - 40, cy - 5); x.lineTo(cx + 5, cy + 115); x.lineTo(cx + 45, cy - 5);
-  x.stroke();
-  x.beginPath();
-  x.moveTo(cx - 55, cy + 80); x.lineTo(cx + 60, cy + 80);
-  x.stroke();
-  x.fillStyle = '#c1a76b';
-  for (let i = 0; i < 3; i++) {                          // 凿点
-    x.beginPath(); x.arc(cx - 60 + i * 60, cy + 155, 5, 0, 7); x.fill();
+
+  x.beginPath();                                         // 绳索：一段盘绕
+  for (let i = 0; i <= 26; i++) {
+    const t = i / 26;
+    const px = cx + 6 + t * 96, py = cy + Math.sin(t * Math.PI * 3) * 16;
+    if (i === 0) x.moveTo(px, py); else x.lineTo(px, py);
   }
+  x.stroke();
+
+  x.beginPath();                                         // ＝
+  x.moveTo(cx + 126, cy - 10); x.lineTo(cx + 152, cy - 10);
+  x.moveTo(cx + 126, cy + 10); x.lineTo(cx + 152, cy + 10);
+  x.stroke();
+
+  for (let i = 0; i < 3; i++) rr(cx + 174, cy - 26 + i * 17, 88, 15, 7);   // 木筏：三根
+  x.beginPath();                                         // 木筏：两道绑绳
+  x.moveTo(cx + 190, cy - 28); x.lineTo(cx + 190, cy + 24);
+  x.moveTo(cx + 248, cy - 28); x.lineTo(cx + 248, cy + 24);
+  x.stroke();
 }
 
 // —— 深水段合成位：石壁上凿出四个圆孔凹槽（不再把合成台摆在河上）——

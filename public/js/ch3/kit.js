@@ -20,7 +20,8 @@ import { screenToLogical } from '../ch1/physics.js';
 const TARGETS = {
   bank: [
     { id: 'bench', x: w => w.geo.bank.benchX, y: w => w.geo.bank.groundY, r: 82 },
-    { id: 'creviceDoor', x: w => w.geo.bank.doorX, y: w => w.geo.bank.groundY, r: 110 },
+    // r 收到 90：与 water（760±92 = 668..852）拉开，否则站在水边偏左按 E 会误开裂缝
+    { id: 'creviceDoor', x: w => w.geo.bank.doorX, y: w => w.geo.bank.groundY, r: 90 },
     { id: 'water', x: w => w.geo.bank.waterX, y: w => w.geo.bank.groundY, r: 92 },
     { id: 'raft', x: w => w.raft.x, y: w => w.raft.y, r: 130, when: g => g.raftAssembled }
   ],
