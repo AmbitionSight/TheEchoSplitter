@@ -32,6 +32,10 @@ Useful browser/debug hooks:
 - Inspect `window.__errors` for captured runtime errors.
 - `window.G` exposes the active chapter content, game state, and chapter-specific debug jump function after boot.
 
+## Git 约定
+
+分支模型与提交信息规范见 `docs/CONTRIBUTING.md`：日常开发落在 `develop`，`main` 只收稳定节点（`--no-ff` 合并）；提交必须带 type 前缀（`feat/fix/docs/refactor/test/chore/ui`），主题 ≤ 32 汉字，一事一提交，细节进 body。
+
 ## Architecture
 
 ### Runtime and routing
