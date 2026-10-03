@@ -13,6 +13,7 @@ export function createGame(content, profile) {
     attempted: false,
     jumpUnlocked: profile.abilities.includes('jump'),
     crossed: false, exited: false, fell: false,
+    heard: new Set(),                                  // 听声点听过的音（声音层；与拼词层 everPicked 分开）
     teaseClock: 0
   };
 }
@@ -64,6 +65,12 @@ export function gameEvent(g, ev, arg = null) {
       g.beat = 'summary';
       return [{ t: 'summary' }];
     }
+    case 'LISTEN': {                                          // 听声点：走近按 E 触发（纯听觉，不进库存）
+      const spot = (c.listening || []).find(s => s.id === arg);
+      if (!spot) return [];
+      const v = (g.jumpUnlocked && spot.after) ? spot.after : spot;   // 解锁跳跃（能过坑）后回声变化
+      return [{ t: 'sfx', name: 'glowTick' }, { t: 'echo', ipas: v.echo, say: v.say }];
+    }
     case 'TICK': {
       g.teaseClock += arg;
       if (g.teaseClock < 45) return [];
@@ -97,11 +104,11 @@ export function jumpDebug(g, beat) {
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette } from './sideview.js';
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawListenSpots } from './sideview.js';
 import { PAL } from './art.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
-import { paintMasonry, paintSlabs, shade } from './masonry.js';
+import { shade, paintMasonry, paintSlabs, BAYER4, pixelGradientV, pixelGlow } from './masonry.js';
 
 export const kit = {
   chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
@@ -165,6 +172,14 @@ export const kit = {
     for (const m of v.mist) m.ph += dt * m.v * 0.1;
     v.stars = v.stars.filter(st => (st.a -= dt * 1.2) > 0);
     v.puffs = v.puffs.filter(p => { p.r += dt * 40; p.a -= dt * 2; return p.a > 0; });
+    // 环境听声点（火把等）：走近自动响，不用按 E
+    for (const spot of (w.content.listening || [])) {
+      if (!spot.auto) continue;
+      const near = Math.abs(w.player.x - spot.x) < spot.r;
+      const st = (v.listen ||= {})[spot.id] ||= { near: false };
+      if (near && !st.near) w.run(gameEvent(w.game, 'LISTEN', spot.id));
+      st.near = near;
+    }
   },
 
   findE(w) {
@@ -175,12 +190,17 @@ export const kit = {
       consider(Math.hypot(player.x - s.x, geo.groundY - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, stone: s }, 56);
     }
     consider(Math.abs(player.x - geo.benchX), { kind: 'obj', id: 'bench', x: geo.benchX, y: geo.groundY }, 80);
+    for (const spot of (w.content.listening || [])) {           // 听声点：实体物件，走近按 E（auto 的自动响，不占 E）
+      if (spot.auto) continue;
+      consider(Math.abs(player.x - spot.x), { kind: 'obj', id: spot.id, x: spot.x, y: spot.y }, spot.r);
+    }
     if (w.game.hand?.kind === 'item') consider(0, { kind: 'obj', id: 'self', x: player.x, y: player.y }, 0);
     return best;
   },
 
   onE: chapterOnE(gameEvent, (w, t) => {
-    if (t.id === 'self' && w.game.hand?.kind === 'item') w.run(gameEvent(w.game, 'USE', { word: w.game.hand.word, target: 'player' }));
+    if (w.content.listening?.some(s => s.id === t.id)) w.run(gameEvent(w.game, 'LISTEN', t.id));
+    else if (t.id === 'self' && w.game.hand?.kind === 'item') w.run(gameEvent(w.game, 'USE', { word: w.game.hand.word, target: 'player' }));
     else w.sfx.mutter();
   }),
 
@@ -210,7 +230,7 @@ export const kit = {
   },
 
   summaryMerge(game) {
-    return { everPicked: [...game.inv.everPicked], words: [...game.book], abilities: ['jump'], chapter: 2 };
+    return { everPicked: [...game.inv.everPicked], heard: [...game.heard], words: [...game.book], abilities: ['jump'], chapter: 2 };
   },
 
   draw(w, x, eTarget) {
@@ -222,10 +242,7 @@ export const kit = {
     const eg = x.createLinearGradient(geo.exitX - 70, 0, geo.exitX + 70, 0);
     eg.addColorStop(0, 'rgba(255,214,130,0)'); eg.addColorStop(0.5, 'rgba(255,214,130,.10)'); eg.addColorStop(1, 'rgba(255,214,130,0)');
     x.fillStyle = eg; x.fillRect(geo.exitX - 70, 200, 140, 420);
-    // 深渊
-    const gg = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 220);
-    gg.addColorStop(0, '#05060a'); gg.addColorStop(1, '#000');
-    x.fillStyle = gg; x.fillRect(geo.chasmL, geo.groundY, geo.chasmR - geo.chasmL, 220);
+    // 深谷已烘进背景（makeBg，像素化）；此处只留出口微光与断崖
     // 断口两侧：苔藓巨石断崖
     drawCliffCluster(x, geo.chasmL, +1, geo.groundY, 71);
     drawCliffCluster(x, geo.chasmR, -1, geo.groundY, 72);
@@ -249,6 +266,7 @@ export const kit = {
     // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
     x.fillStyle = 'rgba(16,18,36,.30)';
     x.fillRect(0, 0, SIDE.W, SIDE.H);
+    drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
     vignette(x);
   }
@@ -282,8 +300,24 @@ function drawCliffCluster(x, ex, dir, gy, seed) {
     x.closePath();
     x.save();
     x.clip();
-    x.fillStyle = shade('#7b7669', -0.08 + rk.moss * 0.05);   // 石块本体：砌石同族石色
-    x.fillRect(cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h + 16);
+    // 石块本体：砌石同族块状纹理（错缝凿石，看得出是一块块石头，不再是一团纯色）
+    const bx0 = cx - rx - 8, by0 = cy - ry - 8, bw = rk.w + 16, bh = rk.h + 16;
+    x.fillStyle = '#26232b';                                  // 灰浆底
+    x.fillRect(bx0, by0, bw, bh);
+    const cell = 17;
+    for (let yy = by0, row = 0; yy < by0 + bh; yy += cell, row++) {
+      const off = (row % 2) ? cell / 2 : 0;                   // 错缝
+      for (let xx = bx0 - off; xx < bx0 + bw; xx += cell) {
+        const t = 0.9 + r() * 0.2, inset = 2;
+        x.fillStyle = shade('#7b7669', t - 1);
+        x.fillRect(xx + inset, yy + inset, cell - inset * 2, cell - inset * 2);
+        x.fillStyle = shade('#7b7669', t - 1 + 0.18);         // 上/左受光
+        x.fillRect(xx + inset, yy + inset, cell - inset * 2, 1.5);
+        x.fillRect(xx + inset, yy + inset, 1.5, cell - inset * 2);
+        x.fillStyle = shade('#7b7669', t - 1 - 0.22);         // 下缘沉影
+        x.fillRect(xx + inset, yy + cell - inset - 1.5, cell - inset * 2, 1.5);
+      }
+    }
     if (rk.moss > 0) {                                        // 顶面苔藓盖头（去饱和绿，与砌石苔藓同族）
       x.globalAlpha = 0.55 * rk.moss;
       x.fillStyle = '#446355';
@@ -322,39 +356,118 @@ function drawCliffCluster(x, ex, dir, gy, seed) {
   }
 }
 
+// ================= 第二关背景：峡谷（像素语言） =================
+// 远处崖层剪影：锯齿顶缘 + 顶缘受光（越远越浅），给峡谷纵深
+function drawFarCliffs(x, topY, color, rim, seed) {
+  const r = rng(seed);
+  const pts = [];
+  for (let px = 0; px <= SIDE.W; px += 22) pts.push([px, topY + (r() * 46 - 12)]);
+  x.fillStyle = color;
+  x.beginPath(); x.moveTo(0, SIDE.H); x.lineTo(pts[0][0], pts[0][1]);
+  for (const [px, y] of pts.slice(1)) x.lineTo(px, y);
+  x.lineTo(SIDE.W, SIDE.H); x.closePath(); x.fill();
+  x.strokeStyle = rim; x.lineWidth = 2; x.beginPath();        // 顶缘受光（远山轮廓）
+  x.moveTo(pts[0][0], pts[0][1]); for (const [px, y] of pts.slice(1)) x.lineTo(px, y);
+  x.stroke();
+}
+
+// 近景崖壁顶缘：崩裂岩脊（压住砌石的平顶，让它读起来是崖顶不是墙头）
+function drawRockRidge(x, y, W, seed) {
+  const r = rng(seed);
+  x.fillStyle = '#2f3139';
+  x.beginPath(); x.moveTo(0, y + 46);
+  for (let px = 0; px <= W; px += 18) x.lineTo(px, y + (r() * 32 - 6));
+  x.lineTo(W, y + 46); x.closePath(); x.fill();
+  x.strokeStyle = 'rgba(10,12,18,.75)'; x.lineWidth = 2; x.stroke();
+  x.fillStyle = 'rgba(255,240,214,.07)';                       // 岩脊顶受光
+  x.fillRect(0, y + 2, W, 2);
+}
+
+// 崖台细节：碎石 + 苔簇（让崖台不空、不塑料）
+function drawLedgeDetail(x, geo, seed) {
+  const r = rng(seed), gy = geo.groundY;
+  for (const [bx, bw] of [[0, geo.chasmL], [geo.chasmR, SIDE.W - geo.chasmR]]) {
+    for (let i = 0; i < 8; i++) {                              // 碎石
+      const px = bx + 24 + r() * (bw - 48), t = 150 + (r() * 44 | 0);
+      x.fillStyle = `rgba(${t},${t},${t + 12},.5)`;
+      x.beginPath(); x.ellipse(px, gy - 2 - r() * 4, 2 + r() * 3, 1.4 + r() * 1.8, 0, 0, 7); x.fill();
+    }
+    for (let i = 0; i < 6; i++) {                              // 苔簇 / 草
+      const px = bx + 34 + r() * (bw - 68), h = 6 + r() * 9;
+      x.strokeStyle = i % 2 ? '#446355' : '#3a5646'; x.lineWidth = 2; x.lineCap = 'round';
+      x.beginPath(); x.moveTo(px, gy - 2); x.lineTo(px + (r() - 0.5) * 7, gy - 2 - h); x.stroke();
+    }
+  }
+}
+
 function makeBg(w) {
   const { geo } = w;
   const c = document.createElement('canvas');
   c.width = SIDE.W; c.height = SIDE.H;
   const x = c.getContext('2d');
   x.imageSmoothingEnabled = false;
-  const wallH = geo.groundY - 16;                              // 墙带高
-  // 墙：程序生成像素砌石（seed 23），与第一关同源；替退役的照片苔墙
-  paintMasonry(x, masonryPlan(23, SIDE.W, wallH), SIDE.W, wallH);
-  // 石质基座带（墙脚踢脚线，裂缝两侧断开）
-  for (const [bx, bw] of [[0, geo.chasmL], [geo.chasmR, SIDE.W - geo.chasmR]]) {
+  const gy = geo.groundY, wallH = gy - 16;
+  const ridge = 176;                                           // 近景崖壁顶缘：其上露出天与远山（峡谷纵深）
+  const segs = [[0, geo.chasmL], [geo.chasmR, SIDE.W - geo.chasmR]];   // 裂缝两侧的两块崖体
+  // 黄昏天幕（像素化：色带 + 拜耳抖动）
+  pixelGradientV(x, 0, SIDE.W, 0, gy, [[0, '#0c1320'], [0.5, '#182233'], [0.82, '#28313f'], [1, '#39414d']]);
+  // 远处崖层剪影（三层，越远越浅、顶缘受光）——峡谷纵深
+  drawFarCliffs(x, 58,  '#2b3646', 'rgba(150,168,192,.10)', 11);
+  drawFarCliffs(x, 104, '#212b3a', 'rgba(140,158,184,.09)', 23);
+  drawFarCliffs(x, 150, '#18202d', 'rgba(130,148,176,.08)', 37);
+  // 对面有光：缝口那侧的暖光（像素化光晕）
+  const gx0 = (geo.chasmL + geo.chasmR) / 2;
+  pixelGlow(x, gx0, gy - 70, 300, [255, 214, 130], 0.16);
+  // 近景崖壁：砌石（自 ridge 起），顶缘压一道崩裂岩脊。
+  // 关键：裂缝处整面断开——峡谷贯穿上下，缝里透出天与远山，才读得出"悬崖"。
+  const floorH = SIDE.H - gy;
+  const slabRows = slabPlan(31, SIDE.W, gy, floorH);
+  for (const [bx, bw] of segs) {
+    x.save(); x.beginPath(); x.rect(bx, 0, bw, wallH); x.clip();
+    x.save(); x.translate(0, ridge);
+    paintMasonry(x, masonryPlan(23, SIDE.W, wallH - ridge), SIDE.W, wallH - ridge);
+    x.restore();
+    drawRockRidge(x, ridge, SIDE.W, 31);
+    x.restore();
+    // 断崖立面：缝两侧的切面压暗 + 一条崖缘线（让它像被劈开的岩体）
+    const ex = bx === 0 ? geo.chasmL : geo.chasmR;
+    const inLeft = bx === 0;                                   // 左块：切面在其右缘
+    const eg = x.createLinearGradient(ex, 0, ex + (inLeft ? -1 : 1) * 34, 0);
+    eg.addColorStop(0, 'rgba(0,0,0,.5)'); eg.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = eg; x.fillRect(inLeft ? ex - 34 : ex, ridge, 34, wallH - ridge);
+    x.strokeStyle = 'rgba(8,10,14,.85)'; x.lineWidth = 2;
+    x.beginPath(); x.moveTo(ex, ridge); x.lineTo(ex, wallH); x.stroke();
+    // 石质基座带（墙脚踢脚线，随崖体断开）
     x.fillStyle = '#5d5a52'; x.fillRect(bx, wallH, bw, 16);
     x.fillStyle = '#7b7669'; x.fillRect(bx, wallH, bw, 4);
     x.fillStyle = '#3a3833'; x.fillRect(bx, wallH + 12, bw, 4);
-  }
-  // 地：大块凿石板（seed 31），裂缝两侧断开
-  const floorH = SIDE.H - geo.groundY;
-  const slabRows = slabPlan(31, SIDE.W, geo.groundY, floorH);
-  for (const [bx, bw] of [[0, geo.chasmL], [geo.chasmR, SIDE.W - geo.chasmR]]) {
-    x.save(); x.beginPath(); x.rect(bx, geo.groundY, bw, floorH); x.clip();
-    paintSlabs(x, slabRows, SIDE.W, geo.groundY, floorH);
+    // 地：大块凿石板（seed 31），随崖体断开
+    x.save(); x.beginPath(); x.rect(bx, gy, bw, floorH); x.clip();
+    paintSlabs(x, slabRows, SIDE.W, gy, floorH);
     x.restore();
   }
+  // 深谷：缝里露出对面崖壁（像素化）+ 横向岩层 + 底部深渊
+  const gx = geo.chasmL, gw = geo.chasmR - geo.chasmL;
+  pixelGradientV(x, gx, geo.chasmR, gy, SIDE.H, [[0, '#33404f'], [0.42, '#1d2634'], [1, '#070a0f']]);
+  for (let i = 0; i < 7; i++) {                                // 对壁岩层横纹
+    const ly = gy + 10 + i * 32;
+    x.fillStyle = `rgba(150,164,186,${Math.max(0.02, 0.07 - i * 0.008)})`;
+    x.fillRect(gx + 8, ly, gw - 16, 3);
+  }
+  // 火把暖光落在崖壁上（像素化光晕）——光与墙发生关系，是"精致"的关键
+  pixelGlow(x, 90, 220, 180, [255, 198, 112], 0.34);
+  pixelGlow(x, geo.chasmR + 120, 220, 180, [255, 198, 112], 0.34);
+  // 崖台细节：碎石 + 苔簇
+  drawLedgeDetail(x, geo, 53);
   x.fillStyle = 'rgba(255,236,200,.09)';                       // 地面顶缘亮线（裂缝两侧）
-  x.fillRect(0, geo.groundY, geo.chasmL, 2); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 2);
-  // 墙脚落地阴影（压住墙/地交界）
-  const fsh = x.createLinearGradient(0, geo.groundY - 8, 0, geo.groundY + 36);
+  x.fillRect(0, gy, geo.chasmL, 2); x.fillRect(geo.chasmR, gy, SIDE.W - geo.chasmR, 2);
+  const fsh = x.createLinearGradient(0, gy - 8, 0, gy + 36);   // 墙脚落地阴影
   fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
-  x.fillStyle = fsh; x.fillRect(0, geo.groundY - 8, SIDE.W, 44);
-  const gsh = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 130);   // 地面下部压暗
+  x.fillStyle = fsh; x.fillRect(0, gy - 8, SIDE.W, 44);
+  const gsh = x.createLinearGradient(0, gy, 0, gy + 130);      // 地面下部压暗
   gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.42)');
   x.fillStyle = gsh;
-  x.fillRect(0, geo.groundY, geo.chasmL, 130); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130);
+  x.fillRect(0, gy, geo.chasmL, 130); x.fillRect(geo.chasmR, gy, SIDE.W - geo.chasmR, 130);
   // 黄昏级色不再烘焙进背景：改到 draw() 角色之后统一压暗（与第一关同法）
   return c;
 }
