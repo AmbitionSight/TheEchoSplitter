@@ -1,5 +1,5 @@
 {
-  "meta": { "title": "析声者 · 第二间房", "titleEn": "ROOM TWO", "chapter": 2,
+  "meta": { "title": "析声者 · 第二章 · 裂谷", "titleEn": "CHAPTER TWO · RAVINE", "chapter": 2,
             "intro": ["门后是一条幽深的走廊。", "地板在这里断开了一道裂缝。", "对面有光。"] },
   "words": {
     "jump": { "icon": "jump", "phonemes": [["dʒ",90],["ʌ",80],["m",90],["p",80]],

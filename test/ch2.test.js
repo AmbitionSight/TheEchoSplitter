@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2, tapTargetAt, crossMargin,
          CAT, catClickable, stepCat, windDelay, windNow, lightScales, stepFellSlide,
          makeRubble, stepRubble, HINT_UNLOCKED } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { planDropStones, drawTorchSide, drawBenchSide, makeDust, stepDust, SIDE } from '../public/js/sideview.js';
+import { CHAPTER_DAY } from '../public/js/shell.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter2.json', import.meta.url), 'utf8'));
 const ch1Profile = mergeProfile(createProfile(), {
@@ -101,8 +102,9 @@ test('jumpDebug：crafted/unlocked 拍状态正确', () => {
   assert.equal(g.jumpUnlocked, true);
 });
 
-test('无缝交接：第二间房声明后继为崖壁（第二间房后半），且可动态载入其 kit', async () => {
+test('无缝交接：裂谷声明后继为崖壁（第二章后半），且可动态载入其 kit', async () => {
   assert.equal(kit.next?.chapter, 2);
+  assert.equal(kit.next?.label, '第二章 · 崖壁');       // veil 文案（规格 §11）
   assert.equal(typeof kit.next.load, 'function');
   const nextKit = await kit.next.load();          // 真实动态导入，守住 ch2b.js 必须导出 kit
   assert.equal(nextKit.chapter, 2);
@@ -739,4 +741,55 @@ test('2a 补漏接线：draw 读 lightScales、tick 推滑回与碎石（源码�
     assert.ok(src.includes(k), `缺 ${k}`);
   }
   assert.match(src, /sc\.torchL/, '火把动态光晕 s 按拍缩放（不复制坐标）');
+});
+
+// ================= Task 19：命名统一与残留清零（规格 §11 / §14） =================
+
+const pageSrc = f => readFile(new URL('../public/' + f, import.meta.url), 'utf8');
+const jsonSrc = f => readFile(new URL('../content/' + f, import.meta.url), 'utf8').then(JSON.parse);
+
+test('命名统一：meta / HTML 静态文案 / kit 标牌 / CHAPTER_DAY 齐步（第二章 · 裂谷/崖壁）', async () => {
+  const [html2, html2b, c2, c2b] = await Promise.all([
+    pageSrc('chapter2.html'), pageSrc('chapter2b.html'), jsonSrc('chapter2.json'), jsonSrc('chapter2b.json')
+  ]);
+  // meta 命名（规格 §11）；titleEn 前缀断言（规格 §14）
+  assert.equal(c2.meta.title, '析声者 · 第二章 · 裂谷');
+  assert.equal(c2.meta.titleEn, 'CHAPTER TWO · RAVINE');
+  assert.equal(c2b.meta.title, '析声者 · 第二章 · 崖壁');
+  assert.equal(c2b.meta.titleEn, 'CHAPTER TWO · CLIFF');
+  for (const c of [c2, c2b]) assert.ok(c.meta.titleEn.startsWith('CHAPTER TWO'), 'titleEn 前缀 CHAPTER TWO');
+  const pick = (s, re) => s.match(re)?.[1];
+  for (const [html, c] of [[html2, c2], [html2b, c2b]]) {
+    assert.equal(pick(html, /<title>(.*?)<\/title>/), c.meta.title, '<title> 与 meta.title 对齐');
+    assert.equal(pick(html, /<div id="title"[\s\S]*?<p class="sub">(.*?)<\/p>/), c.meta.titleEn, '标题页 .sub 与 meta.titleEn 对齐');
+    const pro = html.split('<div id="prologue"')[1].split('<p class="tap">')[0];   // 序章三句逐句 = meta.intro（2b 第三句曾走样）
+    assert.deepEqual(pro.match(/<p>(.*?)<\/p>/g).map(s => s.replace(/<\/?p>/g, '')), c.meta.intro, '序章 = meta.intro');
+  }
+  // 结算卡：.day = CHAPTER_DAY[2]；.next = 下一章悬念
+  assert.equal(pick(html2, /<p class="day">(.*?)<\/p>/), '第二章');
+  assert.equal(pick(html2b, /<p class="day">(.*?)<\/p>/), '第二章');
+  assert.ok(pick(html2, /<p class="next">(.*?)<\/p>/).includes('第二章 · 崖壁'), '2a 下一章悬念');
+  assert.ok(pick(html2b, /<p class="next">(.*?)<\/p>/).includes('第三章'), '2b 下一章悬念（第三章合法，非「第三间房」）');
+  // kit 标牌：titleRune ᚵ；CHAPTER_DAY[2] 供 veil 缺省文案
+  assert.equal(kit.titleRune, 'ᚵ');
+  assert.equal(CHAPTER_DAY[2], '第二章');
+  // 2a 标题符文三处同步：标题页 / 书钮（HTML）+ 入口拱（ch2.js）
+  assert.equal(pick(html2, /<div class="rune-float"[^>]*>(.*?)<\/div>/), 'ᚵ');
+  assert.equal(pick(html2, /<button class="rune-btn" id="btn-book"[^>]*>(.*?)<\/button>/), 'ᚵ');
+  assert.match(await pageSrc('js/ch2.js'), /drawArchSide\(x, 60, gy, \{ rune: 'ᚵ' \}\)/, '入口拱 ᚵ 阴刻');
+});
+
+test('残留清零：chapter2*.html / content/chapter2*.json / ch2*.js 零命中（含代码注释）', async () => {
+  const found = [];
+  for (const [dir, re] of [['public', /^chapter2.*\.html$/], ['content', /^chapter2.*\.json$/], ['public/js', /^ch2.*\.js$/]]) {
+    for (const f of await readdir(new URL('../' + dir + '/', import.meta.url))) {
+      if (re.test(f)) found.push([dir + '/' + f, new URL('../' + dir + '/' + f, import.meta.url)]);
+    }
+  }
+  assert.deepEqual(found.map(([p]) => p).sort(), ['content/chapter2.json', 'content/chapter2b.json',
+    'public/chapter2.html', 'public/chapter2b.html', 'public/js/ch2.js', 'public/js/ch2b.js'], '扫描范围即规格 §11 清单');
+  for (const [p, u] of found) {
+    const src = await readFile(u, 'utf8');
+    assert.ok(!/第二间房|第三间房|ROOM THREE/.test(src), `${p} 残留旧命名`);
+  }
 });

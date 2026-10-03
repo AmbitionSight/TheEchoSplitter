@@ -106,8 +106,9 @@ test('ropeDebug：mended 拍状态正确', () => {
   assert.equal(g.mended, true);
 });
 
-test('无缝交接：崖壁走到尽头声明后继为第三间房（暗河），且可动态载入其 kit', async () => {
+test('无缝交接：崖壁走到尽头声明后继为第三章（暗河），且可动态载入其 kit', async () => {
   assert.equal(kit.next?.chapter, 3);
+  assert.equal(kit.next?.label, '第三章');              // veil 文案（规格 §11）
   assert.equal(typeof kit.next.load, 'function');
   const nextKit = await kit.next.load();          // 真实动态导入，守住 ch3.js 必须导出 kit
   assert.equal(nextKit.chapter, 3);

@@ -1,4 +1,4 @@
-// —— 析声者 · 第二间房·崖壁（rope：r·əʊ·p；əʊ/p 为旧识凝石）——
+// —— 析声者 · 第二章 · 崖壁（rope：r·əʊ·p；əʊ/p 为旧识凝石）——
 import { createInventory } from './hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord,
          chapterOnE, syncHeld, seedBegin, dropExtra, dropBackExtra, stepWorldStones } from './chapter.js';
@@ -194,8 +194,8 @@ export const kit = {
 
   createGame, startGame, gameEvent, debug: ropeDebug,
 
-  // 崖壁走到尽头：无缝交接进入第三间房（暗河）——壳读 kit.next
-  next: { chapter: 3, page: 'chapter3.html', load: () => import('./ch3.js').then(m => m.kit) },
+  // 崖壁走到尽头：无缝交接进入第三章（暗河）——壳读 kit.next
+  next: { chapter: 3, page: 'chapter3.html', label: '第三章', load: () => import('./ch3.js').then(m => m.kit) },
   summaryFirst: true,                                      // 章末先出结算卡，[下一间房 →] 再交接（规格 §7.4）
 
   voices: v => ({

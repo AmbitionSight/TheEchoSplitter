@@ -1,4 +1,4 @@
-// —— 析声者 · 第二间房：jump（dʒ·ʌ·m·p；p 为第一间房旧识）——
+// —— 析声者 · 第二章 · 裂谷：jump（dʒ·ʌ·m·p；p 为第一章旧识）——
 import { createInventory } from './hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord, cap,
          chapterOnE, syncHeld, seedBegin, dropExtra, dropBackExtra, stepWorldStones } from './chapter.js';
@@ -301,12 +301,12 @@ function wireJumpBtn(w, signal) {
 export const HINT_UNLOCKED = '能跳了。跑起来，跳。';
 
 export const kit = {
-  chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
+  chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᚵ',
 
   createGame, startGame, gameEvent, debug: jumpDebug,
 
-  // 走到走廊尽头：无缝交接进入崖壁（第二间房后半，同页、无刷新，跳过其标题页）——壳读 kit.next
-  next: { chapter: 2, page: 'chapter2b.html', load: () => import('./ch2b.js').then(m => m.kit) },
+  // 走到走廊尽头：无缝交接进入崖壁（第二章后半，同页、无刷新，跳过其标题页）——壳读 kit.next
+  next: { chapter: 2, page: 'chapter2b.html', label: '第二章 · 崖壁', load: () => import('./ch2b.js').then(m => m.kit) },
 
   voices: v => ({
     child: { voice: v.child, pitch: 1.25, rate: 1, rateSlow: 0.8 },

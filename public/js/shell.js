@@ -11,7 +11,7 @@ import { loadProfile, saveProfile, mergeProfile } from './profile.js';
 import { loadAtlases } from './sprites.js';
 
 export const CHAPTER_NEXT = { 1: 'chapter2.html', 2: 'chapter3.html', 3: null };
-export const CHAPTER_DAY = { 1: '第一天', 2: '第二间房', 3: '第三间房' };
+export const CHAPTER_DAY = { 1: '第一天', 2: '第二章', 3: '第三间房' };
 
 export function mount(kit) {
   if (typeof document === 'undefined') return;
@@ -35,7 +35,7 @@ function bootShell(kit) {
   addEventListener('error', e => __errors.push(String(e.message)));
   addEventListener('unhandledrejection', e => __errors.push(String(e.reason)));
 
-  // —— 同页交接遮罩：第二间房走到尽头 → 崖壁（第二间房后半，纯视觉，不挡输入）——
+  // —— 同页交接遮罩：裂谷走到尽头 → 崖壁（第二章后半，纯视觉，不挡输入）——
   const veil = document.createElement('div');
   veil.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;' +
     'background:#05070b;color:#cfe6e0;font:600 30px/1 system-ui;letter-spacing:.35em;text-indent:.35em;' +
