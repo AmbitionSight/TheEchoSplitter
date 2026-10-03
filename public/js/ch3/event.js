@@ -2,12 +2,8 @@
 import { createInventory, addStone } from '../hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord } from '../chapter.js';
 
-const PHONEMES = {
-  log: ['l', 'ɒ', 'g'],
-  rope: ['r', 'əʊ', 'p'],
-  raft: ['r', 'æ', 'f', 't'],
-  pole: ['p', 'əʊ', 'l']
-};
+// 组筏前须并排放下的原木根数（手持原木词具在水边连按 E 逐根放置）
+const LOGS_NEEDED = 3;
 
 function seedOpening(inv) {
   for (const [ipa, count] of [['p', 2], ['əʊ', 2], ['r', 2]]) {
@@ -27,13 +23,12 @@ export function createGame(content, profile = null) {
     stonesPicked: 0,
     hand: null,
     logDropped: false,
-    logPlaced: false,
+    logsPlaced: 0,
     raftAssembled: false,
     raftDropped: false,
     raftRiderUnlocked: false,
     embarked: false,
     stalled: false,
-    poleDropped: false,
     poled: false,
     summary: false,
     teased: 0,
@@ -46,59 +41,100 @@ export function startGame(g) {
   return [{ t: 'hint', key: 'start' }, { t: 'beat', beat: 'bank' }];
 }
 
-function dropInstruction(word, only = null) {
-  return only ? { t: 'drop', word, only } : { t: 'drop', word };
+function dropInstruction(word, only) {
+  return { t: 'drop', word, only };
 }
 
 function roomEvent(g, room) {
   if (!['bank', 'crevice', 'deep'].includes(room) || g.room === room) return [];
   g.room = room;
-  const key = room === 'bank' ? 'bank' : room;
-  g.beat = key;
-  return [{ t: 'effect', name: 'roomTransition', room }, { t: 'hint', key }, { t: 'beat', beat: key }];
+  g.beat = room;
+  return [{ t: 'effect', name: 'roomTransition', room }, { t: 'hint', key: room }, { t: 'beat', beat: room }];
 }
 
-// 合成 = chapter.craftWord + 本章合成后的指向提示
+// 合成 = chapter.craftWord + 本章合成后的指向提示（绳未用前若原木未放满，指向放木头而非组筏）
 const CRAFT_HINT = { log: 'log', rope: 'raft', raft: 'raftReady', pole: 'poled' };
 function craft(g, word) {
-  return craftWord(g, word, [{ t: 'hint', key: CRAFT_HINT[word] }]);
+  const key = word === 'rope' && g.logsPlaced < LOGS_NEEDED ? 'log' : CRAFT_HINT[word];
+  return craftWord(g, word, [{ t: 'hint', key }]);
+}
+
+function clearHeld(g, word) {
+  if (g.hand?.kind === 'item' && g.hand.word === word) g.hand = null;
 }
 
 function useItem(g, word, target) {
   const def = g.content.words[word]?.use;
   if (!def || target !== def.target || !g.inv.items.has(word)) return [{ t: 'mutter' }];
   if (word === 'log') {
-    if (g.logPlaced) return [{ t: 'effect', name: 'placeLog', full: false }];
     if (g.room !== 'bank') return [{ t: 'mutter' }];
-    g.logPlaced = true;
-    if (g.hand?.kind === 'item' && g.hand.word === word) g.hand = null;
-    return [{ t: 'hand' }, { t: 'effect', name: 'placeLog', full: true }, { t: 'hint', key: 'raft' }];
+    if (g.logsPlaced >= LOGS_NEEDED) return [{ t: 'effect', name: 'placeLog', full: false }];
+    g.logsPlaced += 1;
+    const done = g.logsPlaced === LOGS_NEEDED;
+    if (done) {
+      clearHeld(g, word);
+      g.inv.items.delete(word);                // 三根放满：原木词具耗尽离栏
+    }
+    return [
+      { t: 'hand' },
+      ...(done ? [{ t: 'itemIn' }] : []),      // 耗尽时刷新物品栏并提示音
+      { t: 'effect', name: 'placeLog', full: true, slot: g.logsPlaced },
+      { t: 'hint', key: done ? 'raft' : g.logsPlaced === 1 ? 'log2' : 'log3' }
+    ];
   }
   if (word === 'rope') {
-    if (!g.logPlaced || g.raftAssembled || g.room !== 'bank') return [{ t: 'mutter' }];
+    if (g.logsPlaced < LOGS_NEEDED || g.raftAssembled || g.room !== 'bank') return [{ t: 'mutter' }];
     g.raftAssembled = true;
-    if (g.hand?.kind === 'item' && g.hand.word === word) g.hand = null;
-    return [{ t: 'hand' }, { t: 'effect', name: 'assembleRaft', full: true }, { t: 'hint', key: 'raft' }];
+    clearHeld(g, word);
+    g.inv.items.delete(word);                  // 组筏完成：绳索词具耗尽离栏
+    return [
+      { t: 'hand' },
+      { t: 'itemIn' },
+      { t: 'effect', name: 'assembleRaft', full: true },
+      { t: 'hint', key: 'raft' }
+    ];
   }
   if (word === 'raft') {
     if (g.raftRiderUnlocked) return [{ t: 'effect', name: 'raftRiderUnlock', full: false }];
     g.raftRiderUnlocked = true;
-    if (g.hand?.kind === 'item' && g.hand.word === word) g.hand = null;
+    clearHeld(g, word);
     return [{ t: 'hand' }, { t: 'effect', name: 'raftRiderUnlock', full: true }, { t: 'hint', key: 'raftReady' }];
   }
   if (word === 'pole') {
     if (!g.stalled || g.poled) return g.poled ? [{ t: 'effect', name: 'poleRiver', full: false }] : [{ t: 'mutter' }];
     g.poled = true;
-    if (g.hand?.kind === 'item' && g.hand.word === word) g.hand = null;
+    clearHeld(g, word);
     return [{ t: 'hand' }, { t: 'effect', name: 'poleRiver', full: true }, { t: 'hint', key: 'poled' }, { t: 'beat', beat: 'poled' }];
   }
   return [{ t: 'mutter' }];
 }
 
+// —— 交互判定唯一入口（纯函数）：目标 id [+ 掉落的词具] → 事件指令 ——
+// kit 的 E / 画布点击 / 拖放只负责把输入映射到 id；"没拼对 raft 词 → 困惑摇头、拼对 → 登筏"
+// 这类规则只写在这一份，不许在 kit 里再写第二处判断。
+// word 缺省取当前手持词具；拖放路径显式传入被拖的词。
+export function interact(g, id, word = g.hand?.kind === 'item' ? g.hand.word : null) {
+  switch (id) {
+    case 'bench': return gameEvent(g, 'BANK');
+    case 'creviceDoor': return gameEvent(g, 'ROOM', 'crevice');
+    case 'bankDoor': return gameEvent(g, 'ROOM', 'bank');
+    case 'creviceLog': return gameEvent(g, 'CREVICE');
+    case 'water':
+      if (word === 'log' || word === 'rope') return useItem(g, word, g.content.words[word].use.target);
+      if (g.raftAssembled && g.raftRiderUnlocked) return gameEvent(g, 'BOARD');   // raftReady 提示承诺过：走到水边按 E 登筏
+      return gameEvent(g, 'RAFT');
+    case 'raft':
+      return g.raftRiderUnlocked ? gameEvent(g, 'BOARD') : gameEvent(g, 'RAFT');
+    case 'self':
+      return word ? useItem(g, word, 'player') : [{ t: 'mutter' }];
+    default:
+      return [{ t: 'mutter' }];
+  }
+}
+
 export function gameEvent(g, ev, arg = null) {
   switch (ev) {
     case 'ROOM':
-    case 'ENTER_ROOM':
       return roomEvent(g, arg);
     case 'CREVICE': {
       if (g.room !== 'crevice') return [];
@@ -109,8 +145,6 @@ export function gameEvent(g, ev, arg = null) {
       }
       return out;
     }
-    case 'LOG':
-      return gameEvent(g, 'CREVICE');
     case 'RAFT': {
       if (g.room !== 'bank' || !g.raftAssembled) return [];
       const out = [
@@ -121,22 +155,10 @@ export function gameEvent(g, ev, arg = null) {
       ];
       if (!g.raftDropped) {
         g.raftDropped = true;
-        out.push(dropInstruction('raft', ['æ', 'f', 't']), { t: 'hint', key: 'raftListen' }, { t: 'beat', beat: 'raft' });
+        out.push(dropInstruction('raft', g.content.flows.raft.stones), { t: 'hint', key: 'raftListen' }, { t: 'beat', beat: 'raft' });
       }
       return out;
     }
-    case 'POLE':
-      if (g.room !== 'deep' || !g.stalled) return [];
-      if (!g.poleDropped) {
-        g.poleDropped = true;
-        return [
-          { t: 'speak', who: 'door', text: g.content.flows.pole.listen[0], slow: true },
-          dropInstruction('pole', ['l']),
-          { t: 'hint', key: 'pole' },
-          { t: 'beat', beat: 'stalled' }
-        ];
-      }
-      return [{ t: 'speak', who: 'door', text: g.content.flows.pole.listen[0], slow: true }];
     case 'PICKUP':
       return pickupStone(g, arg);
     case 'BANK':
@@ -149,12 +171,7 @@ export function gameEvent(g, ev, arg = null) {
       if (!arg || typeof arg !== 'object') return [{ t: 'mutter' }];
       return useItem(g, arg.word, arg.target);
     }
-    case 'PLACE_LOG':
-      return useItem(g, 'log', 'bank');
-    case 'ASSEMBLE_RAFT':
-      return useItem(g, 'rope', 'logs');
-    case 'BOARD':
-    case 'EMBARK': {
+    case 'BOARD': {
       if (!g.raftAssembled || !g.raftRiderUnlocked || g.embarked || g.room !== 'bank') return [];
       g.embarked = true;
       g.room = 'deep';
@@ -166,21 +183,17 @@ export function gameEvent(g, ev, arg = null) {
         { t: 'beat', beat: 'deep' }
       ];
     }
-    case 'STALL': {
+    case 'STALL':
+      // 木筏停在停滞点：暗河授音（Pole.），壁龛/岩画皆为场景陈设，pole 用剩余音素拼出
       if (!g.embarked || g.poled || g.room !== 'deep') return [];
       g.stalled = true;
       g.beat = 'stalled';
-      const out = [
+      return [
         { t: 'speak', who: 'door', text: g.content.flows.pole.listen[0], slow: true },
         { t: 'hint', key: 'stalled' },
         { t: 'beat', beat: 'stalled' }
       ];
-      return out;
-    }
-    case 'DEEP_POLE':
-      return gameEvent(g, 'STALL');
-    case 'EXIT':
-    case 'RAFT_EXIT': {
+    case 'EXIT': {
       if (!g.poled || g.summary) return [];
       g.summary = true;
       g.beat = 'summary';
@@ -190,10 +203,10 @@ export function gameEvent(g, ev, arg = null) {
       g.teaseClock += Number(arg) || 0;
       if (g.teaseClock < 45 || g.summary) return [];
       g.teaseClock = 0;
-      if (g.room === 'bank' && !g.logPlaced) return [{ t: 'hint', key: 'start' }];
+      if (g.room === 'bank' && g.logsPlaced < LOGS_NEEDED) return [{ t: 'hint', key: 'start' }];
       if (!g.logDropped) return [{ t: 'hint', key: 'crevice' }];
       if (!g.book.has('log')) return [{ t: 'hint', key: 'craftLog' }];
-      if (!g.logPlaced) return [{ t: 'hint', key: 'log' }];
+      if (g.logsPlaced < LOGS_NEEDED) return [{ t: 'hint', key: 'log' }];
       if (!g.book.has('rope')) return [{ t: 'hint', key: 'craftRope' }];
       if (!g.raftAssembled) return [{ t: 'hint', key: 'raft' }];
       if (!g.raftDropped || !g.book.has('raft')) return [{ t: 'hint', key: 'raftListen' }];
@@ -211,11 +224,10 @@ export function gameEvent(g, ev, arg = null) {
 
 function collectWord(g, word) {
   let out = [];
-  const flow = g.content.flows[word];
   if (word === 'log') out = out.concat(gameEvent(g, 'ROOM', 'crevice'), gameEvent(g, 'CREVICE'));
   if (word === 'raft') out = out.concat(gameEvent(g, 'RAFT'));
-  if (word === 'pole') out = out.concat(gameEvent(g, 'POLE'));
-  const source = flow?.stones || flow?.phonemes || PHONEMES[word];
+  const flow = g.content.flows[word];
+  const source = flow?.stones?.length ? flow.stones : g.content.words[word].phonemes.map(([ipa]) => ipa);
   for (const ipa of source) out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
   return out.concat(gameEvent(g, 'CRAFT', word));
 }
@@ -236,7 +248,7 @@ export function ch3Debug(g, beat) {
       let out = ch3Debug(g, 'crafted');
       out = out.concat(gameEvent(g, 'ROOM', 'bank'));
       out = out.concat(gameEvent(g, 'HOLD_ITEM', 'log'));
-      out = out.concat(gameEvent(g, 'USE', { word: 'log', target: 'bank' }));
+      for (let i = 0; i < LOGS_NEEDED; i++) out = out.concat(gameEvent(g, 'USE', { word: 'log', target: 'bank' }));
       out = out.concat(gameEvent(g, 'HOLD_ITEM', 'rope'));
       out = out.concat(gameEvent(g, 'USE', { word: 'rope', target: 'logs' }));
       return out;
@@ -252,11 +264,10 @@ export function ch3Debug(g, beat) {
     case 'embarked':
       return ch3Debug(g, 'raft-unlocked').concat(gameEvent(g, 'BOARD'));
     case 'stalled':
-      return ch3Debug(g, 'embarked').concat(gameEvent(g, 'STALL'), gameEvent(g, 'POLE'));
+      return ch3Debug(g, 'embarked').concat(gameEvent(g, 'STALL'));
     case 'poled': {
       let out = ch3Debug(g, 'stalled');
-      for (const ipa of ['p', 'əʊ', 'l']) out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
-      out = out.concat(gameEvent(g, 'CRAFT', 'pole'));
+      out = out.concat(gameEvent(g, 'CRAFT', 'pole'));          // 剩下的 p·əʊ·l 恰好够拼
       return out.concat(gameEvent(g, 'USE', { word: 'pole', target: 'player' }));
     }
     case 'summary':

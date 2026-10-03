@@ -34,8 +34,8 @@
   "flows": {
     "log": { "listen": ["Log."], "puzzled": ["Log?"], "drop": [450, 520], "stones": ["l", "l", "ɒ", "g"] },
     "rope": { "listen": ["Rope."], "drop": [350, 540], "stones": [] },
-    "raft": { "listen": ["Raft."], "puzzled": ["Raft?"], "drop": [820, 520], "stones": ["æ", "f", "t"] },
-    "pole": { "listen": ["Pole."], "drop": [780, 420], "stones": ["l"] }
+    "raft": { "listen": ["Raft."], "puzzled": ["Raft?"], "drop": [500, 520], "stones": ["æ", "f", "t"] },
+    "pole": { "listen": ["Pole."] }
   },
   "carriers": {
     "l": "Light.",
@@ -55,7 +55,7 @@
       "groundY": 590,
       "spawnX": 170,
       "benchX": 360,
-      "doorX": 650,
+      "doorX": 570,
       "waterX": 760,
       "raftX": 880
     },
@@ -63,13 +63,12 @@
       "groundY": 590,
       "spawnX": 150,
       "benchX": 300,
-      "logX": 590,
-      "exitX": 1120
+      "logX": 590
     },
     "deep": {
       "groundY": 590,
       "spawnX": 260,
-      "benchX": 500,
+      "benchX": 660,
       "raftX": 360,
       "stallX": 760,
       "muralX": 960,
@@ -98,15 +97,17 @@
     "start": "暗河挡住了去路。岸边的东西，或许能拼出一条路。",
     "bank": "走近合成台，看看记忆里的声音够不够。",
     "crevice": "石壁的缝隙里卡着什么。走近，按 E。",
-    "log": "原木在水边等着。把它放到滩涂上。",
+    "log": "拿起背包里的原木，到水边按 E 放下，并排放满三根。",
     "craftLog": "三颗声音石，能拼出原木。",
     "craftRope": "绳子还在记忆里。把 r、əʊ、p 拼起来。",
-    "raft": "原木漂起来了。再把绳子给它。",
+    "log2": "第一根原木浮好了。再按一次 E，还差两根。",
+    "log3": "还差最后一根。再按一次 E。",
+    "raft": "三根原木并排浮着。再把绳子给它。",
     "raftListen": "木筏在低语——它还缺少一种声音。",
     "raftReady": "木筏会动了。走到水边，按 E 登上去。",
     "deep": "水流把你带进更深处。",
     "stalled": "水流停了。石壁上的画，像是在说什么。",
-    "pole": "把最后的声音拼成 pole，再把它交给自己。",
+    "pole": "把剩下的声音拼成 pole，再把它交给自己。",
     "poled": "木篙撑住了石壁。顺流而下，别停。",
     "end": "阳光在前面。第三间房完成了。"
   }

@@ -43,8 +43,13 @@ export function moveSide(w, dt) {
       p.climbing = true; p.x = rope.x();                // 抓住绳子：吸附到绳位（墙把玩家挡在两侧，起爬判定须放宽）
     }
     if (p.airborne || overGap) {
+      const py0 = p.y;
       p.vy += 1500 * dt; p.y += p.vy * dt; p.airborne = true;
-      if (p.vy > 0 && p.y >= geo.groundY && !overGap) {
+      // 跳上可跳平台（wall.jumpable，如第三关停泊的木筏）：下落穿越台面即落定
+      if (wall && wall.jumpable && p.vy > 0 && py0 <= wall.topY && p.y >= wall.topY &&
+          p.x > wall.X && p.x < wall.X + wall.W) {
+        p.y = wall.topY; p.vy = 0; p.airborne = false;
+      } else if (p.vy > 0 && p.y >= geo.groundY && !overGap) {
         p.y = geo.groundY; p.vy = 0; p.airborne = false;
         cfg.onLand?.(p.x);
       }
