@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil, CATB } from '../public/js/ch2b.js';
+import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil, CATB, tapTargetAt } from '../public/js/ch2b.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { moveSide, planDropStones } from '../public/js/sideview.js';
@@ -449,4 +449,158 @@ test('2b 绘制冒烟：推窗光柱/风尘/过曝白与窗台猫不抛（模拟
   assert.doesNotThrow(() => kit.draw(w, x, null), '光柱 + 风尘态 draw');
   w.view.winT = 1.5;                                     // 过曝白峰值
   assert.doesNotThrow(() => kit.draw(w, x, null), '过曝白态 draw');
+});
+
+// ================= Task 17：2b 交互（指针/拖拽/跳键，规格 §10） =================
+
+// 逻辑画布 1280×720 的 mock：client 坐标 = 逻辑坐标（scale 1）
+function mockCV() {
+  return { style: {}, addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }) };
+}
+
+test('指针命中表：石/台/听声点 stone·high/绳/窗（顺序镜像 findE）', () => {
+  const geo = content.geometry;
+  const base = {
+    geo, content,
+    player: { x: 140, y: geo.groundY },
+    stones: [{ ipa: 'r', x: 700, y: geo.groundY - 14, state: 'idle' }],
+    game: { hand: null }
+  };
+  assert.equal(tapTargetAt(base, { x: 702, y: 604 }).kind, 'stone');
+  assert.equal(tapTargetAt(base, { x: 470, y: 540 }).id, 'bench');
+  assert.equal(tapTargetAt(base, { x: 782, y: 302 }).id, 'stone');   // 嵌壁残碑 (780,300)
+  assert.equal(tapTargetAt(base, { x: 918, y: 122 }).id, 'high');    // 塔顶铁锚环 (920,120)
+  assert.equal(tapTargetAt(base, { x: 912, y: 400 }).id, 'rope');    // 绳带：地面才可点
+  assert.equal(tapTargetAt(base, { x: 990, y: 300 }), null);         // 地面点窗：隔着塔身不可交
+  const top = { ...base, player: { x: 950, y: geo.topY } };
+  assert.equal(tapTargetAt(top, { x: 980, y: 140 }).id, 'exit');     // 顶台点窗 = 推窗
+  assert.notEqual(tapTargetAt(top, { x: 912, y: 300 })?.id, 'rope'); // 顶台不再读作绳
+  assert.equal(tapTargetAt(base, { x: 300, y: 300 }), null);         // 空处：无目标 → 只走位
+});
+
+test('kit 导出指针入口：onPointerDown/onDropItem/onKey', () => {
+  assert.equal(typeof kit.onPointerDown, 'function');
+  assert.equal(typeof kit.onDropItem, 'function');
+  assert.equal(typeof kit.onKey, 'function');
+});
+
+test('onPointerDown：点哪走哪 + pending；点绳不再任意位置直触发', () => {
+  const g = createGame(content, ch2Profile);
+  const w = {
+    game: g, content, geo: content.geometry, stones: [],
+    player: { x: 140, y: content.geometry.groundY, climbing: false }
+  };
+  kit.onPointerDown(w, { clientX: 912, clientY: 300 }, mockCV());
+  assert.equal(w.pending.id, 'rope');
+  assert.equal(w.walkTo.x, content.geometry.wallX + 12);       // 912
+  assert.equal(g.mended, false, '先走位、到位再 doE（替换任意位置直接触发）');
+  kit.onPointerDown(w, { clientX: 470, clientY: 540 }, mockCV());
+  assert.equal(w.pending.id, 'bench');
+  assert.equal(w.walkTo.x, content.geometry.benchX);
+  kit.onPointerDown(w, { clientX: 1260, clientY: 300 }, mockCV());   // 空处：走到点击 x（地面钳 [40,1240]）
+  assert.equal(w.pending, null);
+  assert.equal(w.walkTo.x, 1240);
+  kit.onPointerDown(w, { clientX: 10, clientY: 300 }, mockCV());
+  assert.equal(w.walkTo.x, 40);
+});
+
+test('onPointerDown：顶台钳在 [920,990]；攀爬中不接点', () => {
+  const g = createGame(content, ch2Profile);
+  const geo = content.geometry;
+  const top = { game: g, content, geo, stones: [], player: { x: 950, y: geo.topY, climbing: false } };
+  kit.onPointerDown(top, { clientX: 400, clientY: 300 }, mockCV());
+  assert.equal(top.walkTo.x, geo.wallX + 20);                  // 920：不许走出平台边缘
+  kit.onPointerDown(top, { clientX: 980, clientY: 140 }, mockCV());
+  assert.equal(top.pending.id, 'exit');
+  assert.equal(top.walkTo.x, geo.exitX);
+  const climb = { ...top, player: { x: 912, y: 300, climbing: true }, pending: null, walkTo: null };
+  kit.onPointerDown(climb, { clientX: 700, clientY: 300 }, mockCV());
+  assert.equal(climb.pending, null);
+  assert.equal(climb.walkTo, null);
+  kit.onPointerDown(top, { clientX: 520, clientY: 120 }, mockCV());   // 顶台点台下的合成台
+  assert.equal(top.pending, null, '顶台够不到地面目标：只走位不交互');
+  assert.equal(top.walkTo.x, geo.wallX + 20);
+});
+
+test('onKey 清走位（pending 一并清；键盘接管移动）', () => {
+  const w = { walkTo: { x: 500 }, pending: { kind: 'obj', id: 'rope' } };
+  kit.onKey(w);
+  assert.equal(w.walkTo, null);
+  assert.equal(w.pending, null);
+});
+
+test('走位到位：tick 调 stepWalkTo 后按同一路径 doE（合成台）', () => {
+  const { w } = stageWorld();
+  const done = [];
+  w.doE = t => done.push(t);
+  kit.onPointerDown(w, { clientX: 520, clientY: 560 }, mockCV());
+  assert.equal(w.pending.id, 'bench');
+  for (let i = 0; i < 300 && !done.length; i++) kit.tick(w, 1 / 60);
+  assert.ok(done.some(t => t.id === 'bench'), '到位后走 doE（与按 E 同一条路径）');
+  assert.equal(w.pending, null);
+  assert.equal(w.walkTo, null);
+});
+
+test('绳升为正式 E 目标：未接也可 E（地面），顶台不读作绳（findE 条件放宽）', () => {
+  const g = createGame(content, ch2Profile);
+  const geo = content.geometry;
+  const w = { game: g, content, geo, stones: [], player: { x: geo.wallX + 12, y: geo.groundY } };
+  assert.equal(kit.findE(w).id, 'rope', '未接绳也是 E 目标（规格 §10）');
+  w.player.x = geo.wallX + 12 + 70;                            // 距绳 70px：出 65 半径
+  assert.notEqual(kit.findE(w)?.id, 'rope');
+  w.player.x = 990; w.player.y = geo.topY;                     // 顶台：绳不可 E，窗可 E
+  assert.equal(kit.findE(w).id, 'exit');
+});
+
+test('onE 绳分支：未接+空手=ROPE；未接+持绳=USE 接绳；已接+地面=攀爬', () => {
+  const ropeT = { kind: 'obj', id: 'rope', x: content.geometry.wallX + 12, y: content.geometry.groundY };
+  const a = stageWorld();
+  kit.onE(a.w, ropeT);                                         // 未接 + 空手 → 听断绳
+  assert.ok(a.ran.some(i => i.t === 'ropeFirst'), '空手 E = 听断绳（ROPE）');
+  assert.ok(a.ran.some(i => i.t === 'drop' && i.word === 'rope'), '首次掉石');
+  a.g.hand = { kind: 'item', word: 'rope' };
+  a.ran.length = 0;
+  kit.onE(a.w, ropeT);                                         // 未接 + 持绳 → 接绳
+  assert.ok(a.ran.some(i => i.t === 'effect' && i.name === 'mendRope' && i.full === true), '持绳 E = 接绳（USE）');
+  assert.equal(a.g.mended, true);
+  a.ran.length = 0;
+  kit.onE(a.w, ropeT);                                         // 已接 + 地面 → 攀爬
+  assert.equal(a.w.player.climbing, true, '已接 + 地面 E = 攀爬');
+});
+
+test('onDropItem：rope 拖到绳带 |x−912|≤45 且 y∈[130,600] = 接绳；其余 = mutter', () => {
+  const a = stageWorld();
+  a.g.hand = { kind: 'item', word: 'rope' };
+  kit.onDropItem(a.w, 'rope', 912, 300);
+  assert.ok(a.ran.some(i => i.t === 'effect' && i.name === 'mendRope' && i.full === true), '拖到绳带 = USE(rope)');
+  assert.equal(a.g.mended, true);
+  const b = stageWorld();
+  kit.onDropItem(b.w, 'rope', 912, 620);                       // 低于绳带（地面线）
+  kit.onDropItem(b.w, 'rope', 960, 300);                       // |960−912|=48 > 45
+  kit.onDropItem(b.w, 'jump', 912, 300);                       // 非 rope 词
+  assert.equal(b.sounds.filter(s => s === 'mutter').length, 3, '拖错：纹丝不动 + 咕哝');
+  assert.ok(!b.ran.some(i => i.t === 'effect'), '拖错不接绳');
+});
+
+test('#btn-jump：页面有钮、有 jump 能力即显示（mock document）', async () => {
+  const html = await readFile(new URL('../public/chapter2b.html', import.meta.url), 'utf8');
+  assert.match(html, /<button id="btn-jump"/, 'chapter2b.html 补触屏跳键（规格 §10）');
+  const prev = globalThis.document;
+  const mkBtn = () => ({ firstChild: null, innerHTML: '', addEventListener() {}, classList: { hidden: true, remove(c) { if (c === 'hidden') this.hidden = false; } } });
+  let btn = mkBtn();
+  globalThis.document = {
+    createElement: () => ({ width: 0, height: 0, getContext: () => mockCtx(), toDataURL: () => 'data:image/png;base64,x' }),
+    getElementById: id => (id === 'btn-jump' ? btn : null)
+  };
+  try {
+    const noJump = mergeProfile(createProfile(), { chapter: 1 });        // 无 jump 能力
+    kit.makeWorld({ content, profile: noJump, game: createGame(content, noJump), cv: mockCV(), signal: undefined });
+    assert.equal(btn.classList.hidden, true, '无能力：不显示');
+    btn = mkBtn();
+    kit.makeWorld({ content, profile: ch2Profile, game: createGame(content, ch2Profile), cv: mockCV(), signal: undefined });
+    assert.equal(btn.classList.hidden, false, '有 jump 能力：进场即显示（规格 §10）');
+    assert.match(btn.innerHTML, /^<img src="data:image\/png/, '图标 = jump（只装一次）');
+  } finally {
+    globalThis.document = prev;
+  }
 });

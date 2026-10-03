@@ -108,10 +108,10 @@ export function ropeDebug(g, beat) {
 
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
-import { SIDE, moveSide, sideJump,
+import { SIDE, moveSide, sideJump, stepWalkTo,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots,
          drawArchSide, groundShadow, benchCandle } from './sideview.js';
-import { PAL, drawRune } from './art.js';
+import { PAL, drawRune, iconURL } from './art.js';
 import { blit } from './sprites.js';
 import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
 import { screenToLogical } from './ch1/physics.js';
@@ -131,6 +131,46 @@ export function LIGHTS2(geo) {
 
 // —— 窗台橘猫（跨半场活物，规格 §9）：坐 (935,120) 先到一步；window 拍先钻出窗 ——
 export const CATB = { x: 935, speed: 90 };                 // 90px/s：约 0.5s 走到窗 (980) 钻出
+
+// —— 指针命中表（纯函数；顺序镜像 findE：石 → 合成台 → 听声点 stone/high → 绳 → 窗）——
+// 绳只在绳下（地面）可点、窗只在顶台可点——与 findE 的可交条件同源（规格 §10）
+export function tapTargetAt(w, p) {
+  const { geo, player, stones } = w;
+  let best = null, bd = 1e9;
+  const consider = (d, t, r) => { if (d < bd && d <= r) { bd = d; best = t; } };
+  for (const s of stones) if (s.state === 'idle') {
+    consider(Math.hypot(p.x - s.x, p.y - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, stone: s }, 44);
+  }
+  consider(Math.abs(p.x - geo.benchX), { kind: 'obj', id: 'bench', x: geo.benchX, y: geo.groundY }, 80);
+  for (const spot of (w.content.listening || [])) {        // 听声点：auto 的自动响，不占指针（stone/high）
+    if (spot.auto) continue;
+    consider(Math.hypot(p.x - spot.x, p.y - spot.y), { kind: 'obj', id: spot.id, x: spot.x, y: spot.y }, spot.r);
+  }
+  const ropeX = geo.wallX + 12;
+  if (player.y >= geo.groundY - 20) {
+    consider(Math.abs(p.x - ropeX), { kind: 'obj', id: 'rope', x: ropeX, y: geo.groundY }, 65);
+  }
+  if (player.y <= geo.topY + 2) {
+    consider(Math.abs(p.x - geo.exitX), { kind: 'obj', id: 'exit', x: geo.exitX, y: geo.topY }, 80);
+  }
+  return best;
+}
+
+// —— #btn-jump 触屏跳键（规格 §10）：右下圆钮，有 jump 能力即显示；pointerdown → onSpace ——
+function showJumpBtn(w) {
+  if (typeof document === 'undefined') return;
+  const btn = document.getElementById?.('btn-jump');       // 无 DOM（Node 测试 mock）时静默
+  if (!btn) return;
+  if (!btn.firstChild) btn.innerHTML = `<img src="${iconURL('jump')}" alt="">`;   // 图标只装一次
+  btn.classList.remove('hidden');
+}
+function wireJumpBtn(w, signal) {
+  if (typeof document === 'undefined') return;
+  const btn = document.getElementById?.('btn-jump');
+  if (!btn) return;
+  btn.addEventListener('pointerdown', () => kit.onSpace(w), { signal });
+  if (w.canJump) showJumpBtn(w);                           // 书档已有 jump：进场即显示
+}
 
 export const kit = {
   chapter: 2, contentId: '2b', W: SIDE.W, H: SIDE.H, titleRune: 'ᚱ',
@@ -160,6 +200,7 @@ export const kit = {
       actors, player, geo, canJump, cv,
       lights: LIGHTS2(geo),                                    // 光锚唯一事实源（烘焙光池/动态光晕/面纱挖孔共用，规格 §6.1 2b 表）
       stones: [],
+      walkTo: null, pending: null,                             // 点哪走哪（指针 → walkTo + pending；tick 到位 doE，规格 §10）
       view: {
         t: 0, puffs: [], ropeMendT: 0, winOpen: false,
         swayKick: 0, tautT: 0,                                 // 断绳一摆 / 绷直一沉（Task 16）
@@ -182,6 +223,7 @@ export const kit = {
     cv.style.cursor = 'default';
     cv.addEventListener('pointermove', updateRopeCursor, { signal });
     cv.addEventListener('pointerleave', () => { cv.style.cursor = 'default'; }, { signal });
+    wireJumpBtn(w, signal);                                    // #btn-jump 触屏跳键（页面无此钮则静默）
     return w;
   },
 
@@ -222,8 +264,14 @@ export const kit = {
       w.cfg.rope = null;
       moveSide(w, dt);
       w.cfg.rope = rope;
+      stepWalkTo(w, dt);                                   // 点哪走哪（规格 §10；调在 moveSide 之后）
       if (player.y <= geo.topY + 2) {                     // 塔顶平台：不许走出边缘掉下去
         player.x = Math.max(geo.wallX + 20, Math.min(geo.wallX + geo.wallW - 20, player.x));
+      }
+      // 走位到位（≤30px）→ 触发 pending：与按 E 同一条路径（规格 §10）
+      if (w.pending && (!w.walkTo || Math.abs(player.x - w.walkTo.x) <= 30)) {
+        const t = w.pending; w.pending = null; w.walkTo = null;
+        w.doE(t);
       }
       if (player.moving && (w.keys.has('l') || w.keys.has('r'))) player.walkT += dt;
     }
@@ -277,35 +325,56 @@ export const kit = {
       if (spot.auto) continue;
       consider(Math.abs(player.x - spot.x), { kind: 'obj', id: spot.id, x: spot.x, y: spot.y }, spot.r);
     }
-    if (w.game.mended && player.y >= geo.groundY - 20) {
+    if (player.y >= geo.groundY - 20) {                         // 绳升为正式 E 目标（规格 §10）：未接=听/接，已接=攀爬
       consider(Math.abs(player.x - ropeX), { kind: 'obj', id: 'rope', x: ropeX, y: geo.groundY }, 65);
     }
     consider(Math.hypot(player.x - geo.exitX, player.y - geo.topY), { kind: 'obj', id: 'exit', x: geo.exitX, y: geo.topY }, 80);  // 须在顶台（y≈topY）才可交
     return best;
   },
 
-  onPointerDown(w, e, cv) {
-    if (w.game.mended) { cv.style.cursor = 'default'; return; }
+  onPointerDown(w, e, cv) {                                        // 点哪走哪：命中表 → walkTo + pending（tick 到位 doE，规格 §10）
+    const { player, geo } = w;
+    if (player.climbing) return;                                   // 攀爬中不接点
     const p = screenToLogical(e.clientX, e.clientY, cv.getBoundingClientRect());
-    const ropeX = w.geo.wallX + 12;
-    if (!p.inside || Math.hypot(p.x - ropeX, p.y - (w.geo.topY + 192)) > 60) return;
-    if (w.game.hand?.kind === 'item' && w.game.hand.word === 'rope') {
-      w.run(gameEvent(w.game, 'USE', { word: 'rope', target: 'rope' }));
-    } else {
-      w.run(gameEvent(w.game, 'ROPE'));
-    }
-    cv.style.cursor = 'default';
+    if (!p.inside) return;
+    const t = tapTargetAt(w, p);
+    const onTop = player.y <= geo.topY + 2;                        // 顶台钳在平台内 [920,990]，地面钳在走廊内 [40,1240]
+    const x0 = onTop ? geo.wallX + 20 : 40;
+    const x1 = onTop ? geo.wallX + geo.wallW - 20 : SIDE.W - 40;
+    const tx = t ? t.x : p.x;
+    w.walkTo = { x: Math.max(x0, Math.min(x1, tx)) };              // 未命中 = 走到点击 x（钳制）
+    w.pending = t && tx >= x0 && tx <= x1 ? t : null;              // 钳位改变了目标 x = 本层够不到：只走位不交互
   },
+
+  onDropItem(w, word, cx, cy) {                                    // 拖词具到场景：rope 拖到绳带 = 接绳（规格 §10）
+    const p = screenToLogical(cx, cy, w.cv.getBoundingClientRect());
+    if (!p.inside) return;
+    const ropeX = w.geo.wallX + 12;
+    if (word === 'rope' && Math.abs(p.x - ropeX) <= 45 && p.y >= w.geo.topY + 10 && p.y <= w.geo.groundY - 20) {
+      w.run(gameEvent(w.game, 'USE', { word, target: 'rope' }));   // 绳带 = |x−912|≤45 且 y∈[130,600]
+    } else w.sfx.mutter();                                         // 拖错：目标纹丝不动 + 咕哝
+  },
+
+  onKey(w) { w.walkTo = null; w.pending = null; },                 // 方向键按下取消走位（规格 §10）
 
   onE: chapterOnE(gameEvent, (w, t) => {
     const { game } = w;
     if (w.content.listening?.some(s => s.id === t.id)) { w.run(gameEvent(game, 'LISTEN', t.id)); return; }
-    if (t.id === 'rope' && game.mended) {
-      w.player.climbing = true;
-      w.player.airborne = false;
-      w.player.x = w.geo.wallX + 12;
-      w.player.y = w.geo.groundY;
-      w.view.climbT = 0; w.view.climbStrain = 0;              // 起爬：strain 节律清零
+    if (t.id === 'rope') {                                     // 绳升为正式 E 目标（规格 §10）
+      if (!game.mended) {
+        if (game.hand?.kind === 'item' && game.hand.word === 'rope') {
+          w.run(gameEvent(game, 'USE', { word: 'rope', target: 'rope' }));   // 持绳 E = 接绳
+        } else {
+          w.run(gameEvent(game, 'ROPE'));                      // 空手 E = 听断绳（掉石/低语）
+        }
+      } else if (w.player.y >= w.geo.groundY - 20) {
+        w.player.climbing = true;                              // 已接 + 地面 E = 攀爬
+        w.player.airborne = false;
+        w.player.x = w.geo.wallX + 12;
+        w.player.y = w.geo.groundY;
+        w.view.climbT = 0; w.view.climbStrain = 0;             // 起爬：strain 节律清零
+        w.walkTo = null; w.pending = null;
+      } else w.sfx.mutter();
     }
     else if (t.id === 'exit') w.run([{ t: 'windowExit' }]);
     else w.sfx.mutter();
@@ -356,6 +425,7 @@ export const kit = {
       w.player.x = w.geo.wallX + 12;
       w.player.y = w.geo.groundY;
       w.view.climbT = 0; w.view.climbStrain = 0;
+      w.walkTo = null; w.pending = null;
     },
     teleport(w, ins) {                                       // 通用调试传送原语（规格 §3.5）：位置依赖拍截图用
       w.player.x = ins.x;
