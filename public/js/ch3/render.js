@@ -54,7 +54,7 @@ export function drawCreviceObjects(w, x) {
   drawLog(x, geo.logX + 126, geo.groundY - 40, -0.58);
   drawLog(x, geo.logX + 170, geo.groundY - 96, 0.22);
 
-  drawCraftMural(x, 975, 200);                         // 配方岩画（原为 fillText 占位）
+  drawCraftMural(x, 1010, 200);                        // 配方岩画（原为 fillText 占位）
 
   drawCrack(x, geo.spawnX, geo.groundY, CAVE_SEEDS.crevice + 3);   // 回程口（原石拱门）
 }
