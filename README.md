@@ -11,7 +11,7 @@
 [![Dependencies](https://img.shields.io/badge/dependencies-0-2ea44f?style=flat-square)](#技术实现)
 [![Tests](https://img.shields.io/badge/tests-330%20passing-success?style=flat-square)](#测试)
 [![Chapters](https://img.shields.io/badge/chapters-3-8fc3ff?style=flat-square)](#三章)
-[![License](https://img.shields.io/badge/license-%E5%BE%85%E5%AE%9A-lightgrey?style=flat-square)](#许可)
+[![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)](LICENSE)
 
 <img src="docs/screenshots/title.png" alt="标题页：暗色石室中一枚发光的青色符文" width="760">
 
@@ -153,4 +153,4 @@ node --test test/ch2.test.js test/ch3.test.js   # 多文件
 
 ## 许可
 
-尚未指定。若需开源，请补充 `LICENSE`（并在上方徽章同步）。
+[MIT](LICENSE) © 2026 Xiaozhi_z —— 可自由使用、修改、分发，保留署名与许可副本即可。

@@ -1,7 +1,17 @@
 node_modules/
 *.log
+
+# 会话 / 素材包 / 草稿（不入库）
 .superpowers/
-Modern_Interiors_Free_v2.2.zip
 .bands/
 .assetpeek/
 .claude/
+Modern_Interiors_Free_v2.2.zip
+
+# 系统与编辑器噪声
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+.idea/
+.vscode/

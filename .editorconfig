@@ -1,0 +1,13 @@
+# 编辑器统一约定（与 .gitattributes 同源：文本一律 LF、UTF-8）
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
