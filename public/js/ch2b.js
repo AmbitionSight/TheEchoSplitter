@@ -100,7 +100,7 @@ import { SIDE, moveSide, sideJump,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots,
          drawArchSide, groundShadow } from './sideview.js';
 import { PAL, drawRune } from './art.js';
-import { blit, SPR } from './sprites.js';
+import { blit } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { screenToLogical } from './ch1/physics.js';
 import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
@@ -284,7 +284,7 @@ export const kit = {
     drawTorchSide(x, 240, 240, v.t);                                         // 左火把 = warm 听声点实体 (240,240)（规格 §5.2#2）
     drawTorchSide(x, 868, 430, v.t);                                         // 绳位火把 (868,430)：照亮绳根与绞盘（§5.2#6）
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
-    drawWindow(x, w.atlases, geo.exitX, geo.topY, v.winOpen, game.climbed, v.t);
+    drawWindow(x, geo.exitX, geo.topY, v.winOpen, game.climbed, v.t);
     x.save();
     if (w.player.climbing) { x.translate(w.player.x, w.player.y); x.rotate(0.12); x.translate(-w.player.x, -w.player.y); }
     drawPlayer(x, w.player, v.t, w.atlases);
@@ -511,73 +511,178 @@ function makeBg(w) {
   return c;
 }
 
+// —— 绳（规格 §11）：矢量 8px 双层编织（暗边 #6e4526 / 芯 #b98d55 / 高光 #d9b878）
+//    + 每 6px 一道 2px 斜纹 + PAL.ink 描边；绳身自局部原点 (0,0) 垂直垂下 ——
+function ropeBraid(x, len) {
+  x.fillStyle = '#6e4526';                                   // 暗边层（背光侧）
+  x.fillRect(-4, 0, 8, len);
+  x.fillStyle = '#b98d55';                                   // 绳芯
+  x.fillRect(-3, 0, 5, len);
+  x.fillStyle = '#d9b878';                                   // 高光层（受光侧）
+  x.fillRect(-3, 0, 2, len);
+  for (let i = 0, y = 3; y < len - 2; i++, y += 6) {         // 斜纹：每 6px 一道 2px，明暗交替
+    x.strokeStyle = i % 2 ? '#d9b878' : '#6e4526';
+    x.lineWidth = 2;
+    x.beginPath(); x.moveTo(-4, y); x.lineTo(4, Math.min(y + 4, len)); x.stroke();
+  }
+  x.strokeStyle = PAL.ink; x.lineWidth = 1.5;                // ink 描边（顶端没入锚点，不描顶）
+  x.beginPath();
+  x.moveTo(-4, 0); x.lineTo(-4, len);
+  x.moveTo(4, 0); x.lineTo(4, len);
+  x.stroke();
+}
+
 function drawRope(x, w, ropeX) {
   const geo = w.geo, v = w.view, game = w.game;
-  const sway = Math.sin(v.t * 1.6) * 6;
-  const anchorY = geo.topY - 10;
+  const sway = Math.sin(v.t * 1.6) * 6;                      // 摆动幅度（常量保持）
+  const anchorY = geo.topY - 10;                             // 锚点（常量保持）
   if (!game.mended) {
-    // 断绳：散头贴图从墙顶垂下（15 倍缩小须平滑采样），末端轻摆 + 互动绿光
-    const len = 198, wid = 13;
+    // 断绳：垂到半空，断端三股散开 + 一股打卷（矢量重写，规格 §11）
+    const len = 198;                                         // 断绳长度（常量保持）
     x.save();
     x.translate(ropeX, anchorY);
-    x.rotate(sway * 0.0022);
-    x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
-    blit(x, w.atlases, 'rope_broken', 0, 0, { w: wid, h: len, ax: 0.5 });
+    x.rotate(sway * 0.0022);                                 // 断绳摆幅（常量保持）
+    const bodyLen = len - 14;
+    ropeBraid(x, bodyLen);
+    x.lineCap = 'round';
+    const strands = [                                        // [色, 起点x, 控制x, 控制y, 末点x, 末点y]
+      ['#d9b878', -1.5, -4, bodyLen + 7, -7.5, bodyLen + 13],
+      ['#b98d55', 0.5, 1.5, bodyLen + 10, 0.5, bodyLen + 19],
+      ['#6e4526', 2, 5, bodyLen + 6, 6.5, bodyLen + 11]
+    ];
+    for (const [c, sx, cx2, cy2, ex2, ey2] of strands) {     // 三股散开（先 ink 描边再上色）
+      x.beginPath(); x.moveTo(sx, bodyLen); x.quadraticCurveTo(cx2, cy2, ex2, ey2);
+      x.strokeStyle = PAL.ink; x.lineWidth = 3.2; x.stroke();
+      x.strokeStyle = c; x.lineWidth = 2; x.stroke();
+    }
+    x.beginPath(); x.arc(7.5, bodyLen + 13.5, 3.2, -0.6, 3.6);  // 卷曲（右股末端打卷）
+    x.strokeStyle = PAL.ink; x.lineWidth = 2.6; x.stroke();
+    x.strokeStyle = '#b98d55'; x.lineWidth = 1.6; x.stroke();
     x.restore();
+    // 绳端交互光：青 PAL.glowRune（修 #7bd88f 绿例外，规格 §11）
     const endY = anchorY + len;
     const gp = Math.sin(v.t * 3) * 0.5 + 0.5;
     const g = x.createRadialGradient(ropeX, endY + 2, 4, ropeX, endY + 2, 44 + gp * 16);
-    g.addColorStop(0, `rgba(123,216,143,${0.3 + gp * 0.25})`); g.addColorStop(1, 'rgba(123,216,143,0)');
+    g.addColorStop(0, `rgba(84,224,200,${0.3 + gp * 0.25})`);
+    g.addColorStop(1, 'rgba(84,224,200,0)');
     x.fillStyle = g; x.beginPath(); x.arc(ropeX, endY + 2, 60, 0, 7); x.fill();
   } else if (v.ropeMendT < 1.2) {
-    // 好绳：绳身贴图平铺（交替垂直镜像，接缝无痕）+ 绳结收尾；随 ropeMendT 向下生长
-    const endY = geo.groundY - 14;
+    // 好绳：矢量绳身随 ropeMendT 向下生长 + 末端绳结；生长前沿青微光（完成即熄）
+    const endY = geo.groundY - 14;                           // 垂到地面上方 14px（常量保持）
     const grow = Math.min(1, Math.max(0, (1.2 - v.ropeMendT) / 0.9));
     const curLen = (endY - anchorY) * grow;
     if (curLen < 4) return;
-    const atlas = w.atlases?.furn;
-    if (!atlas) return;
-    const spr = SPR.rope_fixed;                          // 16x120：绳身 y=8..88，绳结 y=88..120
-    const s = 1.3;                                       // 绳身 5px×1.3=6.5px，与断绳视觉宽度(≈6.6px)一致
-    const segW = spr.w * s, segH = 80 * s;
-    const knotH = (spr.h - 88) * s;
-    const dx = -segW * 0.44;                             // 绳芯对齐 ropeX
     x.save();
     x.translate(ropeX, anchorY);
-    x.rotate(sway * 0.0012);
-    x.imageSmoothingEnabled = false;
-    let y = 0, flip = false;
-    const limit = curLen > knotH ? curLen - knotH : curLen;
-    while (y < limit) {                                  // 绳身平铺
-      const h = Math.min(segH, limit - y);
-      const srcH = 80 * (h / segH);
-      if (flip) {                                        // 垂直镜像：底边接上一块的底边，无痕
-        x.save();
-        x.translate(0, y + h); x.scale(1, -1);
-        x.drawImage(atlas, spr.x, spr.y + 8, spr.w, srcH, dx, 0, segW, h);
-        x.restore();
-      } else {
-        x.drawImage(atlas, spr.x, spr.y + 8, spr.w, srcH, dx, y, segW, h);
-      }
-      y += h; flip = !flip;
-    }
-    if (curLen > knotH) {                                // 末端绳结
-      x.drawImage(atlas, spr.x, spr.y + 88, spr.w, spr.h - 88, dx, curLen - knotH, segW, knotH);
+    x.rotate(sway * 0.0012);                                 // 好绳摆幅（常量保持）
+    const knotH = Math.min(18, curLen * 0.5);
+    ropeBraid(x, curLen - knotH);
+    x.fillStyle = '#b98d55';                                 // 末端绳结
+    x.beginPath(); x.ellipse(0, curLen - knotH / 2, 5.5, knotH / 2 + 0.5, 0, 0, 7); x.fill();
+    x.strokeStyle = PAL.ink; x.lineWidth = 1.6; x.stroke();
+    x.strokeStyle = '#6e4526'; x.lineWidth = 2;              // 双道缠绳
+    x.beginPath(); x.moveTo(-5.2, curLen - knotH * 0.7); x.lineTo(5.2, curLen - knotH * 0.45); x.stroke();
+    x.beginPath(); x.moveTo(-5.2, curLen - knotH * 0.35); x.lineTo(5.2, curLen - knotH * 0.6); x.stroke();
+    x.strokeStyle = '#d9b878'; x.lineCap = 'round';          // 收头小尾
+    x.beginPath(); x.moveTo(3.5, curLen - 2); x.lineTo(6.5, curLen + 2.5); x.stroke();
+    if (grow < 1) {                                          // 生长前沿青微光
+      const g = x.createRadialGradient(0, curLen, 1, 0, curLen, 15);
+      g.addColorStop(0, 'rgba(84,224,200,.5)');
+      g.addColorStop(1, 'rgba(84,224,200,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(0, curLen, 15, 0, 7); x.fill();
+      x.fillStyle = 'rgba(160,245,225,.85)';
+      x.beginPath(); x.arc(0, curLen, 1.6, 0, 7); x.fill();
     }
     x.restore();
   }
 }
 
-// 塔顶出口：窗户立在窗沿上（关=拱形窗，按 E 推开=双页窗）
-function drawWindow(x, imgs, ex, ty, open, lit, t) {
+// 塔顶出口：矢量拱龛 + 双页木窗（规格 §11；退役照片贴图）
+// 关 = 两页木窗合拢（顶部随拱收弧）；开 = 木页绕外缘旋出 70°（平行四边形投影），夜空 + 暖光点透出
+function drawWindow(x, ex, ty, open, lit, t) {
+  const hw = 22, top = ty - 84, base = ty - 4;
+  const arch = () => {                                       // 洞口拱形（ch1 门拱同族）
+    x.beginPath();
+    x.moveTo(ex - hw, base);
+    x.lineTo(ex - hw, top + 26);
+    x.quadraticCurveTo(ex, top - 6, ex + hw, top + 26);
+    x.lineTo(ex + hw, base);
+    x.closePath();
+  };
   if (!open && lit) {                                        // 可互动时的暖光提示
     const gp = Math.sin(t * 3) * 0.5 + 0.5;
     const g = x.createRadialGradient(ex, ty - 40, 6, ex, ty - 40, 48 + gp * 12);
     g.addColorStop(0, `rgba(255,214,130,${0.16 + gp * 0.16})`); g.addColorStop(1, 'rgba(255,214,130,0)');
     x.fillStyle = g; x.beginPath(); x.arc(ex, ty - 40, 60, 0, 7); x.fill();
   }
-  if (open) blit(x, imgs, 'window_open', ex - 28, ty - 78, { w: 56, h: 78 });
-  else blit(x, imgs, 'window_closed', ex - 28, ty - 78, { w: 56, h: 78 });
+  x.save();
+  x.fillStyle = shade('#7b7669', 0.03);                      // 拱龛石框
+  x.beginPath();
+  x.moveTo(ex - hw - 10, base + 6);
+  x.lineTo(ex - hw - 10, top + 20);
+  x.quadraticCurveTo(ex, top - 18, ex + hw + 10, top + 20);
+  x.lineTo(ex + hw + 10, base + 6);
+  x.closePath(); x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 3; x.stroke();
+  x.fillStyle = 'rgba(255,240,214,.08)';                     // 龛框左缘受光
+  x.fillRect(ex - hw - 10, top + 20, 3, base - top - 14);
+  x.fillStyle = 'rgba(0,0,0,.30)';                           // 龛内沉影
+  arch(); x.fill();
+  x.save(); arch(); x.clip();
+  const sky = x.createLinearGradient(0, top, 0, base);       // 夜空（洞口外的天色）
+  sky.addColorStop(0, '#0a0f1e'); sky.addColorStop(1, '#1e2743');
+  x.fillStyle = sky; x.fillRect(ex - hw, top - 8, hw * 2, base - top + 12);
+  const r = rng(88);                                         // 远处暖光点（确定布局）
+  for (let i = 0; i < 7; i++) {
+    const dx = ex - hw + 7 + r() * (hw * 2 - 14), dy = top + 12 + r() * (base - top - 20);
+    x.fillStyle = 'rgba(255,214,130,.14)'; x.beginPath(); x.arc(dx, dy, 3.4, 0, 7); x.fill();
+    x.fillStyle = 'rgba(255,226,168,.9)'; x.beginPath(); x.arc(dx, dy, 1.2, 0, 7); x.fill();
+  }
+  if (!open) {
+    for (const s of [-1, 1]) {                               // 关：两页合拢，板缝 + 拉手
+      const px = s < 0 ? ex - hw : ex;
+      x.fillStyle = shade(PAL.wood3, s < 0 ? 0.06 : -0.05);
+      x.fillRect(px, top - 8, hw, base - top + 10);
+      x.strokeStyle = 'rgba(32,26,20,.5)'; x.lineWidth = 1.3;
+      for (let i = 1; i < 3; i++) {
+        x.beginPath(); x.moveTo(px + (hw * i) / 3, top - 6); x.lineTo(px + (hw * i) / 3, base + 2); x.stroke();
+      }
+      x.strokeStyle = PAL.ink; x.lineWidth = 2;
+      x.strokeRect(px, top - 8, hw, base - top + 10);
+      x.fillStyle = '#4b4f5a';
+      x.beginPath(); x.arc(px + (s < 0 ? hw - 4 : 4), base - 26, 2.2, 0, 7); x.fill();
+      x.strokeStyle = PAL.ink; x.lineWidth = 1.2; x.stroke();
+    }
+    x.strokeStyle = PAL.ink; x.lineWidth = 1.6;              // 中缝
+    x.beginPath(); x.moveTo(ex, top - 6); x.lineTo(ex, base + 2); x.stroke();
+  } else {
+    const pw = hw * 0.34;                                    // 旋出 70°：cos70°≈0.34 的投影宽
+    for (const s of [-1, 1]) {
+      const hx = s < 0 ? ex - hw : ex + hw;                  // 铰链在外缘
+      x.beginPath();                                         // 平行四边形木页
+      x.moveTo(hx, top + 22);
+      x.lineTo(hx - s * pw, top + 28);
+      x.lineTo(hx - s * pw, base + 7);
+      x.lineTo(hx, base);
+      x.closePath();
+      x.fillStyle = shade(PAL.wood3, s < 0 ? 0.06 : -0.05);
+      x.fill();
+      x.strokeStyle = PAL.ink; x.lineWidth = 2; x.stroke();
+      x.strokeStyle = 'rgba(32,26,20,.5)'; x.lineWidth = 1.3;  // 板缝
+      x.beginPath(); x.moveTo(hx - s * pw * 0.5, top + 25); x.lineTo(hx - s * pw * 0.5, base + 3.5); x.stroke();
+      x.fillStyle = '#4b4f5a';                               // 拉手
+      x.beginPath(); x.arc(hx - s * (pw - 2.5), base - 24, 2, 0, 7); x.fill();
+      x.strokeStyle = PAL.ink; x.lineWidth = 1.1; x.stroke();
+    }
+  }
+  x.restore();
+  arch(); x.strokeStyle = PAL.ink; x.lineWidth = 2.5; x.stroke();   // 洞口描边
+  x.restore();
+  x.fillStyle = shade('#7b7669', 0.06);                      // 窗台石沿（压在洞口下缘）
+  x.fillRect(ex - hw - 14, base, hw * 2 + 28, 8);
+  x.strokeStyle = PAL.ink; x.lineWidth = 2; x.strokeRect(ex - hw - 14, base, hw * 2 + 28, 8);
+  x.fillStyle = 'rgba(255,240,214,.12)';
+  x.fillRect(ex - hw - 14, base, hw * 2 + 28, 2);
 }
 
 function drawClimbArms(x, p) {

@@ -5,10 +5,6 @@ export const ATLASES = {
   rb: { src: 'assets/mi/roombuilder32.png', w: 544, h: 736 },   // 墙/地板（房间构建器）
   ch: { src: 'assets/mi/chars.png', w: 576, h: 768 },           // 角色（RPGMAKERMV 版，48x96 格）
   props: { src: 'assets/props/props.webp', w: 400, h: 400 },     // 外部道具素材（黑底，第一排为门）
-  rpB:   { src: 'assets/props/rope-broken.webp', w: 887, h: 1774, key: 'black' },  // 断绳（黑底需抠黑）
-  furn:  { src: 'assets/props/furniture.png', w: 768, h: 768 },  // 家具素材表（自带透明通道）
-  winC:  { src: 'assets/props/window-closed.png', w: 144, h: 192, key: 'white' },  // 关着的拱形窗（灰底抠图）
-  winO:  { src: 'assets/props/window-open.png', w: 124, h: 166, key: 'white' },    // 推开的双页窗
   fb:    { src: 'assets/floor/brick.webp', w: 762, h: 784 },     // 第一关地砖（4x 像素砖石纹理，0.25x 平铺）
   wallClean: { src: 'assets/wall/clean.webp', w: 1104, h: 1128 },
   wallMoss: { src: 'assets/wall/moss.webp', w: 814, h: 818 },
@@ -23,10 +19,6 @@ export const SPR = {
   door:       { a: 'mi', x: 228, y: 1544, w: 54,  h: 78  },   // 木门（可开合，第二/三章用）
   door_open:  { a: 'props', x: 66,  y: 21, w: 28, h: 42 },   // 石拱门框+敞开门洞（开门态）
   door_closed:{ a: 'props', x: 167, y: 26, w: 18, h: 37 },   // 拱顶木门（关门态，与门洞同宽配套）
-  rope_broken:{ a: 'rpB',   x: 387, y: 0,   w: 113, h: 1722 }, // 断裂绳索（末端散开，第三关）
-  rope_fixed: { a: 'furn',  x: 352, y: 0,   w: 16,  h: 120 },  // 完整绳索带绳结（修复后，第三关）
-  window_closed:{ a: 'winO', x: 12, y: 10, w: 105, h: 146 },   // 关着的双页木窗（塔顶出口）
-  window_open:  { a: 'winC', x: 26, y: 28, w: 105, h: 146 },   // 推开后的拱形亮窗
   table:      { a: 'mi', x: 26,  y: 322,  w: 76,  h: 74  },   // 木桌（合成台/工作台）
   plant:      { a: 'mi', x: 386, y: 1444, w: 28,  h: 46  },   // 盆栽（枯苗陶盆，盆在底部）
   pot:        { a: 'mi', x: 390, y: 1470, w: 20,  h: 20  },   // 盆栽的陶盆部分（枯苗用）
