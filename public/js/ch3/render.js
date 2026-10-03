@@ -39,7 +39,7 @@ export function drawBankObjects(w, x) {
     for (let k = 0; k < w.game.logsPlaced; k++) drawLog(x, geo.waterX - 20 + k * 44, geo.groundY - 16, ROTS[k % ROTS.length]);
   }
   if (w.game.raftAssembled) drawRaft(x, w.raft.x, w.raft.y, w.view.t);
-  x.fillStyle = '#2d3941'; x.fillRect(geo.waterX - 4, geo.groundY - 4, 8, 8);
+  drawMooring(x, geo.waterX - 4, geo.groundY);                 // 系泊石桩（原 8×8 裸方块）
 }
 
 export function drawCreviceObjects(w, x) {
@@ -106,23 +106,96 @@ export function drawDeepObjects(w, x) {
   x.fillStyle = 'rgba(255,221,140,.5)'; x.font = '18px system-ui'; x.fillText('石壁上的撑篙图', geo.muralX - 88, 310);
 }
 
-function drawLog(x, cx, cy, rot = -0.08) {
+export function drawLog(x, cx, cy, rot = -0.08) {
   x.save(); x.translate(cx, cy); x.rotate(rot);
-  x.fillStyle = '#9a6536'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
-  x.beginPath(); x.roundRect ? x.roundRect(-78, -18, 156, 36, 16) : x.rect(-78, -18, 156, 36); x.fill(); x.stroke();
-  x.fillStyle = '#d0a064'; x.beginPath(); x.ellipse(-78, 0, 16, 18, 0, 0, 7); x.fill(); x.stroke();
-  x.strokeStyle = '#6f4327'; x.lineWidth = 3; x.beginPath(); x.ellipse(-78, 0, 8, 11, 0, 0, 7); x.stroke();
+  x.strokeStyle = PAL.ink; x.lineWidth = 5;
+
+  x.fillStyle = '#9a6536';                                // 树身
+  x.beginPath(); x.roundRect ? x.roundRect(-78, -18, 156, 36, 16) : x.rect(-78, -18, 156, 36);
+  x.fill(); x.stroke();
+
+  x.fillStyle = '#7d5029';                                // 树皮暗边（下缘）
+  x.beginPath();
+  x.moveTo(-70, 10); x.quadraticCurveTo(0, 22, 70, 10);
+  x.lineTo(70, 16); x.quadraticCurveTo(0, 28, -70, 16);
+  x.closePath(); x.fill();
+
+  x.fillStyle = '#b07a44';                                // 上缘受光
+  x.beginPath(); x.roundRect ? x.roundRect(-70, -16, 140, 7, 4) : x.rect(-70, -16, 140, 7); x.fill();
+
+  x.strokeStyle = '#6f4327'; x.lineWidth = 3;             // 木纹
+  for (const dy of [-6, 2]) {
+    x.beginPath();
+    x.moveTo(-58, dy); x.quadraticCurveTo(0, dy + 3, 58, dy - 1);
+    x.stroke();
+  }
+
+  x.fillStyle = '#d0a064'; x.strokeStyle = PAL.ink; x.lineWidth = 5;   // 左端年轮
+  x.beginPath(); x.ellipse(-78, 0, 16, 18, 0, 0, 7); x.fill(); x.stroke();
+  x.strokeStyle = '#6f4327'; x.lineWidth = 3;
+  x.beginPath(); x.ellipse(-78, 0, 8, 11, 0, 0, 7); x.stroke();
+  x.beginPath(); x.ellipse(-78, 0, 3, 4, 0, 0, 7); x.stroke();
   x.restore();
 }
 
-function drawRaft(x, cx, cy, t) {
-  const bob = Math.sin(t * 2.2) * 4;
+// 木筏：木板 + 木纹 + 端面年轮 + 横梁 + 绳索缠绕与绳结。
+// state 本轮只有 'parked'（岸边停泊）；'riding'/'poling' 随深水轮实现，
+// 签名留了默认值，drawDeepObjects 的四参调用因此不受影响。
+export function drawRaft(x, cx, cy, t, state = 'parked') {
+  const bob = Math.sin(t * 2.2) * (state === 'parked' ? 2 : 4);
+  contactShadow(x, cx, cy + 10, 74, 10);
   x.save(); x.translate(cx, cy + bob);
-  x.fillStyle = '#8e5e33'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
-  for (let i = -2; i <= 2; i++) { x.beginPath(); x.roundRect ? x.roundRect(i * 28 - 72, -14, 144, 22, 8) : x.rect(i * 28 - 72, -14, 144, 22); x.fill(); x.stroke(); }
-  x.strokeStyle = '#d5b56b'; x.lineWidth = 5;
-  x.beginPath(); x.moveTo(-68, -20); x.lineTo(68, 10); x.moveTo(-68, 10); x.lineTo(68, -20); x.stroke();
+
+  for (const py of [-30, -14, 2, 18, 34]) {               // 5 根木板
+    x.fillStyle = '#8e5e33'; x.strokeStyle = PAL.ink; x.lineWidth = 4;
+    x.beginPath(); x.roundRect ? x.roundRect(-72, py, 144, 14, 6) : x.rect(-72, py, 144, 14);
+    x.fill(); x.stroke();
+
+    x.strokeStyle = '#6f4327'; x.lineWidth = 2;           // 木纹
+    x.beginPath();
+    x.moveTo(-60, py + 4); x.lineTo(-16, py + 5); x.lineTo(28, py + 3); x.lineTo(62, py + 4);
+    x.stroke();
+
+    x.fillStyle = '#d0a064';                              // 左端年轮
+    x.beginPath(); x.ellipse(-72, py + 7, 6, 7, 0, 0, 7); x.fill();
+    x.strokeStyle = '#6f4327'; x.lineWidth = 2;
+    x.beginPath(); x.ellipse(-72, py + 7, 3, 3.5, 0, 0, 7); x.stroke();
+  }
+
+  x.fillStyle = '#6b4423'; x.strokeStyle = PAL.ink; x.lineWidth = 4;   // 2 根横梁
+  for (const bx of [-42, 30]) {
+    x.beginPath();
+    if (x.roundRect) x.roundRect(bx, -36, 12, 78, 4); else x.rect(bx, -36, 12, 78);
+    x.fill(); x.stroke();
+  }
+
+  x.strokeStyle = '#d5b56b'; x.lineWidth = 3;             // 绳索 X 形缠绕 + 绳结
+  for (const bx of [-36, 36]) {
+    x.beginPath();
+    x.moveTo(bx - 9, -34); x.lineTo(bx + 9, 42);
+    x.moveTo(bx + 9, -34); x.lineTo(bx - 9, 42);
+    x.stroke();
+    x.fillStyle = '#d5b56b';
+    x.beginPath(); x.arc(bx, 4, 3.5, 0, 7); x.fill();
+  }
   x.restore();
+}
+
+// 系泊石桩：原先是 8×8 的裸方块，太小、也没有落地影
+export function drawMooring(x, cx, gy) {
+  contactShadow(x, cx, gy + 2, 14, 5);
+
+  x.fillStyle = shade(CAVE_PAL.rockA, -0.12);             // 桩身（侧面沉影）
+  x.beginPath();
+  x.moveTo(cx - 7, gy); x.lineTo(cx - 6, gy - 22);
+  x.lineTo(cx + 6, gy - 22); x.lineTo(cx + 7, gy);
+  x.closePath(); x.fill();
+
+  x.fillStyle = shade(CAVE_PAL.rockA, 0.22);              // 顶面受光
+  x.beginPath(); x.ellipse(cx, gy - 22, 7, 3, 0, 0, 7); x.fill();
+
+  x.fillStyle = 'rgba(120,180,200,.28)';                  // 入水湿痕
+  x.fillRect(cx - 8, gy - 6, 16, 6);
 }
 
 export function drawBubble(x, p, t) {

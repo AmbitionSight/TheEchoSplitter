@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from '../public/js/ch3/cave.js';
 import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites,
-         createScene, initScene, drawScene, drawCrack, drawBoulder, drawWater } from '../public/js/ch3/render.js';
+         createScene, initScene, drawScene, drawCrack, drawBoulder, drawWater,
+         drawRaft, drawLog, drawMooring } from '../public/js/ch3/render.js';
 
 // 宽松 canvas 桩（同 test/scene.bg.test.js）：任何方法可调、任何属性可写，只断言「不抛」
 function mockCtx() {
@@ -296,4 +297,45 @@ test('drawWater：非岸边房间不绘制任何东西', () => {
   const w = bankWorld(); w.currentRoom = 'deep';
   drawWater(x, w, 1);
   assert.equal(x.__calls.fill, 0);
+});
+
+// ---- 木筏 / 原木 / 系泊桩 ----
+
+test('drawRaft：结构比旧版复杂（≥10 次填充）', () => {
+  const x = recordingCtx();
+  drawRaft(x, 880, 584, 0);
+  assert.ok(x.__calls.fill >= 10, `fill=${x.__calls.fill}`);
+});
+
+test('drawRaft：state 默认 parked——四参调用与五参显式 parked 等价', () => {
+  const a = recordingCtx(), b = recordingCtx();
+  drawRaft(a, 880, 584, 1.2);
+  drawRaft(b, 880, 584, 1.2, 'parked');
+  assert.deepEqual(a.__calls, b.__calls);
+});
+
+test('drawRaft：有吃水影（至少一枚椭圆）', () => {
+  const x = recordingCtx();
+  drawRaft(x, 880, 584, 0);
+  assert.ok(x.__calls.ellipse >= 1);
+});
+
+test('drawLog：签名不变，结构细节增加（≥4 次填充）', () => {
+  const x = recordingCtx();
+  drawLog(x, 740, 574, -0.08);
+  assert.ok(x.__calls.fill >= 4, `fill=${x.__calls.fill}`);
+});
+
+test('drawLog：默认 rot 参数保持原行为', () => {
+  const a = recordingCtx(), b = recordingCtx();
+  drawLog(a, 740, 574);
+  drawLog(b, 740, 574, -0.08);
+  assert.deepEqual(a.__pts, b.__pts);
+});
+
+test('drawMooring：系泊石桩有落地影与体积（≥1 椭圆、≥2 填充）', () => {
+  const x = recordingCtx();
+  drawMooring(x, 756, 590);
+  assert.ok(x.__calls.ellipse >= 1);
+  assert.ok(x.__calls.fill >= 2);
 });
