@@ -1,5 +1,6 @@
 // —— 析声者 · 第三关渲染层：自 ch3.js 绘制段原样迁入（房间/岸边/裂隙/深水/木筏/气泡）——
 import { SIDE, drawBenchSide } from '../sideview.js';
+import { drawBenchStones } from '../workbench.js';
 import { PAL, drawCross } from '../art.js';
 
 export function currentGround(w) {
@@ -56,11 +57,51 @@ export function drawCreviceObjects(w, x) {
   x.beginPath(); x.moveTo(810, 180); x.lineTo(900, 240); x.lineTo(980, 180); x.lineTo(1040, 250); x.stroke();
   x.beginPath(); x.moveTo(830, 180); x.lineTo(850, 300); x.moveTo(940, 210); x.lineTo(940, 320); x.stroke();
   x.fillStyle = '#c1a76b'; x.font = '18px system-ui'; x.fillText('◼  ◼  ◼', 820, 365);
+  drawCreviceDoor(x, geo.spawnX, geo.groundY);   // 左壁回程门（进来的门）
+}
+
+// 裂隙回程门：石拱 + 暗洞（与岸边门同族，略小）
+function drawCreviceDoor(x, cx, gy) {
+  x.fillStyle = '#5f6a74'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
+  x.beginPath(); x.moveTo(cx - 42, gy); x.lineTo(cx - 28, gy - 108); x.lineTo(cx + 28, gy - 108); x.lineTo(cx + 42, gy); x.closePath(); x.fill(); x.stroke();
+  x.fillStyle = '#0d1219';
+  x.beginPath(); x.moveTo(cx - 19, gy); x.lineTo(cx - 13, gy - 90); x.lineTo(cx + 13, gy - 90); x.lineTo(cx + 19, gy); x.closePath(); x.fill();
+}
+
+// —— 深水段合成位：石壁上凿出四个圆孔凹槽（不再把合成台摆在河上）——
+// 槽位几何与横版合成台一致（bx-33 + i*22, gy-62），槽内石头复用 drawBenchStones
+function drawWallSockets(x, bx, gy, hot, slots) {
+  const sockets = [];
+  for (let i = 0; i < 4; i++) sockets.push([bx - 33 + i * 22, gy - 160]);
+  x.save();
+  x.fillStyle = 'rgba(8,11,17,.6)';                                   // 凿刻的凹入石板（抬到壁面上部）
+  x.beginPath();
+  if (x.roundRect) x.roundRect(bx - 54, gy - 182, 108, 46, 10); else x.rect(bx - 54, gy - 182, 108, 46);
+  x.fill();
+  x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = 2;                 // 上缘沉影
+  x.beginPath(); x.moveTo(bx - 50, gy - 182); x.lineTo(bx + 50, gy - 182); x.stroke();
+  x.strokeStyle = 'rgba(255,255,255,.14)';                            // 下缘受光
+  x.beginPath(); x.moveTo(bx - 50, gy - 136); x.lineTo(bx + 50, gy - 136); x.stroke();
+  sockets.forEach(([sx, sy], i) => {
+    x.fillStyle = '#070a10';                                          // 圆孔
+    x.beginPath(); x.arc(sx, sy, 10, 0, 7); x.fill();
+    const hole = x.createRadialGradient(sx, sy - 3, 2, sx, sy, 10);   // 洞感：内阴影
+    hole.addColorStop(0, 'rgba(0,0,0,.7)'); hole.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = hole; x.beginPath(); x.arc(sx, sy, 10, 0, 7); x.fill();
+    x.strokeStyle = 'rgba(255,255,255,.22)'; x.lineWidth = 1.5;       // 孔下缘受光边
+    x.beginPath(); x.arc(sx, sy, 10, 0.4, 2.6); x.stroke();
+    if (hot && !slots?.[i]) {                                         // 手持音素石：空孔亮起
+      x.fillStyle = 'rgba(84,224,200,.28)';
+      x.beginPath(); x.arc(sx, sy, 13, 0, 7); x.fill();
+    }
+  });
+  if (slots) drawBenchStones(x, slots, sockets);                      // 已嵌入的音素石
+  x.restore();
 }
 
 export function drawDeepObjects(w, x) {
   const geo = w.geo.deep;
-  if (w.game.stalled) drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true, w.view.craftSlots);
+  if (w.game.stalled) drawWallSockets(x, geo.benchX, geo.groundY, w.game.hand?.kind === 'stone', w.view.craftSlots);
   x.fillStyle = 'rgba(120,205,230,.10)'; x.fillRect(0, geo.groundY - 80, SIDE.W, 80);
   x.strokeStyle = '#c1a76b'; x.lineWidth = 5;
   x.beginPath(); x.moveTo(geo.muralX - 120, 190); x.lineTo(geo.muralX, 100); x.lineTo(geo.muralX + 110, 190); x.stroke();
