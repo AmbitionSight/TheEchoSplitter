@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2, tapTargetAt, crossMargin } from '../public/js/ch2.js';
+import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2, tapTargetAt, crossMargin,
+         CAT, catClickable, stepCat, windDelay, windNow } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { planDropStones, drawTorchSide, drawBenchSide, makeDust, stepDust } from '../public/js/sideview.js';
@@ -85,7 +86,7 @@ test('FELL：软重生无惩罚（提示）；TICK 链按进度给提示', () =>
   const g = createGame(content, ch1Profile);
   const out = gameEvent(g, 'FELL');
   assert.ok(out.some(i => i.t === 'fell'));
-  assert.ok(!out.some(i => i.t === 'meow'));                          // 猫只在第一关出场
+  assert.ok(!out.some(i => i.t === 'meow'));                          // 坠落不惊动猫（2a 猫只随 crossed 离场，规格 §9）
   for (let i = 0; i < 44; i++) gameEvent(g, 'TICK', 1);
   let tease = gameEvent(g, 'TICK', 1);
   assert.ok(tease.some(i => i.t === 'hint'));
@@ -287,7 +288,7 @@ test('runExtras.revealCard：+0.9s 卡开 chime + ui.reveal(word)', async () => 
   assert.deepEqual(cards, ['jump']);
 });
 
-test('runExtras.crossed：22 金星 + 暖晕/雾脉冲/火把涌亮 + 声序 + hint 延后 0.9s', async () => {
+test('runExtras.crossed：22 金星 + 暖晕/雾脉冲/火把涌亮 + 猫离场倒计时 + 声序 + hint 延后 0.9s', async () => {
   const sounds = [], spoke = [], hints = [];
   const w = {
     geo: { groundY: 600 },
@@ -301,6 +302,7 @@ test('runExtras.crossed：22 金星 + 暖晕/雾脉冲/火把涌亮 + 声序 + h
   assert.equal(w.view.stars.length, 22);                      // 22 金星
   assert.equal(w.view.glowT, 1.2);                            // 预渲染暖晕涌起计时（1.2s 光涌）
   assert.equal(w.view.torchSurge, 0);                         // 火把池涌亮按 §3.4 排在 t+0.5s
+  assert.equal(w.view.catLeaveT, 1.0);                        // 猫：落地起 1s 可点窗口，t+1.0s 起身走远（规格 §9）
   assert.ok(w.player.squash > 0);                             // 落地 squash
   assert.equal(w.view.puffs.length, 2);                       // 尘环
   assert.deepEqual(sounds, ['chime']);                        // t0 落地 chime
@@ -344,6 +346,7 @@ test('起跳 hop / 落地 thud / 掉石 hatPuff：音频接线（规格 §7.1）
   w.game = g; w.content = content;
   const sounds = [];
   w.sfx = { hop: () => sounds.push('hop'), thud: () => sounds.push('thud'), hatPuff: () => sounds.push('hatPuff'),
+            wind: () => sounds.push('wind'),
             glowTick: () => sounds.push('glowTick'), click: () => sounds.push('click'), chime: () => sounds.push('chime') };
   w.ui = { setHint() {} };
   w.run = () => {};
@@ -356,8 +359,9 @@ test('起跳 hop / 落地 thud / 掉石 hatPuff：音频接线（规格 §7.1）
   kit.runExtras.effect(w, { t: 'effect', name: 'jumpUnlock', full: true });   // use-jump 首次示范跳 → hop
   assert.deepEqual(sounds, ['thud', 'hop', 'hop']);
   assert.equal(w.player.vy, -740);
-  kit.runExtras.drop(w, { t: 'drop', word: 'jump' });         // chasm-try 掉石 → hatPuff
+  kit.runExtras.drop(w, { t: 'drop', word: 'jump' });         // chasm-try 掉石 → hatPuff + 一次性风
   assert.ok(sounds.includes('hatPuff'));
+  assert.ok(sounds.includes('wind'));                         // chasm-try 一次性风（规格 §9）
   assert.ok(w.stones.length > 0);
 });
 
@@ -503,4 +507,114 @@ test('chapter2.html：#btn-jump 触屏跳键（初始隐藏）与 style.css 接�
   assert.match(css, /#btn-jump\{/, 'style.css 有 #btn-jump 定位');
   assert.match(css, /#game\{[^}]*touch-action:none/, '画布禁浏览器手势（点哪走哪）');
   assert.match(src, /iconURL\('jump'\)/, '跳键图标 = jump');
+});
+
+// ================= Task 12：2a 猫与环境风（规格 §9） =================
+
+test('2a 对岸橘猫与环境风：源码含 drawCat 调用与 wind() 调用点', async () => {
+  const src = await readFile(new URL('../public/js/ch2.js', import.meta.url), 'utf8');
+  assert.match(src, /drawCat\(/, '复用 actors.js drawCat 画对岸猫');
+  assert.match(src, /sfx\.wind\(\)/, 'wind() 有真实调用点（规格 §9）');
+  assert.match(src, /CAT = \{ x: 1015/, '猫坐对岸 (1015,600)');
+});
+
+test('makeWorld：猫坐对岸 (1015,600) 待命；环境风计时 8–14s 就绪', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  assert.deepEqual([w.actors.cat.x, w.actors.cat.y], [CAT.x, content.geometry.groundY]);
+  assert.equal(w.actors.cat.seated, true);
+  assert.equal(w.actors.cat.gone, false);
+  assert.ok(w.view.windT >= 8 && w.view.windT <= 14, '出生点远离裂口：常态间隔');   // 规格 §9
+  assert.equal(w.view.catLeaveT, 0);                            // 未过坑：无离场倒计时
+});
+
+test('环境风调度：常态 8–14s；近裂口（±300px）间隔减半更密', () => {
+  const geo = content.geometry;
+  assert.equal(windDelay(140, geo, () => 0), 8);                // 远处下限
+  assert.equal(windDelay(140, geo, () => 1), 14);               // 远处上限
+  assert.equal(windDelay(geo.chasmL, geo, () => 0), 4);         // 裂口边：减半
+  assert.equal(windDelay(geo.chasmR + 120, geo, () => 1), 7);
+});
+
+test('环境风：tick 到点吹一阵并重置；windNow 一次性风重置计时', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content; w.keys = new Set(); w.run = () => {};
+  const sounds = [];
+  w.sfx = { wind: () => sounds.push('wind'), thud() {}, hop() {}, click() {}, glowTick() {}, mutter() {}, chime() {}, hatPuff() {} };
+  w.ui = { setHint() {} };
+  w.view.windT = 0.05;
+  kit.tick(w, 0.1);
+  assert.deepEqual(sounds, ['wind']);                           // 到点一阵
+  assert.ok(w.view.windT >= 4, '吹完重置为下一段间隔');
+  sounds.length = 0;
+  w.view.windT = 100;
+  windNow(w);                                                   // chasm-try/fell/crossed 一次性
+  assert.deepEqual(sounds, ['wind']);
+  assert.ok(w.view.windT >= 4 && w.view.windT <= 14, '一次性风把环境风计时重置');
+});
+
+test('猫可点窗口：crossed 落地后 1s 内可点；未过坑/已起身/已走远不可点', () => {
+  const w = { actors: { cat: { seated: true, gone: false } }, view: { catLeaveT: 0 } };
+  assert.equal(catClickable(w), false);                         // 未过坑
+  w.view.catLeaveT = 1.0;
+  assert.equal(catClickable(w), true);                          // 落地 1s 窗口内
+  w.view.catLeaveT = 0;
+  assert.equal(catClickable(w), false);                         // 窗口已过
+  w.view.catLeaveT = 0.5; w.actors.cat.seated = false;
+  assert.equal(catClickable(w), false);                         // 已起身走远
+  w.actors.cat.seated = true; w.actors.cat.gone = true;
+  assert.equal(catClickable(w), false);                         // 已走出画面
+});
+
+test('猫离场：crossed 后满 1s 喵一声起身，向右走出画面后 gone', () => {
+  const w = {
+    actors: { cat: { x: CAT.x, y: 600, seated: true, gone: false, vx: 0 } },
+    view: { catLeaveT: CAT.leaveDelay }
+  };
+  assert.deepEqual(stepCat(w, 0.6), []);                        // 窗口内：仍坐着（可点）
+  assert.deepEqual(stepCat(w, 0.4), [{ t: 'meow' }]);           // 满 1s：起身喵一声（壳给竖耳）
+  assert.equal(w.actors.cat.seated, false);
+  assert.ok(w.actors.cat.vx > 0, '向右走');
+  const x0 = w.actors.cat.x;
+  stepCat(w, 1);
+  assert.ok(w.actors.cat.x > x0);
+  for (let i = 0; i < 40; i++) stepCat(w, 0.5);                 // 一路向右
+  assert.equal(w.actors.cat.gone, true);                        // exit-2a 前已走出画面
+});
+
+test('tick 驱动猫离场：crossed 1s 后 meow、约 3s 后走出画面', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content; w.keys = new Set();
+  const ran = [];
+  w.run = ins => ran.push(...ins);
+  w.sfx = { wind() {}, thud() {}, hop() {}, click() {}, glowTick() {}, mutter() {}, chime() {}, meow() {}, hatPuff() {} };
+  w.ui = { setHint() {} };
+  w.view.catLeaveT = CAT.leaveDelay;                            // 模拟 crossed 演出已开
+  for (let i = 0; i < 60 * 4; i++) kit.tick(w, 1 / 60);
+  assert.ok(ran.some(i => i.t === 'meow'), '1s 后猫自己喵一声');
+  assert.equal(w.actors.cat.gone, true, '4s 内走出画面');
+});
+
+test('点猫：1s 窗口内点击 → meow（不占走位）；窗口外走普通命中表', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content;
+  const ran = [];
+  w.run = ins => ran.push(...ins);
+  w.view.catLeaveT = CAT.leaveDelay;                            // 落地窗口内
+  kit.onPointerDown(w, { clientX: 1015, clientY: 570 }, mockCV());
+  assert.ok(ran.some(i => i.t === 'meow'), '窗口内点猫 → meow + 竖耳（壳）');
+  assert.equal(w.pending, null, '点猫不占用走位');
+  ran.length = 0;
+  w.view.catLeaveT = 0;                                         // 窗口外：猫不在命中表
+  kit.onPointerDown(w, { clientX: 1015, clientY: 570 }, mockCV());
+  assert.ok(!ran.some(i => i.t === 'meow'));
+  assert.equal(w.pending.kind, 'chasm', '本侧点对岸仍读作过坑');
+});
+
+test('CAT：事件机返回 meow 指令（竖耳由壳的 meow 分支给）', () => {
+  const g = createGame(content, ch1Profile);
+  assert.deepEqual(gameEvent(g, 'CAT'), [{ t: 'meow' }]);
 });

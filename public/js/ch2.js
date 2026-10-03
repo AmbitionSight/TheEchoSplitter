@@ -62,6 +62,8 @@ export function gameEvent(g, ev, arg = null) {
       return [{ t: 'crossed' }, { t: 'beat', beat: 'crossed' }];   // 演出在 runExtras.crossed；hint 'exit' 由它延后 0.9s（规格 §3.2 拍 11）
     case 'FELL':
       return [{ t: 'fell' }, { t: 'hint', key: 'fell' }];
+    case 'CAT':                                                // 对岸猫（规格 §9）：点它 → 喵 + 竖耳（竖耳由壳的 meow 分支给）
+      return [{ t: 'meow' }];
     case 'EXIT': {
       if (g.exited) return [];
       g.exited = true;
@@ -116,7 +118,7 @@ import { SIDE, moveSide, sideJump, stepWalkTo,
 import { blit } from './sprites.js';
 import { PAL, iconURL } from './art.js';
 import { screenToLogical } from './ch1/physics.js';
-import { createActors, updateActors, drawPlayer } from './actors.js';
+import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
 import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
 import { shade, paintMasonry, paintSlabs, BAYER4, pixelGradientV, pixelGlow } from './masonry.js';
 
@@ -136,6 +138,39 @@ export const CROSS = { runUp: 28, speed: 330 };            // 助跑止点 = cha
 export function crossMargin(geo, speed = CROSS.speed) {
   const airT = 2 * 740 / 1500;                             // 滞空 ≈0.99s
   return speed * airT - (geo.chasmR - (geo.chasmL - CROSS.runUp));   // 射程 ≈326px − 需求 268px ≈ 58px 余量
+}
+
+// —— 对岸橘猫（规格 §9）：坐 (1015,600)；crossed 落地后 1s 内可点（meow + 竖耳）；t+1.0s 起身向右走出画面 ——
+export const CAT = { x: 1015, r: 56, speed: 180, leaveDelay: 1.0 };   // 180px/s：起身后约 1.7s 走出画面
+export function catClickable(w) {                          // 可点窗口：crossed 落地起 1s（catLeaveT 由 runExtras.crossed 开）
+  const c = w.actors?.cat;
+  return !!(c && c.seated && !c.gone && w.view.catLeaveT > 0);
+}
+export function stepCat(w, dt) {                           // 纯步进：倒计时满 → meow 起身；起身后向右走，出画即 gone
+  const c = w.actors?.cat, v = w.view;
+  if (!c || !v || c.gone) return [];
+  if (c.seated) {
+    if (!(v.catLeaveT > 0)) return [];
+    v.catLeaveT -= dt;
+    if (v.catLeaveT > 0) return [];
+    c.seated = false; c.vx = CAT.speed;
+    return [{ t: 'meow' }];                                // t+1.0s 起身喵一声（规格 §3.4）
+  }
+  c.x += (c.vx || 0) * dt;
+  if (c.x > SIDE.W + 46) c.gone = true;                    // exit-2a 前已不在（规格 §9）
+  return [];
+}
+
+// —— 环境风（规格 §9）：常态 8–14s 一阵，近裂口（±300px）间隔减半更密；chasm-try/fell/crossed 一次性 ——
+export const WIND = { min: 8, max: 14, near: 300 };
+export function windDelay(px, geo, rand = Math.random) {
+  const base = WIND.min + rand() * (WIND.max - WIND.min);
+  const near = Math.abs(px - geo.chasmL) <= WIND.near || Math.abs(px - geo.chasmR) <= WIND.near;
+  return near ? base * 0.5 : base;
+}
+export function windNow(w) {                               // 一次性风：吹一声并把环境风计时重置（免紧跟又一阵）
+  w.sfx.wind();
+  w.view.windT = windDelay(w.player.x, w.geo);
 }
 
 // —— 指针命中表（纯函数；顺序镜像 findE：石 → 合成台 → 听声点 → 裂谷 → 出口 → 自身）——
@@ -210,6 +245,8 @@ export const kit = {
     const player = actors.player;
     player.x = geo.spawnX; player.y = geo.groundY; player.dir = 'right';
     player.vy = 0; player.airborne = false; player.squash = 0;
+    const cat = actors.cat;                                  // 对岸橘猫：坐 (1015,600) 等过坑（规格 §9）
+    cat.x = CAT.x; cat.y = geo.groundY; cat.seated = true; cat.gone = false; cat.vx = 0;
     const w = {
       actors, player, geo, cv,
       lights: LIGHTS2(geo),                                    // 光锚唯一事实源（烘焙光池与动态光晕共用）
@@ -220,7 +257,9 @@ export const kit = {
         dust: makeDust(26, 99),                                // 浮尘 26 粒（rng(99) 确定布局，规格 §6.4）
         emberT: [0.4, 1.1],                                    // 双火把余烬计时（每颗间隔 0.7–1.4s）
         gold: makeGoldMotes(geo),                              // 出口 12 金尘（拱洞内循环上浮）
-        glowT: 0, mistPulse: 0, torchSurge: 0                  // crossed 演出计时（暖晕 1.2s / 雾脉冲 / 火把池 0.8s 涌亮）
+        glowT: 0, mistPulse: 0, torchSurge: 0,                 // crossed 演出计时（暖晕 1.2s / 雾脉冲 / 火把池 0.8s 涌亮）
+        catLeaveT: 0,                                          // 猫离场倒计时（crossed 落地开 1s；窗口内可点，规格 §9）
+        windT: windDelay(geo.spawnX, geo)                      // 环境风：8–14s 一阵，近裂口更密（规格 §9）
       },
       cfg: {
         gap: { L: geo.chasmL, R: geo.chasmR },
@@ -256,6 +295,10 @@ export const kit = {
   onPointerDown(w, e, cv) {                                        // 点哪走哪：命中表 → walkTo + pending（tick 到位触发）
     const p = screenToLogical(e.clientX, e.clientY, cv.getBoundingClientRect());
     if (!p.inside) return;
+    if (catClickable(w) && Math.hypot(p.x - w.actors.cat.x, p.y - (w.actors.cat.y - 26)) <= CAT.r) {
+      w.run(gameEvent(w.game, 'CAT'));                             // 落地 1s 内点猫：喵 + 竖耳，不占用走位（规格 §9）
+      return;
+    }
     const t = tapTargetAt(w, p);
     w.walkTo = { x: Math.max(40, Math.min(SIDE.W - 40, t ? t.x : p.x)) };   // 未命中 = 走到点击 x（钳制）
     w.pending = t;
@@ -276,9 +319,12 @@ export const kit = {
     v.glowT = Math.max(0, v.glowT - dt);                       // crossed 暖晕：1.2s 光涌后熄
     v.mistPulse = Math.max(0, v.mistPulse - dt * 0.8);         // 谷雾脉冲（被风吹散后回稳）
     v.torchSurge = Math.max(0, v.torchSurge - dt / 0.8);       // 对岸火把池 0.8s 涌亮
+    v.windT -= dt;                                             // 环境风：8–14s 一阵，近裂口更密（规格 §9）
+    if (v.windT <= 0) { w.sfx.wind(); v.windT = windDelay(w.player.x, geo); }
     w.player.squash = Math.max(0, w.player.squash - dt * 2);
     w.cfg.canJump = w.game.jumpUnlocked;
     updateActors(w.actors, dt);
+    w.run(stepCat(w, dt));                                     // 对岸猫：crossed 1s 后 meow 起身向右走出画面（规格 §9）
     moveSide(w, dt);
     stepWalkTo(w, dt);                                         // 点哪走哪（规格 §10；调在 moveSide 之后）
     if (w.player.moving && (w.keys.has('l') || w.keys.has('r'))) w.player.walkT += dt;  // 行走帧推进（仅水平移动）
@@ -342,15 +388,16 @@ export const kit = {
     hint(w, ins) {                                     // hint 'unlocked' 覆盖文案（不再绑定空格，规格 §10）；其余照常走内容键
       w.ui.setHint(ins.key === 'unlocked' ? HINT_UNLOCKED : ins.key);
     },
-    drop(w, ins) {                                     // chasm-try 掉石：hatPuff（规格 §7.1）
+    drop(w, ins) {                                     // chasm-try 掉石：hatPuff + 一次性风（规格 §7.1/§9）
       w.sfx.hatPuff();
+      windNow(w);
       dropExtra(w => w.geo.chasmL)(w, ins);
     },
     dropBack: dropBackExtra(),
     shrug(w) { w.player.squash = 0.9; },
     bubble(w) { w.view.bubbleT = 2.6; },
     fell(w) {                                          // 坠谷：wind（下坠）+ thud（落地）——不再 mutter（规格 §7.1）
-      w.sfx.wind(); w.sfx.thud();
+      windNow(w); w.sfx.thud();
       if (w.autoCross) { w.autoCross = false; w.keys?.delete('r'); }   // 自动跳被中断：收回空中右推，防重生后继续冲谷
       w.view.puffs.push({ x: w.player.x, y: w.geo.groundY, r: 8, a: 1 });
       w.player.x = w.geo.chasmL - 90; w.player.y = w.geo.groundY - 160;
@@ -365,12 +412,13 @@ export const kit = {
       v.puffs.push({ x: p.x - 14, y: w.geo.groundY, r: 8, a: 1 });
       v.puffs.push({ x: p.x + 14, y: w.geo.groundY, r: 8, a: 1 });
       v.glowT = 1.2;                                   // 预渲染暖晕 (chasmR+50, groundY−80) r280：1.2s 光涌
+      v.catLeaveT = CAT.leaveDelay;                    // 猫：落地 1s 内可点；t+1.0s meow 起身向右走远（规格 §9）
       for (let i = 0; i < 22; i++) {                   // 22 金星
         v.stars.push({ x: p.x + (Math.random() - 0.5) * 180, y: p.y - 30 - Math.random() * 130, a: 1, r: 2 + Math.random() * 3 });
       }
       w.sfx.chime();                                   // t0 落地 chime
       setTimeout(() => w.speak('Jump!', 'child'), 200);            // t+0.2s 童声喊 "Jump!"
-      setTimeout(() => { w.sfx.wind(); v.mistPulse = 1; }, 400);   // t+0.4s 风一阵 + 谷雾被吹散
+      setTimeout(() => { windNow(w); v.mistPulse = 1; }, 400);     // t+0.4s 风一阵 + 谷雾被吹散
       setTimeout(() => { v.torchSurge = 0.8; }, 500);              // t+0.5s 对岸火把池 0.8s 涌亮（tick 衰减，draw 读）
       setTimeout(() => w.ui.setHint('exit'), 900);                 // hint 'exit' 延后 0.9s
     },
@@ -420,6 +468,7 @@ export const kit = {
     drawTorchSide(x, L.torchR.x, L.torchR.y, v.t,                                  // 对岸火把：crossed 后 0.8s 涌亮
       { r: L.torchR.r * (1 + v.torchSurge * 0.2), a: L.torchR.s * (1 + v.torchSurge * 1.4) });
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
+    drawCatActor(w, x, v.t);                                                // 对岸橘猫（规格 §9）
     x.save();
     if (w.player.airborne) { x.translate(w.player.x, w.player.y); x.scale(1, 0.92); x.translate(-w.player.x, -w.player.y); }
     if (w.player.squash > 0) { const q = 1 - Math.sin(w.player.squash * Math.PI) * 0.08; x.translate(w.player.x, w.player.y); x.scale(1.06, q); x.translate(-w.player.x, -w.player.y); }
@@ -846,6 +895,17 @@ function drawCrossGlow(w, x) {
   x.globalAlpha = Math.min(1, v.glowT / 0.5);              // 前 0.7s 满档，末 0.5s 淡出
   x.drawImage(g.cv, g.x - g.r, g.y - g.r);
   x.globalAlpha = 1;
+}
+
+// 对岸橘猫（规格 §9）：复用 actors.js drawCat；离场时补一点颠步（不改 actors.js）
+function drawCatActor(w, x, t) {
+  const c = w.actors?.cat;
+  if (!c || c.gone) return;
+  if (c.seated !== false) { drawCat(x, c, t); return; }
+  x.save();
+  x.translate(c.x, c.y - Math.abs(Math.sin(t * 9)) * 2.5);
+  drawCat(x, { x: 0, y: 0, earT: c.earT, meowT: c.meowT }, t);
+  x.restore();
 }
 
 // 出口金尘：12 粒在拱洞内循环上浮（rng(7) 定布局；规格 §5.1#10「ᚱ 灯塔 + 洞内暖金 + 12 金尘」）
