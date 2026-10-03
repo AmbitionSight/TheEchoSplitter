@@ -9,7 +9,7 @@ const ROOT = fileURLToPath(new URL('.', import.meta.url));
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png'
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp'
 };
 
 // —— HTTP Basic 认证（内网部署：用户名 PanPan / 密码 LeLe）——
