@@ -1,0 +1,84 @@
+import { test } from 'node:test';
+import assert from 'node:assert';
+import { readFile } from 'node:fs/promises';
+import { createGame, gameEvent, jumpDebug, startGame } from '../public/js/ch2.js';
+import { createProfile, mergeProfile, seedMemory } from '../public/js/profile.js';
+import { addStone, stoneCount } from '../public/js/hotbar.js';
+
+const content = JSON.parse(await readFile(new URL('../content/chapter2.json', import.meta.url), 'utf8'));
+const ch1Profile = mergeProfile(createProfile(), {
+  everPicked: ['h', 'ə', 'l', 'əʊ', 'p', 'n'], words: ['hello', 'open'], chapter: 1
+});
+
+test('开局（第一关书档在场）：不剧透 jump，只提示裂缝', () => {
+  const g = createGame(content, ch1Profile);
+  const out = startGame(g);
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'start'));
+  assert.ok(!out.some(i => i.t === 'speak'));                          // 开局不说话
+  assert.equal(g.jumpUnlocked, false);
+});
+
+test('记忆凝石：p 已在物品栏（一颗），dʒ ʌ m 不在', () => {
+  const g = createGame(content, ch1Profile);
+  const seeded = seedMemory(g.inv, addStone, ch1Profile.everPicked);
+  assert.ok(seeded.includes('p'));
+  assert.ok(!seeded.includes('dʒ'));
+  assert.equal(stoneCount(g.inv, 'p'), 1);
+});
+
+test('空格尝试：耸肩+红叉气泡+童声疑惑+世界低语+只掉一次 dʒ ʌ m', () => {
+  const g = createGame(content, ch1Profile);
+  let out = gameEvent(g, 'CHASM');
+  assert.ok(out.some(i => i.t === 'shrug'));
+  assert.ok(out.some(i => i.t === 'bubble'));
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'child' && i.text === 'Jump?'));
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'door' && i.text === 'Jump.'));
+  assert.ok(out.some(i => i.t === 'drop' && i.word === 'jump'));
+  out = gameEvent(g, 'CHASM');                                          // 再按：复读不再掉
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'door'));
+  assert.ok(!out.some(i => i.t === 'drop'));
+});
+
+test('全流程：E 搬运（p 由记忆补位）→ 合成 jump → 对自己用 → 解锁 → 过坑 → 出口结算', () => {
+  const g = createGame(content, ch1Profile);
+  seedMemory(g.inv, addStone, ch1Profile.everPicked);                   // p 一颗
+  let out = gameEvent(g, 'CHASM');
+  for (const ipa of ['dʒ', 'ʌ', 'm']) {                                 // 场上只有三颗新石；p 是记忆石不落地
+    out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
+  }
+  assert.equal(g.stonesPicked, 3);
+  out = gameEvent(g, 'CRAFT', 'jump');
+  assert.ok(g.inv.items.has('jump') && g.book.has('jump'));
+  assert.ok(out.some(i => i.t === 'resonate' && i.word === 'jump'));
+  assert.equal(stoneCount(g.inv, 'p'), 0);                              // 全部消耗
+  out = gameEvent(g, 'USE', { word: 'jump', target: 'well' });          // 用错目标
+  assert.ok(out.some(i => i.t === 'mutter'));
+  out = gameEvent(g, 'USE', { word: 'jump', target: 'player' });
+  assert.ok(out.some(i => i.t === 'effect' && i.name === 'jumpUnlock' && i.full === true));
+  assert.equal(g.jumpUnlocked, true);
+  out = gameEvent(g, 'USE', { word: 'jump', target: 'player' });        // 重复：轻反应
+  assert.ok(out.some(i => i.t === 'effect' && i.full === false));
+  out = gameEvent(g, 'CROSS');
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'exit'));
+  out = gameEvent(g, 'EXIT');
+  assert.ok(out.some(i => i.t === 'summary'));
+  assert.equal(g.exited, true);
+});
+
+test('FELL：软重生无惩罚（提示 + 猫叫）；TICK 链按进度给提示', () => {
+  const g = createGame(content, ch1Profile);
+  const out = gameEvent(g, 'FELL');
+  assert.ok(out.some(i => i.t === 'fell'));
+  assert.ok(out.some(i => i.t === 'meow'));
+  for (let i = 0; i < 44; i++) gameEvent(g, 'TICK', 1);
+  let tease = gameEvent(g, 'TICK', 1);
+  assert.ok(tease.some(i => i.t === 'hint'));
+});
+
+test('jumpDebug：crafted/unlocked 拍状态正确', () => {
+  const g = createGame(content, ch1Profile);
+  seedMemory(g.inv, addStone, ch1Profile.everPicked);
+  jumpDebug(g, 'unlocked');
+  assert.ok(g.inv.items.has('jump'));
+  assert.equal(g.jumpUnlocked, true);
+});

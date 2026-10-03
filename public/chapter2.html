@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>回响之石 · 第二间房</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="stage">
+  <canvas id="game" width="1280" height="720"></canvas>
+
+  <div id="title" class="screen center glass hidden">
+    <div class="rune-float" aria-hidden="true">ᛚ</div>
+    <h1>回响之石</h1>
+    <p class="sub">ROOM TWO</p>
+    <button id="btn-start" class="btn primary">开 始</button>
+  </div>
+
+  <div id="prologue" class="screen center glass hidden">
+    <p>门后是一条幽深的走廊。</p>
+    <p>地板在这里断开了一道裂缝。</p>
+    <p>对面，好像有出口的光。</p>
+    <p class="tap">点击继续</p>
+  </div>
+
+  <div id="hud-avatar" class="glass hidden">
+    <canvas id="avatar-fig" width="56" height="64" aria-hidden="true"></canvas>
+    <div id="hand-slot" class="hand-slot"></div>
+  </div>
+
+  <div id="hintbar" class="glass hidden"><span id="hint-text"></span></div>
+
+  <div id="hotbar" class="glass hidden">
+    <div id="bar-row">
+      <div id="stone-cells"></div>
+      <span class="bar-sep"></span>
+      <div id="item-cells"></div>
+      <div id="craft-row">
+        <div class="slot" data-slot="0"></div>
+        <div class="slot" data-slot="1"></div>
+        <div class="slot" data-slot="2"></div>
+        <div class="slot" data-slot="3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="summary" class="screen center glass hidden">
+    <p class="day">第二间房</p>
+    <h2 id="summary-line"></h2>
+    <div id="summary-icons"></div>
+    <p class="next">崖壁在前面等着……（第三间房）</p>
+    <div class="row">
+      <button id="btn-walk" class="btn ghost">继续走走</button>
+      <button id="btn-notes" class="btn ghost">设计说明</button>
+      <button id="btn-again" class="btn primary">再来一次</button>
+    </div>
+  </div>
+
+  <div id="notes" class="screen center glass hidden">
+    <h2>设计说明</h2>
+    <div class="notes-body">
+      <p>裂缝拦路的时候，身体先想起来的，是它在等的声音。</p>
+      <p>jump 里的 p，你在第一间房就学会了——学过的声音会从记忆里凝出石头，帮你把新词拼完。每一间房，都站在前一间的肩膀上。</p>
+    </div>
+    <button id="notes-close" class="btn primary">回到走廊</button>
+  </div>
+
+  <div id="toast" class="glass hidden"></div>
+</div>
+<div id="drag-ghost" class="hidden"></div>
+<script type="module" src="js/ch2.js"></script>
+</body>
+</html>
