@@ -620,7 +620,7 @@ test('finish() 路径：summaryFirst 先出结算卡、再由 [下一间房 →]
   assert.equal(kit.next?.chapter, 3, '交接仍指向 ch3（动态 import 契约）');
   const src = await readFile(new URL('../public/js/shell.js', import.meta.url), 'utf8');
   assert.match(src, /const showSummary = !kit\.next \|\| kit\.summaryFirst/, 'summaryFirst 决定是否出卡');
-  assert.match(src, /ui\.summary\(game, \{ words: \[\.\.\.game\.book\], stones: payload\.picks \?\? game\.stonesPicked \}\)/, '出卡读 picks');
+  assert.match(src, /ui\.summary\(game, \{ words: \[\.\.\.game\.book\], stones: kit\.summaryFirst \? \(p\.picks \?\? game\.stonesPicked\) : game\.stonesPicked \}\)/, '出卡读合并后的档案累计（两半合计）');
   assert.match(src, /if \(kit\.next && !kit\.summaryFirst\) \{ onHandoff\?\.\(kit\.next\); return; \}/, '仅非 summaryFirst 才静默交接');
   assert.match(src, /walk\.onclick = \(\) => onHandoff\?\.\(kit\.next\)/, '[下一间房 →] 按钮触发交接');
   const iSummary = src.indexOf('ui.summary(game,');

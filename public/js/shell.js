@@ -206,7 +206,8 @@ function startShell({ kit, content, el, cv, ctx, atlases, onHandoff }) {
     const showSummary = !kit.next || kit.summaryFirst;   // summaryFirst：章末先弹结算，再由按钮无缝交接
     if (showSummary) {
       const day = el('summary').querySelector('.day'); if (day) day.textContent = CHAPTER_DAY[kit.chapter] || '';
-      ui.summary(game, { words: [...game.book], stones: payload.picks ?? game.stonesPicked });
+      // 章末卡：summaryFirst 的章（第二章两半）石数用合并后的档案累计，而不是只剩最后半段
+      ui.summary(game, { words: [...game.book], stones: kit.summaryFirst ? (p.picks ?? game.stonesPicked) : game.stonesPicked });
     }
     const walk = el('btn-walk');
     if (kit.next && !kit.summaryFirst) { onHandoff?.(kit.next); return; }   // 无缝交接：不弹结算
