@@ -297,12 +297,12 @@ function showJumpBtn(w) {
   if (!btn.firstChild) btn.innerHTML = `<img src="${iconURL('jump')}" alt="">`;   // 图标只装一次
   btn.classList.remove('hidden');
 }
-function wireJumpBtn(w, signal) {
+function wireJumpBtn(w, signal, unlocked) {
   if (typeof document === 'undefined') return;
   const btn = document.getElementById('btn-jump');
   if (!btn) return;
   btn.addEventListener('pointerdown', () => kit.onSpace(w), { signal });
-  if (w.game.jumpUnlocked) showJumpBtn(w);                 // 书档已解锁：开局即可跳
+  if (unlocked) showJumpBtn(w);                            // 书档已解锁：开局即可跳（注意：makeWorld 阶段 w.game 尚未挂上）
 }
 
 // hint 'unlocked' 不再绑定空格：键盘/触屏跳键/点对岸自动跳同一条路（规格 §10）
@@ -369,7 +369,7 @@ export const kit = {
     for (let i = 0; i < 14; i++) {
       w.view.mist.push({ o: Math.random(), ph: Math.random() * 6.28, v: 6 + Math.random() * 10 });
     }
-    wireJumpBtn(w, signal);                                    // #btn-jump 触屏跳键（页面无此钮则静默）
+    wireJumpBtn(w, signal, game.jumpUnlocked);                 // #btn-jump 触屏跳键（页面无此钮则静默）
     return w;
   },
 
