@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 ## Project Overview
 
-The Echo Splitter is a zero-dependency, browser-based four-chapter language puzzle game. The client is native ES modules, Canvas 2D, DOM/CSS UI, Web Speech synthesis, WebAudio effects, and Pointer Events. Game content is stored separately from logic in `content/chapter*.json` and is fetched from the local Node server.
+The Echo Splitter is a zero-dependency, browser-based three-chapter language puzzle game. The client is native ES modules, Canvas 2D, DOM/CSS UI, Web Speech synthesis, WebAudio effects, and Pointer Events. Game content is stored separately from logic in `content/chapter*.json` and is fetched from the local Node server.
 
 The repository uses Node's built-in test runner and has no build step, package dependencies, linter, or formatter configured.
 
@@ -70,9 +70,9 @@ Chapter 2 is two single-file halves — `ch2.js` (chasm) and `ch2b.js` (cliff) �
 
 `public/js/shell.js` is the shared runtime. It loads the chapter JSON, scales the logical canvas, initializes speech and sound, loads persistent profile data and sprite atlases, creates the shared hotbar/UI, interprets standard event instructions, handles keyboard/pointer input, runs the animation loop, and saves chapter summaries. Keep chapter-specific rules in the chapter event machine or kit rather than duplicating them in the shell.
 
-The shell can also swap chapters in place. When a kit declares `next` (chapter 2 does, pointing at its cliff half, chapter 2b), reaching the end of that chapter fades out, disposes the current shell, and boots the next kit on the same page — no reload, and the next chapter's title screen is skipped. All per-chapter listeners (shell, hotbar, UI, journal) are registered against one `AbortController` so `dispose()` removes them cleanly; the profile is saved before the swap, so the next chapter's `createGame` sees the new abilities.
+The shell can also swap chapters in place. When a kit declares `next` (chapter 2's chasm hands off to its cliff half `ch2b`, and `ch2b` hands off to chapter 3's river), reaching the end of that chapter fades out, disposes the current shell, and boots the next kit on the same page — no reload, and the next chapter's title screen is skipped. All per-chapter listeners (shell, hotbar, UI, journal) are registered against one `AbortController` so `dispose()` removes them cleanly; the profile is saved before the swap, so the next chapter's `createGame` sees the new abilities.
 
-`public/js/chapter.js` holds the segments every chapter's event machine and kit share: the event-machine core cases (`pickupStone`, `bankHeld`, `holdItem`, `craftWord` — chapters pass only their first-pickup/craft hints) and common kit behavior (`chapterOnE` stone/bench handling, `syncHeld`, `seedBegin`, the `dropExtra`/`dropBackExtra` instruction factories, `stepWorldStones`). Chapter files keep only what is genuinely chapter-specific (USE/TICK, special targets, staging). When a shared rule changes, edit `chapter.js` once and all four chapters follow — do not re-copy event cases into a chapter file.
+`public/js/chapter.js` holds the segments every chapter's event machine and kit share: the event-machine core cases (`pickupStone`, `bankHeld`, `holdItem`, `craftWord` — chapters pass only their first-pickup/craft hints) and common kit behavior (`chapterOnE` stone/bench handling, `syncHeld`, `seedBegin`, the `dropExtra`/`dropBackExtra` instruction factories, `stepWorldStones`). Chapter files keep only what is genuinely chapter-specific (USE/TICK, special targets, staging). When a shared rule changes, edit `chapter.js` once and all chapters follow — do not re-copy event cases into a chapter file.
 
 ### Shared systems
 
@@ -86,8 +86,9 @@ The shell can also swap chapters in place. When a kit declares `next` (chapter 2
 - `public/js/journal.js`: the rune book UI (word cards with waveforms + the 48-phoneme rune grid), opened via the hotbar `#btn-book` rune button; lit runes = this chapter's picked/heard sounds ∪ the profile's lifetime sets. Echo objects (`ambience[].echo` in content) are pure listening: touch → carrier speech → rune lights, no stones, no inventory.
 - `public/js/art.js`: palette, rune stroke data, and Canvas-drawn icons. Do not replace game icons with emoji.
 - `public/js/sprites.js`: sprite atlas metadata and drawing helpers for assets under `public/assets/mi/`.
+- `public/js/masonry.js`: shared stone-masonry material painting (`shade`, `paintMasonry`, `paintSlabs`) — the procedural pixel-masonry wall and slab-floor look first built for chapter 1, reused by chapter 2. The planners it paints (`masonryPlan`/`slabPlan`) live in `public/js/ch1/planners.js`.
 - `public/js/scene.js`: pure re-export entry for chapter 1 (its logic now lives in `public/js/ch1/`); kept so existing imports of `scene.js` keep working.
-- `public/js/sideview.js`: shared side-view movement, jumping/climbing, stone physics, and rendering helpers used by chapters 2, 3, and 4, and by chapter 1's kit for the E hint.
+- `public/js/sideview.js`: shared side-view movement, jumping/climbing, stone physics, and rendering helpers used by chapters 2 and 3, and by chapter 1's kit for the E hint.
 - `public/js/actors.js`: player, NPC, and cat state/drawing.
 
 ### Content and persistence boundaries
