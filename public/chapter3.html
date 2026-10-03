@@ -10,28 +10,28 @@
 <div id="stage">
   <canvas id="game" width="1280" height="720"></canvas>
 
-  <div id="title" class="screen center glass hidden">
+  <div id="title" class="screen center slab hidden">
     <div class="rune-float" aria-hidden="true">ᚱ</div>
     <h1>析声者</h1>
     <p class="sub">ROOM THREE</p>
     <button id="btn-start" class="btn primary">开 始</button>
   </div>
 
-  <div id="prologue" class="screen center glass hidden">
+  <div id="prologue" class="screen center slab hidden">
     <p>崖壁下面只有一条窄路。</p>
     <p>头顶的墙上，垂着一截断掉的绳子。</p>
     <p>上面风声更大。</p>
     <p class="tap">点击继续</p>
   </div>
 
-  <div id="hud-avatar" class="glass hidden">
+  <div id="hud-avatar" class="slab hidden">
     <canvas id="avatar-fig" width="56" height="64" aria-hidden="true"></canvas>
     <div id="hand-slot" class="hand-slot"></div>
   </div>
 
-  <div id="hintbar" class="glass hidden"><span id="hint-text"></span></div>
+  <div id="hintbar" class="hidden"><span id="hint-text"></span></div>
 
-  <div id="hotbar" class="glass hidden">
+  <div id="hotbar" class="slab hidden">
     <div id="bar-row">
       <div id="stone-cells"></div>
       <span class="bar-sep"></span>
@@ -46,7 +46,7 @@
     </div>
   </div>
 
-  <div id="summary" class="screen center glass hidden">
+  <div id="summary" class="screen center slab hidden">
     <p class="day">第三间房</p>
     <h2 id="summary-line"></h2>
     <div id="summary-icons"></div>
@@ -58,7 +58,7 @@
     </div>
   </div>
 
-  <div id="notes" class="screen center glass hidden">
+  <div id="notes" class="screen center slab hidden">
     <h2>设计说明</h2>
     <div class="notes-body">
       <p>绳断了，还挂着。</p>
@@ -67,8 +67,8 @@
     <button id="notes-close" class="btn primary">回到崖下</button>
   </div>
 
-  <div id="journal" class="screen glass hidden">
-    <div class="journal-head glass">
+  <div id="journal" class="screen slab hidden">
+    <div class="journal-head slab">
       <span class="j-name">析声录</span>
       <div class="seg">
         <button class="seg-btn active" data-tab="words">词语</button>
@@ -82,8 +82,8 @@
       <div id="journal-runes" class="hidden"></div>
     </div>
   </div>
-  <div id="echo-strip" class="glass hidden"></div>
-  <div id="toast" class="glass hidden"></div>
+  <div id="echo-strip" class="hidden"></div>
+  <div id="toast" class="hidden"></div>
 </div>
 <div id="drag-ghost" class="hidden"></div>
 <script type="module" src="js/ch3.js"></script>

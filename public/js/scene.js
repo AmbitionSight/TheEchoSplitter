@@ -1,21 +1,23 @@
 // —— 布局（规格 §6.1）——
 export const LAYOUT = {
   W: 1280, H: 720, WALL_BOTTOM: 300,
-  playerStart: { x: 560, y: 600 },
+  // 三幕剧（DESIGN.md）：一幕「听」=左（出生左下角，大叔在月窗光下，声音花园沿西北墙）
+  // → 二幕「做」=中（合成台居中留工作坪，墙上开关在其身后）→ 三幕「得」=右（暗区帽架与门）
+  playerStart: { x: 140, y: 650 },
   obstacles: [
-    { id: 'well', x: 210, y: 470, r: 46 },
-    { id: 'brazier', x: 480, y: 480, r: 40 },
-    { id: 'bench', x: 640, y: 560, r: 34 },
+    { id: 'well', x: 170, y: 450, r: 46 },
+    { id: 'brazier', x: 520, y: 395, r: 40 },
+    { id: 'bench', x: 640, y: 494, r: 34 },
     { id: 'hatstand', x: 980, y: 520, r: 34 },
-    { id: 'npc', x: 400, y: 430, r: 38 },
-    { id: 'sprout', x: 330, y: 570, r: 28 },
-    { id: 'cat', x: 505, y: 632, r: 24 }
+    { id: 'npc', x: 310, y: 490, r: 38 },
+    { id: 'sprout', x: 260, y: 610, r: 28 },
+    { id: 'cat', x: 450, y: 435, r: 24 }
   ],
   targets: {
-    npc: { x: 400, y: 430, r: 60 }, well: { x: 210, y: 470, r: 56 },
-    brazier: { x: 480, y: 480, r: 52 }, sprout: { x: 330, y: 570, r: 46 },
-    cat: { x: 505, y: 632, r: 50 }, hatstand: { x: 980, y: 520, r: 52 },
-    switch: { x: 660, y: 282, r: 120 }, bench: { x: 640, y: 556, r: 85 },
+    npc: { x: 310, y: 490, r: 60 }, well: { x: 170, y: 450, r: 56 },
+    brazier: { x: 520, y: 395, r: 52 }, sprout: { x: 260, y: 610, r: 46 },
+    cat: { x: 450, y: 435, r: 50 }, hatstand: { x: 980, y: 520, r: 52 },
+    switch: { x: 660, y: 282, r: 120 }, bench: { x: 640, y: 490, r: 85 },
     door: { x: 1112, y: 245, r: 105 }
   },
   INTERACT_R: 170, MAGNET_R: 46
@@ -121,7 +123,7 @@ function shade(hex, f) {
 }
 
 // 合成台石槽中心（v2.1：上移避开底部工具栏；拿石时由动态层点亮）
-export const BENCH_SOCKETS = [[592, 541], [624, 541], [656, 541], [688, 541]];
+export const BENCH_SOCKETS = [[592, 485], [624, 485], [656, 485], [688, 485]];
 
 function drawWallTextures(ctx, atlases) {
   drawMossyWall(ctx, atlases, LAYOUT.W, 284, 23);                      // 第一/二关共用的青苔墙砖
@@ -231,13 +233,13 @@ export function prerenderStatic(atlases) {
   }
   // —— 合成台：两张 MI 木桌拼成工作台 + 内嵌石槽 + 蜡烛座 ——
   x.fillStyle = 'rgba(0,0,0,.25)';
-  x.beginPath(); x.ellipse(640, 600, 96, 17, 0, 0, 7); x.fill();              // 落地影
-  blit(x, atlases, 'table', 564, 526);
-  blit(x, atlases, 'table', 640, 526);
-  drawRune(x, 'ᚹ', 640, 588, 12, 'rgba(217,164,65,.5)', 2);
+  x.beginPath(); x.ellipse(640, 544, 96, 17, 0, 0, 7); x.fill();              // 落地影
+  blit(x, atlases, 'table', 564, 470);
+  blit(x, atlases, 'table', 640, 470);
+  drawRune(x, 'ᚹ', 640, 532, 12, 'rgba(217,164,65,.5)', 2);
   x.fillStyle = PAL.stone;                                                    // 内嵌石槽板（浅色石板）
   x.beginPath();
-  if (x.roundRect) x.roundRect(572, 531, 136, 20, 6); else x.rect(572, 531, 136, 20);
+  if (x.roundRect) x.roundRect(572, 475, 136, 20, 6); else x.rect(572, 475, 136, 20);
   x.fill(); thick(x, 3, PAL.ink); x.stroke();
   for (const [sx, sy] of BENCH_SOCKETS) {                                     // 四个内凹圆槽
     x.fillStyle = 'rgba(20,22,34,.55)';
@@ -247,10 +249,10 @@ export function prerenderStatic(atlases) {
   }
   // 蜡烛座（桌角，火苗由动态层画）
   x.fillStyle = '#d8d3c6';
-  x.fillRect(698, 512, 8, 14);
-  thick(x, 3, PAL.ink); x.strokeRect(698, 512, 8, 14);
+  x.fillRect(698, 456, 8, 14);
+  thick(x, 3, PAL.ink); x.strokeRect(698, 456, 8, 14);
   x.fillStyle = '#9a958a';
-  x.fillRect(700, 520, 4, 6);
+  x.fillRect(700, 464, 4, 6);
   // —— 右半吸顶灯（底盘 + 灯罩；光由动态层画）——
   x.fillStyle = PAL.stoneD;
   x.fillRect(930, 28, 40, 8);
@@ -273,20 +275,43 @@ export function makeDarkness() {
   const c = document.createElement('canvas');
   c.width = LAYOUT.W; c.height = LAYOUT.H;
   const x = c.getContext('2d');
-  // 右半近乎全黑：边界右收（610→740 渐入），暗区不再吃掉半个屏幕
-  const g = x.createLinearGradient(610, 0, 740, 0);
-  g.addColorStop(0, 'rgba(6,7,11,0)');
-  g.addColorStop(1, 'rgba(6,7,11,.95)');
+  // 暗海基体：右向渐入 + 远墙更沉（夜色偏蓝，不是死黑）
+  const g = x.createLinearGradient(520, 0, 780, 0);
+  g.addColorStop(0, 'rgba(7,8,14,0)');
+  g.addColorStop(1, 'rgba(7,8,14,.97)');
   x.fillStyle = g;
-  x.fillRect(610, 0, 130, LAYOUT.H);
-  x.fillStyle = 'rgba(6,7,11,.95)';
-  x.fillRect(740, 0, LAYOUT.W - 740, LAYOUT.H);
-  const fade = x.createLinearGradient(430, 0, 560, 0);               // 左半不受暗角
-  fade.addColorStop(0, 'rgba(6,7,11,1)'); fade.addColorStop(1, 'rgba(6,7,11,0)');
+  x.fillRect(520, 0, 260, LAYOUT.H);
+  x.fillStyle = 'rgba(7,8,14,.97)';
+  x.fillRect(780, 0, LAYOUT.W - 780, LAYOUT.H);
+  const g2 = x.createLinearGradient(780, 0, 1280, 0);
+  g2.addColorStop(0, 'rgba(4,5,10,0)'); g2.addColorStop(1, 'rgba(4,5,10,.55)');
+  x.fillStyle = g2;
+  x.fillRect(780, 0, LAYOUT.W - 780, LAYOUT.H);
+  // 光池挖孔（月窗/火盆/合成台蜡烛/待按的开关）：暗的边界随光衰减起伏，不是一条直线
   x.globalCompositeOperation = 'destination-out';
-  x.fillStyle = fade;
-  x.fillRect(0, 0, 560, LAYOUT.H);
+  const hole = (hx, hy, r, strength) => {
+    const h = x.createRadialGradient(hx, hy, r * 0.15, hx, hy, r);
+    h.addColorStop(0, `rgba(0,0,0,${strength})`); h.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = h; x.beginPath(); x.arc(hx, hy, r, 0, 7); x.fill();
+  };
+  hole(305, 150, 320, 0.95);    // 月窗冷光
+  hole(520, 400, 240, 0.95);    // 火盆暖光
+  hole(702, 455, 160, 0.85);    // 合成台蜡烛
+  hole(660, 285, 130, 0.62);    // 待按的开关（微光可辨，呼应提示"墙上有东西在发光"）
   x.globalCompositeOperation = 'source-over';
+  // 像素抖动量化：把平滑渐变转成 2px 拜尔有序抖动，贴像素世界的质感（一次性预渲染）
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const B = [[0, 2], [3, 1]];
+  for (let by = 0; by < c.height; by += 2) {
+    for (let bx = 0; bx < c.width; bx += 2) {
+      const i = (by * c.width + bx) * 4 + 3;
+      const a = img.data[i] / 255;
+      if (a <= 0 || a >= 1) continue;
+      const q = Math.min(1, Math.floor(a * 6 + B[(by / 2) % 2][(bx / 2) % 2] / 4) / 6);
+      img.data[i] = q * 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
   return c;
 }
 
@@ -445,7 +470,7 @@ export function drawScene(x, sc, view) {
   }
   // —— 火光们 ——
   flame(x, 480, 470, 30, t, 1); glow(x, 480, 472, 130, 'rgba(255,140,60,ALPHA)', 0.3);   // 火盆
-  flame(x, 702, 508, 9, t, 7); glow(x, 702, 510, 48, 'rgba(255,190,90,ALPHA)', 0.22);    // 合成台蜡烛
+  flame(x, 702, 452, 9, t, 7); glow(x, 702, 454, 48, 'rgba(255,190,90,ALPHA)', 0.22);    // 合成台蜡烛
   drawTorch(x, 140, 190, true, t, 5); drawTorch(x, 300, 190, true, t, 6);                // 左墙火把恒亮
   if (view.lit > 0.02) {                                                                  // 吸顶灯亮起
     x.save(); x.globalAlpha = view.lit;
@@ -476,17 +501,52 @@ export function drawScene(x, sc, view) {
 // —— 覆盖层：黑暗遮罩/浮尘/暗角（必须画在角色与掉落物之后，暗区才会正确变暗）——
 export function drawOverlay(x, sc, view) {
   const { t } = view;
-  const dark = (1 - sc.lit) * 0.92;                                    // 两档透明度缓动（规格 §6.2）
-  if (dark > 0.01) {
+  const lit = sc.lit;
+  if (lit < 0.995) {
+    // 光潮：暗海自左向右退去（规格 §6.2 的"涌"），尾段残暗整体淡出
+    const eo = 1 - (1 - lit) * (1 - lit);
+    const tide = 480 + eo * 880;
+    const tail = lit > 0.85 ? 1 - (lit - 0.85) / 0.15 : 1;
     x.save();
-    x.globalAlpha = dark;
+    x.globalAlpha = 0.92 * tail;
+    x.beginPath(); x.rect(tide, 0, LAYOUT.W - tide, LAYOUT.H); x.clip();
     x.drawImage(sc.darkness, 0, 0);
     x.restore();
+    if (lit > 0.01) {                                                  // 潮头亮边
+      const w = 100, a = Math.sin(Math.min(1, lit * 4) * Math.PI) * 0.22 + 0.12;
+      const wg = x.createLinearGradient(tide - w, 0, tide + w * 0.4, 0);
+      wg.addColorStop(0, 'rgba(196,244,230,0)');
+      wg.addColorStop(0.7, `rgba(196,244,230,${a})`);
+      wg.addColorStop(1, 'rgba(196,244,230,0)');
+      x.fillStyle = wg;
+      x.fillRect(tide - w, 0, w * 1.4, LAYOUT.H);
+    }
+    // 暗海灯塔：门符文在黑暗里缓缓呼吸——暗部唯一的光点，牵着人往右走
+    if (view.doorState === 'closed' && lit < 0.98) {
+      const b = (0.22 + Math.sin(t * 1.1) * 0.1) * (1 - lit);
+      const gg = x.createRadialGradient(1112, 242, 6, 1112, 242, 120);
+      gg.addColorStop(0, `rgba(84,224,200,${b * 0.5})`); gg.addColorStop(1, 'rgba(84,224,200,0)');
+      x.fillStyle = gg;
+      x.beginPath(); x.arc(1112, 242, 120, 0, 7); x.fill();
+      drawRune(x, 'ᛟ', 1112, 242, 26, `rgba(140,240,220,${b})`, 4);
+    }
+    // 暗海雾层：几片极淡的冷雾缓缓平移，给黑以纵深
+    x.fillStyle = '#0E1420';
+    for (let i = 0; i < 3; i++) {
+      const fx = 830 + i * 170 + Math.sin(t * 0.12 + i * 2.1) * 50;
+      const fy = 350 + i * 125;
+      x.globalAlpha = 0.05 * (1 - lit);
+      x.beginPath(); x.ellipse(fx, fy, 190, 90, 0, 0, 7); x.fill();
+    }
+    x.globalAlpha = 1;
   }
-  x.fillStyle = 'rgba(255,233,168,.5)';
+  // 浮尘：亮区暖金；暗区冷灰极淡——黑暗不是死的
   for (const d of sc.dust) {
-    const localLight = d.x < 480 ? 1 : sc.lit;
-    x.globalAlpha = 0.18 + Math.abs(Math.sin(d.ph + t)) * 0.3 * localLight;
+    const inDark = d.x >= 700;
+    const vis = inDark ? (1 - lit) * 0.5 : (d.x < 480 ? 1 : lit);
+    if (vis <= 0.02) continue;
+    x.fillStyle = inDark ? '#8FA6B8' : 'rgba(255,233,168,.5)';
+    x.globalAlpha = (inDark ? 0.09 : 0.18 + Math.abs(Math.sin(d.ph + t)) * 0.3) * vis;
     x.fillRect(d.x, d.y, 2.4, 2.4);
   }
   x.globalAlpha = 1;

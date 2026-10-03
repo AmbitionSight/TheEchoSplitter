@@ -32,7 +32,7 @@ function makeW() {
 test('回归：鼠标点物件，走到后自动触发交互（原 w.doEFor 幽灵调用）', () => {
   const w = makeW();
   const p = w.actors.player;
-  p.x = 490; p.y = 430;                                   // 目标 npc(400,430) 旁边
+  p.x = 400; p.y = 490;                                   // 目标 npc(310,490) 旁边
   w.walkTarget = { x: p.x, y: p.y };                      // 立即到达
   w.pendingInteract = { kind: 'obj', id: 'npc' };
   assert.doesNotThrow(() => kit.tick(w, 1 / 60));
