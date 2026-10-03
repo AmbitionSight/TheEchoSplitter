@@ -82,7 +82,7 @@ export function drawRune(ctx, glyph, cx, cy, size, color = PAL.glowRune, lw = nu
 }
 
 // —— 手绘图标库（厚描边 Q 版，规格 §9C，禁 emoji）——
-export const ICON_TYPES = ['hello', 'water', 'fire', 'hat', 'light', 'open', 'switch', 'gem'];
+export const ICON_TYPES = ['hello', 'water', 'fire', 'hat', 'light', 'open', 'switch', 'jump', 'rope', 'gem'];
 
 function ink(ctx, s) { ctx.lineWidth = Math.max(3, s * 0.09); ctx.strokeStyle = PAL.ink; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
 
@@ -186,6 +186,39 @@ const ICON_DRAW = {
     ctx.moveTo(cx - s * 0.16, cy - s * 0.3); ctx.lineTo(cx - s * 0.02, cy - s * 0.22);
     ctx.lineTo(cx - s * 0.1, cy - s * 0.12); ctx.lineTo(cx + s * 0.06, cy - s * 0.04);
     ctx.stroke();
+  },
+  jump(ctx, cx, cy, s) { // 跳跃词具：上弹小人 + 上升箭头 + 速度线
+    ink(ctx, s);
+    ctx.fillStyle = '#7bd88f';
+    ctx.beginPath(); ctx.arc(cx - s * 0.05, cy - s * 0.28, s * 0.11, 0, 7); ctx.fill(); ctx.stroke();   // 头
+    ctx.beginPath();                                                                                     // 蜷腿身
+    ctx.moveTo(cx - s * 0.16, cy + s * 0.3); ctx.quadraticCurveTo(cx - s * 0.2, cy + s * 0.02, cx - s * 0.05, cy - s * 0.14);
+    ctx.quadraticCurveTo(cx + s * 0.12, cy - s * 0.02, cx + s * 0.04, cy + s * 0.12);
+    ctx.quadraticCurveTo(cx + s * 0.0, cy + s * 0.3, cx - s * 0.16, cy + s * 0.3);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = PAL.fire1; ctx.lineWidth = Math.max(3, s * 0.08);                                  // 上升箭头
+    ctx.beginPath();
+    ctx.moveTo(cx + s * 0.26, cy + s * 0.32); ctx.lineTo(cx + s * 0.26, cy - s * 0.18);
+    ctx.moveTo(cx + s * 0.26, cy - s * 0.3); ctx.lineTo(cx + s * 0.16, cy - s * 0.14);
+    ctx.lineTo(cx + s * 0.36, cy - s * 0.14);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(123,216,143,.6)'; ctx.lineWidth = Math.max(2, s * 0.05);                     // 速度线
+    ctx.beginPath();
+    ctx.moveTo(cx - s * 0.36, cy + s * 0.18); ctx.lineTo(cx - s * 0.28, cy + s * 0.18);
+    ctx.moveTo(cx - s * 0.38, cy + s * 0.3); ctx.lineTo(cx - s * 0.26, cy + s * 0.3);
+    ctx.stroke();
+  },
+  rope(ctx, cx, cy, s) { // 绳索词具：盘绳圈 + 垂下的绳头
+    ink(ctx, s);
+    ctx.strokeStyle = '#c9a35e'; ctx.lineWidth = Math.max(4, s * 0.11);
+    ctx.beginPath(); ctx.ellipse(cx - s * 0.06, cy - s * 0.16, s * 0.3, s * 0.16, -0.3, 0, 7); ctx.stroke();  // 绳圈
+    ctx.beginPath(); ctx.ellipse(cx - s * 0.06, cy - s * 0.16, s * 0.16, s * 0.07, -0.3, 0, 7); ctx.stroke(); // 内圈
+    ctx.beginPath();                                                                                           // 垂绳
+    ctx.moveTo(cx - s * 0.08, cy); ctx.quadraticCurveTo(cx + s * 0.1, cy + s * 0.2, cx - s * 0.02, cy + s * 0.4);
+    ctx.stroke();
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.02, cy + s * 0.34); ctx.lineTo(cx + s * 0.08, cy + s * 0.44); ctx.stroke(); // 绳头散絮
+    ctx.beginPath(); ctx.moveTo(cx - s * 0.02, cy + s * 0.34); ctx.lineTo(cx - s * 0.12, cy + s * 0.44); ctx.stroke();
   },
   gem(ctx, cx, cy, s) { // 菱形宝石（声音石袋）
     ink(ctx, s);
