@@ -166,4 +166,8 @@ export class Sfx {
   meow()    { this.tone({ f: 700, f2: 1100, dur: 0.18, vol: 0.11 }); this.tone({ f: 1100, f2: 600, t: 0.18, dur: 0.3, vol: 0.09 }); }
   crackle() { for (let i = 0; i < 3; i++) this.noise({ t: Math.random() * 0.4, dur: 0.05, vol: 0.04, freq: 2500 }); }
   wind()    { this.noise({ dur: 0.9, vol: 0.08, freq: 420 }); this.noise({ t: 0.15, dur: 0.7, vol: 0.05, freq: 300 }); } // 重复 open=门后风声（规格 §4，Task 13 评审 A）
+  hop()     { this.tone({ f: 340, f2: 660, type: 'triangle', dur: 0.12, vol: 0.10 }); this.noise({ dur: 0.05, vol: 0.03, freq: 1800 }); }
+  thud()    { this.tone({ f: 96, f2: 42, dur: 0.22, vol: 0.16 }); this.noise({ dur: 0.10, vol: 0.05, freq: 160 }); }
+  strain()  { this.tone({ f: 130, f2: 92, type: 'sawtooth', dur: 0.18, vol: 0.06 }); this.noise({ dur: 0.12, vol: 0.03, freq: 900 }); }
+  gust()    { this.noise({ dur: 1.3, vol: 0.11, freq: 380 }); this.noise({ t: 0.18, dur: 1.0, vol: 0.07, freq: 260 }); }
 }
