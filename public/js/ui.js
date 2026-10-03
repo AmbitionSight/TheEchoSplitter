@@ -129,6 +129,7 @@ export function createUI({ content, atlases, signal }) {
           return def ? `<img src="${iconURL(def.icon)}" alt="">` : '';
         }).join('');
     rcEl.querySelector('.rc-dots').innerHTML = Array.from({ length: n + 1 }, (_, i) => `<i class="${i === rcIdx ? 'on' : ''}"></i>`).join('');
+    rcEl.classList.remove('hidden');                          // 建出来是 hidden，每帧绘制时亮起（漏这行=永远看不见）
   }
   function recapNext() {
     rcIdx++;

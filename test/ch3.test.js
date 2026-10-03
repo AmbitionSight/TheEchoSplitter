@@ -384,3 +384,8 @@ test('第三关 recap：三段回顾数据齐备，词都能解析到图标（�
   const shell = await readFile(new URL('../public/js/shell.js', import.meta.url), 'utf8');
   assert.match(shell, /content\.recap\)\s*setTimeout|setTimeout\(\(\) => ui\.recap\(content\.recap\)/, '壳在收尾自动播放');
 });
+
+test('第三关 recap：绘制时必须去掉 hidden（回归：曾漏这行导致走马灯永不显示）', async () => {
+  const ui = await readFile(new URL('../public/js/ui.js', import.meta.url), 'utf8');
+  assert.match(ui, /rcEl\.classList\.remove\('hidden'\)/, 'recapPaint 要亮出 #recap');
+});
