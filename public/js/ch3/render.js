@@ -1,4 +1,4 @@
-// —— 析声者 · 第四关渲染层：自 ch4.js 绘制段原样迁入（房间/岸边/裂隙/深水/木筏/气泡）——
+// —— 析声者 · 第三关渲染层：自 ch3.js 绘制段原样迁入（房间/岸边/裂隙/深水/木筏/气泡）——
 import { SIDE, drawBenchSide } from '../sideview.js';
 import { PAL, drawCross } from '../art.js';
 

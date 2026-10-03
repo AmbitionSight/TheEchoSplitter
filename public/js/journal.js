@@ -14,7 +14,7 @@ export function waveSegments(phonemes, width) {
   });
 }
 
-export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard = () => [], lifetimeWords = () => [] }) {
+export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard = () => [], lifetimeWords = () => [], signal }) {
   const el = id => document.getElementById(id);
   const root = el('journal'), wordsBox = el('journal-words'), runesBox = el('journal-runes');
   const pb = content.phonemeBook;
@@ -96,8 +96,8 @@ export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard 
     root.querySelectorAll('.seg-btn').forEach(b => b.classList.toggle('active', b === btn));
     wordsBox.classList.toggle('hidden', btn.dataset.tab !== 'words');
     runesBox.classList.toggle('hidden', btn.dataset.tab !== 'runes');
-  }));
-  el('journal-close').addEventListener('click', close);
+  }, { signal }));
+  el('journal-close').addEventListener('click', close, { signal });
 
   function open(g) { renderWords(g); renderRunes(g); root.classList.remove('hidden'); }
   function close() { root.classList.add('hidden'); }

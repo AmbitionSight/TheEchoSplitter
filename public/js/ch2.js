@@ -103,10 +103,13 @@ import { tile } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { rng } from './scene.js';
 
-const kit = {
+export const kit = {
   chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
 
   createGame, startGame, gameEvent, debug: jumpDebug,
+
+  // 走到走廊尽头：无缝交接进入崖壁（第二间房后半，同页、无刷新，跳过其标题页）——壳读 kit.next
+  next: { chapter: 2, page: 'chapter2b.html', load: () => import('./ch2b.js').then(m => m.kit) },
 
   voices: v => ({
     child: { voice: v.child, pitch: 1.25, rate: 1, rateSlow: 0.8 },

@@ -1,5 +1,5 @@
-// —— 析声者 · 第四关浏览器 kit（侧视河程）：自 ch4.js kit 段原样迁入 ——
-import { createGame, startGame, gameEvent, ch4Debug } from './event.js';
+// —— 析声者 · 第三关浏览器 kit（侧视河程）：自 ch3.js kit 段原样迁入 ——
+import { createGame, startGame, gameEvent, ch3Debug } from './event.js';
 import { drawRoom, drawBankObjects, drawCreviceObjects, drawDeepObjects, drawBubble, currentGround } from './render.js';
 import { chapterOnE, syncHeld, dropBackExtra, stepWorldStones } from '../chapter.js';
 import { mount } from '../shell.js';
@@ -13,14 +13,14 @@ import { screenToLogical } from '../ch1/physics.js';
 
 // ================= 浏览器 Kit =================
 export const kit = {
-  chapter: 4,
+  chapter: 3,
   W: SIDE.W,
   H: SIDE.H,
   titleRune: 'ᚩ',
   createGame,
   startGame,
   gameEvent,
-  debug: ch4Debug,
+  debug: ch3Debug,
   voices: v => ({
     child: { voice: v.child, pitch: 1.25, rate: 1, rateSlow: 0.8 },
     door: { voice: v.door, pitch: 0.7, rate: 0.8, rateSlow: 0.6 }
@@ -229,7 +229,7 @@ export const kit = {
   },
 
   summaryMerge(game) {
-    return { everPicked: [...game.inv.everPicked], words: [...game.book], abilities: ['raft'], chapter: 4 };
+    return { everPicked: [...game.inv.everPicked], words: [...game.book], abilities: ['raft'], chapter: 3 };
   },
 
   onFinal(w) {

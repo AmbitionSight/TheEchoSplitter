@@ -68,7 +68,7 @@ export function swapSlots(slots, a, b) {
   return slots;
 }
 
-export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord, onCraft, onTakeItem, onDropItem }) {
+export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord, onCraft, onTakeItem, onDropItem, signal }) {
   const el = id => document.getElementById(id);
   const root = el('hotbar'), craftRow = el('craft-row');
   const stoneBox = el('stone-cells'), itemBox = el('item-cells');
@@ -170,7 +170,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
       const cell = document.createElement('div');
       cell.className = `cell stone-${isVowel(ipa) ? 'v' : 'c'}`;
       cell.innerHTML = `<span class="glyph">${ipa}</span>` + (n > 0 ? `<span class="count">×${n}</span>` : '');
-      cell.addEventListener('pointerdown', e => startDrag(e, cell, { kind: 'stone', ipa }));
+      cell.addEventListener('pointerdown', e => startDrag(e, cell, { kind: 'stone', ipa }), { signal });
       stoneBox.appendChild(cell);
     }
     itemBox.innerHTML = '';
@@ -178,7 +178,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.innerHTML = `<img src="${iconURL(words[word].icon)}" alt="">`;
-      cell.addEventListener('pointerdown', e => startDrag(e, cell, { kind: 'item', word }));
+      cell.addEventListener('pointerdown', e => startDrag(e, cell, { kind: 'item', word }), { signal });
       itemBox.appendChild(cell);
     }
   }
@@ -236,15 +236,17 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
       ghost.classList.add('hidden'); cell.style.opacity = '';
       // pointercancel：库存从未变化，幽灵消失即回位
     };
-    window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('pointermove', move, { signal });
+    window.addEventListener('pointerup', up, { signal });
+    window.addEventListener('pointercancel', cancel, { signal });
   }
 
   slotEls.forEach((s, i) => s.addEventListener('pointerdown', e => {
     if (e.button > 0 || !slots[i]) return;               // 空槽不响应
     startDrag(e, s, { kind: 'stone', ipa: slots[i], fromSlot: i });
-  }));
+  }, { signal }));
+
+  refreshSlots();                                        // 构造即清空合成槽 DOM（同页换章时抹掉上一关残留）
 
   return {
     refresh,

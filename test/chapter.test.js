@@ -29,7 +29,7 @@ test('pickupStone：首块带 onFirst 追加段；旧石先放回；非首块不
   assert.equal(g.stonesPicked, 2);
 });
 
-test('pickupStone：无 onFirst（第四关形态）输出与手举一致', () => {
+test('pickupStone：无 onFirst（第三关形态）输出与手举一致', () => {
   const g = makeG();
   assert.deepEqual(pickupStone(g, 'l'), [{ t: 'carrier', ipa: 'l' }, { t: 'hand' }]);
 });
