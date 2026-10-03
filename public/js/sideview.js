@@ -1,5 +1,6 @@
 // —— 横版共用件：移动/跳跃/攀爬物理核心 + 通用渲染（火把/合成台/石头/E 提示/暗角） ——
 import { PAL } from './art.js';
+import { shade } from './masonry.js';
 import { isVowel, stoneCount } from './hotbar.js';
 import { drawBenchStones } from './workbench.js';
 import { blit, tile } from './sprites.js';
@@ -170,5 +171,50 @@ export function vignette(x, W = SIDE.W, H = SIDE.H) {
   const v = x.createRadialGradient(W / 2, H / 2 - 40, 340, W / 2, H / 2 - 40, 760);
   v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.5)');
   x.fillStyle = v; x.fillRect(0, 0, W, H);
+}
+
+export const AMBIENT = { grade: 0.24, vignette: 0.42 };   // 与 ch1 对齐（原两章 .30/.50）
+export function benchCandle(bx, gy) { return { x: bx + 62, y: gy - 90 }; }
+// 点哪走哪（第一关 walkTarget 的横版移植；调在 moveSide 之后）
+export function stepWalkTo(w, dt) {
+  const t = w.walkTo; if (!t || w.keys.size) return;
+  const p = w.player, sp = w.cfg.walkSpeed ?? w.cfg.speed ?? 300, dx = t.x - p.x;
+  if (Math.abs(dx) <= 6) { w.walkTo = null; p.moving = false; return; }
+  p.x += Math.sign(dx) * Math.min(Math.abs(dx), sp * dt);
+  p.dir = p.facing = dx > 0 ? 'right' : 'left'; p.moving = true; p.walkT += dt;
+}
+// 落地接触影（全关统一）
+export function groundShadow(x, cx, gy, rx, ry = 7, a = 0.26) {
+  x.fillStyle = `rgba(0,0,0,${a})`;
+  x.beginPath(); x.ellipse(cx, gy + 4, rx, ry, 0, 0, 7); x.fill();
+}
+// 侧视矢量石拱（与 ch1 门拱同族；纯矢量、无章节几何）
+export function drawArchSide(x, cx, baseY, { w = 120, h = 230, opening = 76, mouth = '#141824', rune = null, runeSize = 26, runeColor = 'rgba(30,32,44,.85)', runeGlow = 0 } = {}) {
+  const hw = w / 2, top = baseY - h, ow = opening / 2, oh = h - 40;
+  x.save();
+  x.fillStyle = shade('#7b7669', 0.02);
+  x.beginPath();
+  x.moveTo(cx - hw, baseY); x.lineTo(cx - hw, top + 30);
+  x.quadraticCurveTo(cx, top - 8, cx + hw, top + 30);
+  x.lineTo(cx + hw, baseY); x.closePath(); x.fill();
+  x.lineWidth = 5; x.strokeStyle = PAL.ink; x.stroke();
+  x.fillStyle = mouth;
+  x.beginPath();
+  x.moveTo(cx - ow, baseY); x.lineTo(cx - ow, top + 44);
+  x.quadraticCurveTo(cx, top + 16, cx + ow, top + 44);
+  x.lineTo(cx + ow, baseY); x.closePath(); x.fill();
+  x.fillStyle = shade('#7b7669', 0.12);                       // 拱心石
+  x.fillRect(cx - 10, top + 18, 20, 20); x.strokeRect(cx - 10, top + 18, 20, 20);
+  x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(cx + hw - 16, top + 30, 16, baseY - top - 30);  // 右柱沉影
+  if (rune) {
+    if (runeGlow > 0) {
+      const g = x.createRadialGradient(cx, top + 6, 4, cx, top + 6, 44);
+      g.addColorStop(0, `rgba(84,224,200,${0.35 * runeGlow})`); g.addColorStop(1, 'rgba(84,224,200,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(cx, top + 6, 44, 0, 7); x.fill();
+    }
+    x.fillStyle = runeColor; x.font = `${runeSize}px serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(rune, cx, top + 6);
+  }
+  x.restore();
 }
 

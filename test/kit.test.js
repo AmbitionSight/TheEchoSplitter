@@ -4,6 +4,7 @@ import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { createGame, kit } from '../public/js/main.js';
 import { createActors } from '../public/js/actors.js';
+import { drawArchSide, stepWalkTo, benchCandle, AMBIENT } from '../public/js/sideview.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter1.json', import.meta.url), 'utf8'));
 
@@ -64,4 +65,14 @@ test('节奏掉落：石头按音素时长依次弹出，从左到右排成声�
   assert.ok(Math.abs(at[3] - 1.5) < 1e-9);                            // 最后一块（最长的 əʊ）在 1.5s
   assert.ok(at[3] - at[2] > at[1] - at[0], '音素越长，间隔越大（70/90/80/200ms 的节奏）');
   assert.ok(ss.every(s => s.vx === 0 && s.floorY === 526));           // 直上直落、同一排落地，顺序不被打乱
+});
+
+test('sideview 新增件存在且可调用', () => {
+  assert.equal(typeof drawArchSide, 'function');
+  assert.equal(typeof stepWalkTo, 'function');
+  assert.deepEqual(benchCandle(520, 620), { x: 582, y: 530 });
+  assert.equal(AMBIENT.grade, 0.24);
+  const w = { player: { x: 0, y: 0, dir: 'right', facing: 1, walkT: 0 }, walkTo: { x: 60 }, keys: new Set(), cfg: { speed: 300 } };
+  stepWalkTo(w, 0.1);
+  assert.ok(w.player.x > 0 && w.player.x <= 30);
 });
