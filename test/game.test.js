@@ -148,7 +148,7 @@ test('hello 词具回礼大叔：首次 full 庆祝、重复轻反应；再点�
 
 test('氛围物：音效 + 回声指令，永不掉石', () => {
   const g = createGame(content);
-  for (const id of ['well', 'brazier', 'hatstand', 'sprout']) {
+  for (const id of ['well', 'brazier', 'hatstand', 'sprout', 'shelf', 'plant', 'cactus']) {
     const out = gameEvent(g, 'INTERACT', id);
     assert.ok(out[0].t === 'sfx', `${id} 首条应为音效`);
     assert.ok(out.length === 2 && out[1].t === 'echo' && Array.isArray(out[1].ipas), `${id} 应带回声指令`);
@@ -198,4 +198,12 @@ test('回声物件：猫也是回声点（m·iː·aʊ），跟在猫指令后', 
   const out = gameEvent(g, 'INTERACT', 'cat');
   assert.equal(out[0].t, 'meow');
   assert.deepEqual(out[1], { t: 'echo', ipas: ['m', 'iː', 'aʊ'], say: 'Meow.' });
+});
+
+test('关着的门按 E：低语自己的名字（先闻后仿，规格题眼）', () => {
+  const g = createGame(content);
+  assert.deepEqual(gameEvent(g, 'INTERACT', 'door'),
+    [{ t: 'speak', who: 'door', text: 'Open… open… open the door!', slow: true }]);
+  assert.deepEqual(gameEvent(g, 'INTERACT', 'door'),
+    [{ t: 'speak', who: 'door', text: 'Open.', slow: true }]);          // 再按：低缓念单句
 });

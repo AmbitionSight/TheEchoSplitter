@@ -11,14 +11,19 @@ export const LAYOUT = {
     { id: 'hatstand', x: 980, y: 520, r: 34 },
     { id: 'npc', x: 310, y: 490, r: 38 },
     { id: 'sprout', x: 260, y: 610, r: 28 },
-    { id: 'cat', x: 450, y: 435, r: 24 }
+    { id: 'cat', x: 450, y: 435, r: 24 },
+    { id: 'shelf', x: 66, y: 330, r: 26 },      // 西墙软装（回声物）
+    { id: 'plant', x: 104, y: 338, r: 20 },
+    { id: 'cactus', x: 148, y: 352, r: 16 }
   ],
+  // 注意：目标 r 必须大于障碍 r+20（玩家半径16+余量），否则碰撞把玩家推出判定圈、E 键永远够不到（scene.test 锁此不变式）
   targets: {
-    npc: { x: 310, y: 490, r: 60 }, well: { x: 170, y: 450, r: 56 },
-    brazier: { x: 520, y: 395, r: 52 }, sprout: { x: 260, y: 610, r: 46 },
-    cat: { x: 450, y: 435, r: 50 }, hatstand: { x: 980, y: 520, r: 52 },
+    npc: { x: 310, y: 490, r: 70 }, well: { x: 170, y: 450, r: 72 },
+    brazier: { x: 520, y: 395, r: 68 }, sprout: { x: 260, y: 610, r: 56 },
+    cat: { x: 450, y: 435, r: 58 }, hatstand: { x: 980, y: 520, r: 66 },
     switch: { x: 660, y: 282, r: 120 }, bench: { x: 640, y: 490, r: 85 },
-    door: { x: 1112, y: 245, r: 105 }
+    door: { x: 1112, y: 245, r: 105 },
+    shelf: { x: 66, y: 340, r: 60 }, plant: { x: 104, y: 346, r: 50 }, cactus: { x: 148, y: 362, r: 46 }
   },
   INTERACT_R: 170, MAGNET_R: 46
 };
@@ -193,7 +198,8 @@ export function prerenderStatic(atlases) {
   blit(x, atlases, 'plant', 844, 330);
   blit(x, atlases, 'frame_sm', 930, 110);
   blit(x, atlases, 'frame_sm', 1030, 110);
-  // —— 井（块状石圈 + 深井口 + 水光 + 木架）——
+  // —— 井（块状石圈 + 深井口 + 水光 + 木架；中心随 LAYOUT.obstacles.well）——
+  x.save(); x.translate(-40, -20);
   x.fillStyle = PAL.stone;                                                     // 石圈（圆角块）
   x.beginPath();
   if (x.roundRect) x.roundRect(158, 452, 104, 52, 12); else x.rect(158, 452, 104, 52);
@@ -216,7 +222,9 @@ export function prerenderStatic(atlases) {
   x.strokeStyle = '#c9b18a'; x.lineWidth = 2;
   x.beginPath(); x.moveTo(210, 382); x.lineTo(210, 428); x.stroke();
   x.strokeRect(200, 428, 20, 16);
-  // —— 火盆（块状铁盆，三足，火苗动态画）——
+  x.restore();
+  // —— 火盆（块状铁盆，三足，火苗动态画；中心随 LAYOUT.obstacles.brazier）——
+  x.save(); x.translate(40, -85);
   x.fillStyle = PAL.stoneD;                                                    // 盆身（圆角块）
   x.beginPath();
   if (x.roundRect) x.roundRect(436, 462, 88, 46, 12); else x.rect(436, 462, 88, 46);
@@ -231,6 +239,7 @@ export function prerenderStatic(atlases) {
   for (const dx of [-30, 0, 30]) {
     x.beginPath(); x.moveTo(480 + dx, 502); x.lineTo(480 + dx * 1.3, 524); x.stroke();
   }
+  x.restore();
   // —— 合成台：两张 MI 木桌拼成工作台 + 内嵌石槽 + 蜡烛座 ——
   x.fillStyle = 'rgba(0,0,0,.25)';
   x.beginPath(); x.ellipse(640, 544, 96, 17, 0, 0, 7); x.fill();              // 落地影
@@ -260,7 +269,7 @@ export function prerenderStatic(atlases) {
   x.beginPath(); x.moveTo(924, 36); x.lineTo(976, 36); x.lineTo(962, 56); x.lineTo(938, 56); x.closePath();
   x.fill(); thick(x, 4); x.stroke();
   // —— 枯苗陶盆：MI 陶盆（苗/花由动态层画）——
-  blit(x, atlases, 'pot', 320, 566);
+  blit(x, atlases, 'pot', 250, 606);
   // —— 北墙右端门洞：Props 石拱门框（关门门扇与开门金光由动态层画）——
   blit(x, atlases, 'door_open', 1064, 157, { w: 95, h: 143 });
   x.fillStyle = 'rgba(0,0,0,.3)';                                              // 门前落地影
@@ -469,7 +478,7 @@ export function drawScene(x, sc, view) {
     });
   }
   // —— 火光们 ——
-  flame(x, 480, 470, 30, t, 1); glow(x, 480, 472, 130, 'rgba(255,140,60,ALPHA)', 0.3);   // 火盆
+  flame(x, 520, 385, 30, t, 1); glow(x, 520, 387, 130, 'rgba(255,140,60,ALPHA)', 0.3);   // 火盆
   flame(x, 702, 452, 9, t, 7); glow(x, 702, 454, 48, 'rgba(255,190,90,ALPHA)', 0.22);    // 合成台蜡烛
   drawTorch(x, 140, 190, true, t, 5); drawTorch(x, 300, 190, true, t, 6);                // 左墙火把恒亮
   if (view.lit > 0.02) {                                                                  // 吸顶灯亮起
@@ -480,21 +489,21 @@ export function drawScene(x, sc, view) {
   }
   // —— 枯苗/花 ——
   if (view.bloomed) {
-    for (const [fx, fy, s] of [[320, 556, 1], [336, 548, 0.8], [350, 558, 0.9]]) {
+    for (const [fx, fy, s] of [[250, 596, 1], [266, 588, 0.8], [280, 598, 0.9]]) {
       x.strokeStyle = PAL.leaf; x.lineWidth = 3;
-      x.beginPath(); x.moveTo(fx, 566); x.quadraticCurveTo(fx - 4 * s, 560, fx, 550 * s + 560 * (1 - s)); x.stroke();
+      x.beginPath(); x.moveTo(fx, 606); x.quadraticCurveTo(fx - 4 * s, 600, fx, 590 * s + 600 * (1 - s)); x.stroke();
       x.fillStyle = PAL.petal;
       for (let i = 0; i < 5; i++) {
         const a = i / 5 * 6.28 + Math.sin(t + fx) * 0.06;
-        x.beginPath(); x.ellipse(fx + Math.cos(a) * 6 * s, (550 * s + 560 * (1 - s)) + Math.sin(a) * 6 * s, 5 * s, 5 * s, 0, 0, 7); x.fill();
+        x.beginPath(); x.ellipse(fx + Math.cos(a) * 6 * s, (590 * s + 600 * (1 - s)) + Math.sin(a) * 6 * s, 5 * s, 5 * s, 0, 0, 7); x.fill();
       }
       x.fillStyle = PAL.gold;
-      x.beginPath(); x.arc(fx, 550 * s + 560 * (1 - s), 4 * s, 0, 7); x.fill();
+      x.beginPath(); x.arc(fx, 590 * s + 600 * (1 - s), 4 * s, 0, 7); x.fill();
     }
   } else {
     x.strokeStyle = PAL.leafD; x.lineWidth = 3;
-    x.beginPath(); x.moveTo(324, 566); x.quadraticCurveTo(318, 548, 306, 544); x.stroke();
-    x.beginPath(); x.moveTo(336, 566); x.quadraticCurveTo(342, 552, 352, 548); x.stroke();
+    x.beginPath(); x.moveTo(254, 606); x.quadraticCurveTo(248, 588, 236, 584); x.stroke();
+    x.beginPath(); x.moveTo(266, 606); x.quadraticCurveTo(272, 592, 282, 588); x.stroke();
   }
 }
 

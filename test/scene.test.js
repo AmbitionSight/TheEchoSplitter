@@ -12,9 +12,9 @@ test('碰撞：被推离障碍圆并夹在房间边界内', () => {
   resolveCollisions(p);
   const well = LAYOUT.obstacles.find(o => o.id === 'well');
   assert.ok(Math.hypot(p.x - well.x, p.y - well.y) >= well.r + 16 - 0.01);
-  const q = { x: 0, y: 100 };
+  const q = { x: 0, y: 700 };                       // 左下角（西墙货架落位后左上角有家具，取样换角）
   resolveCollisions(q);
-  assert.equal(q.x, 40); assert.equal(q.y, 340);
+  assert.equal(q.x, 40); assert.equal(q.y, 700);
 });
 
 test('screenToLogical：整档与缩放档都换算正确，出界标记', () => {
@@ -62,4 +62,12 @@ test('磁吸：大 dt（0.05）也不越过玩家导致永久振荡（回归）'
   let picked = false;
   for (let i = 0; i < 60 && !picked; i++) picked = magnetStep(s, player, 0.05);
   assert.ok(picked);
+});
+
+test('布景不变式：每个障碍的交互判定圈必须大于碰撞圈+20（E 键够得到，回归：井/火盆曾按不出 E）', () => {
+  for (const o of LAYOUT.obstacles) {
+    const t = LAYOUT.targets[o.id];
+    if (!t) continue;
+    assert.ok(t.r >= o.r + 20, `${o.id}: 判定 r=${t.r} 必须 ≥ 碰撞 r+20=${o.r + 20}（玩家半径16+余量）`);
+  }
 });

@@ -97,8 +97,8 @@ h2{font-size:30px;font-weight:600;letter-spacing:.14em}
 .rune-btn.armed{box-shadow:inset 0 3px 6px rgba(0,0,0,.55),0 0 18px rgba(84,224,200,.55);border-color:rgba(84,224,200,.60)}
 
 /* 合成槽：与世界合成台同款的圆凹槽 */
-#craft-row{display:flex;gap:6px;padding:6px 10px;border-radius:10px;background:rgba(11,13,18,.60);border:1px solid var(--edge);margin-left:12px}
-#craft-row .slot{width:46px;height:46px;border-radius:50%;
+#craft-row{display:flex;gap:8px;padding:6px 12px;border-radius:10px;background:rgba(11,13,18,.60);border:1px solid var(--edge);margin-left:18px}
+#craft-row .slot{position:relative;width:48px;height:48px;border-radius:50%;
   border:1px solid rgba(233,228,213,.10);
   background:radial-gradient(circle at 50% 38%,#101319,#090B0F 80%);
   box-shadow:inset 0 3px 6px rgba(0,0,0,.60);
@@ -185,3 +185,10 @@ body{overscroll-behavior:none}
 
 /* 屏级元素是暗幕不是石板：透出底下的房间，石板只给内容盒子 */
 .screen.slab{background:rgba(8,9,13,.82);border:none;border-radius:0;box-shadow:none}
+
+/* 拼词栏精修：音序线（相邻有石即连，序列感）+ 落槽轻弹 + 书钮拉开 */
+#craft-row .slot.seq::after{content:'';position:absolute;right:-9px;top:50%;transform:translateY(-50%);width:8px;height:2px;
+  background:rgba(84,224,200,.45);box-shadow:0 0 6px rgba(84,224,200,.40)}
+#craft-row .slot.pop{animation:slotPop .32s ease}
+@keyframes slotPop{0%{transform:scale(.55)}55%{transform:scale(1.14)}100%{transform:scale(1)}}
+#bar-row .rune-btn{margin-left:12px}

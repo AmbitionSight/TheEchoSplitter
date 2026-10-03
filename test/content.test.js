@@ -51,3 +51,15 @@ test('content 中不含 emoji（铁律）', () => {
   const raw = JSON.stringify(data);
   assert.ok(!/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(raw), '发现 emoji');
 });
+
+test('跨关词库 lexicon：旧章词在后续章可展示（icon+音素时长齐备，不与本章词重复）', async () => {
+  for (const n of [2, 3, 4]) {
+    const c = JSON.parse(await readFile(new URL(`../content/chapter${n}.json`, import.meta.url), 'utf8'));
+    for (const [w, def] of Object.entries(c.lexicon || {})) {
+      assert.ok(def.icon, `ch${n}.${w} 缺 icon`);
+      assert.ok(Array.isArray(def.phonemes) && def.phonemes.length, `ch${n}.${w} 缺音素`);
+      for (const ph of def.phonemes) assert.ok(Array.isArray(ph) && typeof ph[1] === 'number', `ch${n}.${w}.${ph[0]} 缺时长`);
+      assert.ok(!c.words[w], `ch${n}.${w} 不应与本章可拼词重复`);
+    }
+  }
+});

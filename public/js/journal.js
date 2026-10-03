@@ -14,7 +14,7 @@ export function waveSegments(phonemes, width) {
   });
 }
 
-export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard = () => [] }) {
+export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard = () => [], lifetimeWords = () => [] }) {
   const el = id => document.getElementById(id);
   const root = el('journal'), wordsBox = el('journal-words'), runesBox = el('journal-runes');
   const pb = content.phonemeBook;
@@ -24,9 +24,11 @@ export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard 
 
   function renderWords(g) {
     const heard = heardSet(g);
+    const defs = { ...(content.lexicon || {}), ...content.words };          // lexicon=前几章词库（仅供展示）
+    const shown = [...new Set([...lifetimeWords(), ...g.book])].filter(w => defs[w]);   // 生涯词 ∪ 本章新词
     wordsBox.innerHTML = '';
-    for (const word of g.book) {
-      const def = content.words[word];
+    for (const word of shown) {
+      const def = defs[word];
       const card = document.createElement('div');
       card.className = 'word-card';
       const ipaHtml = def.phonemes.map(([p]) =>
@@ -49,7 +51,7 @@ export function createJournal({ content, speakWord, speakCarrier, lifetimeHeard 
         x.fill();
       }
     }
-    if (!g.book.size) wordsBox.innerHTML = `<div class="rune-endcard">（还没有拼出任何词——去碰碰这间屋子）</div>`;
+    if (!shown.length) wordsBox.innerHTML = `<div class="rune-endcard">（还没有拼出任何词——去碰碰这间屋子）</div>`;
   }
 
   function renderRunes(g) {

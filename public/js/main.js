@@ -13,7 +13,7 @@ export function createGame(content) {
     hand: null,                        // {kind:'stone',ipa} | {kind:'item',word} | null
     heard: new Set(),                  // 回声物件听过的音（声音层；与拼词层的 everPicked 分开，不污染播种）
     door: createDoor(), usedTargets: new Set(),
-    helloDropped: false, helloReminded: false, switchOn: false,
+    helloDropped: false, helloReminded: false, switchOn: false, doorHeard: false,
     teaseClock: 0
   };
 }
@@ -78,6 +78,14 @@ export function gameEvent(g, ev, arg = null) {
           ];
         }
         return [{ t: 'speak', who: 'uncle', text: c.flows.hello.lines[0] }];
+      }
+      if (id === 'door') {                              // 关着的门：低语自己的名字（规格 §3 拍节11 题眼·先闻后仿）
+        if (g.door.state !== 'closed') return [];
+        if (!g.doorHeard) {
+          g.doorHeard = true;
+          return [{ t: 'speak', who: 'door', text: 'Open… open… open the door!', slow: true }];
+        }
+        return [{ t: 'speak', who: 'door', text: c.flows.open.listen[0], slow: true }];
       }
       if (id === 'switch') {
         if (!g.switchOn) {
@@ -335,7 +343,7 @@ export const kit = {
       if (s.state !== 'idle' && s.state !== 'settle') continue;
       consider(Math.hypot(p.x - s.x, p.y - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, r: 56, stone: s });
     }
-    for (const id of ['npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout', 'switch', 'bench', 'door']) {
+    for (const id of ['npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout', 'switch', 'bench', 'door', 'shelf', 'plant', 'cactus']) {
       const t = LAYOUT.targets[id];
       if (!t) continue;
       if (t.x > 800 && !w.game.lit) continue;             // 黑暗中右半区目标（门/帽架等）摸不到
@@ -349,7 +357,7 @@ export const kit = {
     else if (t.id === 'bench') w.run(gameEvent(w.game, 'BANK'));
     else if (t.id === 'door') {
       if (w.game.hand?.kind === 'item') w.run(gameEvent(w.game, 'USE', { word: w.game.hand.word, target: 'door' }));
-      else w.sfx.mutter();
+      else w.run(gameEvent(w.game, 'INTERACT', 'door'));     // 关着的门：低语自己的名字
     }
     else w.run(gameEvent(w.game, 'INTERACT', t.id));
   },
@@ -441,7 +449,7 @@ function approach(w, t) {
   return { x: Math.max(40, Math.min(LAYOUT.W - 40, t.x + (dx / d) * 90)), y: Math.max(340, Math.min(LAYOUT.H - 20, t.y + (dy / d) * 90)) };
 }
 function hitSceneTarget(w, p) {
-  const ids = ['switch', 'bench', 'door', 'npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout'];
+  const ids = ['switch', 'bench', 'door', 'npc', 'cat', 'well', 'brazier', 'hatstand', 'sprout', 'shelf', 'plant', 'cactus'];
   for (const id of ids) {
     const t = LAYOUT.targets[id];
     if (!t) continue;

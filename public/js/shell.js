@@ -112,7 +112,8 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
     content,
     speakWord: word => speak(cap(word), 'child'),
     speakCarrier: ipa => speakCarrier(carrierOf(ipa)),
-    lifetimeHeard: () => [...new Set([...profile.everPicked, ...profile.heard])]
+    lifetimeHeard: () => [...new Set([...profile.everPicked, ...profile.heard])],
+    lifetimeWords: () => profile.words
   });
   const btnBook = el('btn-book');
   if (btnBook) btnBook.addEventListener('click', () => journal.toggle(game));

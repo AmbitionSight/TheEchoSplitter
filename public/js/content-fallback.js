@@ -19,7 +19,10 @@ export const INLINE_CONTENT = {
     brazier:  { sfx: "crackle",  echo: ["f", "aɪ", "ə"], say: "Fire." },
     hatstand: { sfx: "hatPuff",  echo: ["h", "æ", "t"], say: "Hat." },
     sprout:   { sfx: "glowTick", echo: ["l", "aɪ", "t"], say: "Light." },
-    cat:      { sfx: "meow",     echo: ["m", "iː", "aʊ"], say: "Meow." }
+    cat:      { sfx: "meow",     echo: ["m", "iː", "aʊ"], say: "Meow." },
+    shelf:    { sfx: "glowTick", echo: ["ʃ", "e", "l", "f"], say: "Shelf." },
+    plant:    { sfx: "hatPuff",  echo: ["p", "l", "ɑː", "n", "t"], say: "Plant." },
+    cactus:   { sfx: "click",    echo: ["k", "æ", "k", "t", "ə", "s"], say: "Cactus." }
   },
   switch: { pos: [660, 282], litDrop: [720, 440] },
   bench:  { pos: [640, 616] },
@@ -43,7 +46,7 @@ export const INLINE_CONTENT = {
     runes: { "iː":"ᛃ","ɪ":"ᛂ","e":"ᛖ","æ":"ᚫ","ɑː":"ᚨ","ɒ":"ᚬ","ɔː":"ᚢ","ʊ":"ᚭ","uː":"ᛇ","ʌ":"ᛜ","ə":"ᚪ","ɜː":"ᛠ",
               "eɪ":"ᛄ","aɪ":"ᛁ","ɔɪ":"ᛤ","əʊ":"ᚩ","aʊ":"ᛥ","ɪə":"ᛡ","eə":"ᛧ","ʊə":"ᛨ",
               "p":"ᛈ","b":"ᛒ","t":"ᛏ","d":"ᛞ","k":"ᚳ","g":"ᚷ","f":"ᚠ","v":"ᚡ","θ":"ᚦ","ð":"ᚧ","s":"ᛌ","z":"ᛋ","ʃ":"ᛢ","ʒ":"ᛣ","tʃ":"ᚲ","dʒ":"ᚵ","ts":"ᚶ","dz":"ᚸ","tr":"ᚺ","dr":"ᚼ","m":"ᛗ","n":"ᚾ","ŋ":"ᛝ","h":"ᚻ","l":"ᛚ","r":"ᚱ","j":"ᛅ","w":"ᚹ" },
-        "carriers": { "h":"Huh.", "ə":"Uh.", "l":"All.", "əʊ":"Oh.", "p":"P.", "n":"N.", "w":"Woo.", "ɔː":"Aw.", "t":"T.", "f":"F.", "aɪ":"I.", "æ":"A.", "m":"Mm.", "iː":"Ee.", "aʊ":"Ow." }
+        "carriers": { "h":"Huh.", "ə":"Uh.", "l":"All.", "əʊ":"Oh.", "p":"P.", "n":"N.", "w":"Woo.", "ɔː":"Aw.", "t":"T.", "f":"F.", "aɪ":"I.", "æ":"A.", "m":"Mm.", "iː":"Ee.", "aʊ":"Ow.", "ʃ":"Sh.", "e":"Eh.", "ɑː":"Ah.", "k":"K.", "s":"S." }
   },
   hints: {
     hello: "他在喊你。过去按 E。",

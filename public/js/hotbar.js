@@ -87,6 +87,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
         s.classList.remove('g1', 'g2', 'g3');
         if (slots.filter(Boolean).length && d > 0 && i < d) s.classList.add(`g${Math.min(3, d)}`);
       }
+      if (slots[i] && slots[i + 1]) s.classList.add('seq');   // 音序线：相邻两槽有石则连线——这几个音是一个序列
     });
     if (m.word) runCraft(m.word);
   }
@@ -250,9 +251,13 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
     show() { root.classList.remove('hidden'); },
     pulseBag() { /* v2：右下计数袋已移除（物品栏自带堆叠计数） */ },
     getSlots: () => slots,
-    placeNext(ipa) {                                     // 存石自动进槽：第一个空槽
+    placeNext(ipa) {                                     // 存石自动进槽：第一个空槽（落槽轻弹确认）
       const i = placeNextIndex(slots, inv, ipa);
-      if (i >= 0) { slots[i] = ipa; refreshSlots(); }
+      if (i >= 0) {
+        slots[i] = ipa; refreshSlots();
+        slotEls[i].classList.add('pop');
+        setTimeout(() => slotEls[i].classList.remove('pop'), 340);
+      }
     }
   };
 }

@@ -1,5 +1,6 @@
 import { PAL, drawIcon } from './art.js';
 import { drawChar } from './sprites.js';
+import { LAYOUT } from './scene.js';               // 演员初始位随第一关布景（LAYOUT 单一事实源）
 
 function thick(x, w = 4.5) { x.lineWidth = w; x.strokeStyle = PAL.ink; x.lineJoin = 'round'; x.lineCap = 'round'; }
 function shadow(x, cx, cy, rx) {
@@ -9,9 +10,9 @@ function shadow(x, cx, cy, rx) {
 
 export function createActors() {
   return {
-    player: { x: 560, y: 600, facing: 1, dir: 'down', walkT: 0, moving: false, hatOn: false },
-    npc: { x: 400, y: 430, facing: 1, mouth: 0, gesture: 'idle', gestureT: 0, gestureDur: 0 },
-    cat: { x: 505, y: 632, earT: 0, meowT: 0 }
+    player: { x: LAYOUT.playerStart.x, y: LAYOUT.playerStart.y, facing: 1, dir: 'down', walkT: 0, moving: false, hatOn: false },
+    npc: { x: LAYOUT.targets.npc.x, y: LAYOUT.targets.npc.y, facing: 1, mouth: 0, gesture: 'idle', gestureT: 0, gestureDur: 0 },
+    cat: { x: LAYOUT.targets.cat.x, y: LAYOUT.targets.cat.y, earT: 0, meowT: 0 }
   };
 }
 
