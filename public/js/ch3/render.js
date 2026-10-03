@@ -42,7 +42,10 @@ export function drawBankObjects(w, x) {
   x.beginPath(); x.moveTo(geo.doorX - 55, geo.groundY); x.lineTo(geo.doorX - 35, geo.groundY - 130); x.lineTo(geo.doorX + 35, geo.groundY - 130); x.lineTo(geo.doorX + 55, geo.groundY); x.closePath(); x.fill(); x.stroke();
   x.fillStyle = '#10151b';
   x.beginPath(); x.moveTo(geo.doorX - 24, geo.groundY); x.lineTo(geo.doorX - 18, geo.groundY - 110); x.lineTo(geo.doorX + 18, geo.groundY - 110); x.lineTo(geo.doorX + 24, geo.groundY); x.closePath(); x.fill();
-  if (w.game.logPlaced) drawLog(x, geo.waterX - 25, geo.groundY - 16);
+  if (!w.game.raftAssembled) {              // 并排的原木：组筏后三根并入木筏，只画筏
+    const ROTS = [-0.08, 0.06, -0.04];
+    for (let k = 0; k < w.game.logsPlaced; k++) drawLog(x, geo.waterX - 20 + k * 44, geo.groundY - 16, ROTS[k % ROTS.length]);
+  }
   if (w.game.raftAssembled) drawRaft(x, w.raft.x, w.raft.y, w.view.t);
   x.fillStyle = '#2d3941'; x.fillRect(geo.waterX - 4, geo.groundY - 4, 8, 8);
 }
@@ -111,8 +114,8 @@ export function drawDeepObjects(w, x) {
   x.fillStyle = 'rgba(255,221,140,.5)'; x.font = '18px system-ui'; x.fillText('石壁上的撑篙图', geo.muralX - 88, 310);
 }
 
-function drawLog(x, cx, cy) {
-  x.save(); x.translate(cx, cy); x.rotate(-0.08);
+function drawLog(x, cx, cy, rot = -0.08) {
+  x.save(); x.translate(cx, cy); x.rotate(rot);
   x.fillStyle = '#9a6536'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
   x.beginPath(); x.roundRect ? x.roundRect(-78, -18, 156, 36, 16) : x.rect(-78, -18, 156, 36); x.fill(); x.stroke();
   x.fillStyle = '#d0a064'; x.beginPath(); x.ellipse(-78, 0, 16, 18, 0, 0, 7); x.fill(); x.stroke();
