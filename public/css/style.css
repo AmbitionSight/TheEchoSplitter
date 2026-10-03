@@ -14,7 +14,7 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:#07080B;font-family:var(--font);color:var(--ink);overflow:hidden;user-select:none}
 #stage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
-#game{width:100%;height:100%;display:block;border-radius:4px}
+#game{width:100%;height:100%;display:block;border-radius:4px;touch-action:none}
 .hidden{display:none!important}
 
 /* 浏览器表面：选区 / 焦点环 / 滚动条与设计同源 */
@@ -182,6 +182,27 @@ h2{font-size:30px;font-weight:600;letter-spacing:.14em}
 /* 触摸加固：拖拽禁浏览器手势 + 禁过度滚动 */
 #hotbar .cell,#craft-row .slot{touch-action:none}
 body{overscroll-behavior:none}
+
+/* 触屏跳键：右下 64px 圆钮（unlocked 同拍显示；图标 = jump，由 ch2.js 装） */
+#btn-jump{position:absolute;right:28px;bottom:32px;z-index:30;width:64px;height:64px;
+  display:flex;align-items:center;justify-content:center;touch-action:none}
+#btn-jump img{width:42px;height:42px;pointer-events:none}
+
+/* 旅途回顾走马灯（第三关收尾）：与结算同族；词只出图标不写字 */
+#recap{gap:12px;text-align:center;cursor:pointer}
+#recap .rc-day{font-size:34px;letter-spacing:.22em;text-indent:.22em;color:var(--ink);margin:0}
+#recap .rc-place{color:var(--dim);letter-spacing:.18em;margin:2px 0 8px}
+#recap .rc-icons{display:flex;gap:18px;justify-content:center;align-items:center;min-height:56px}
+#recap .rc-icons img{width:56px;height:56px;image-rendering:pixelated;animation:wordPop .6s ease backwards}
+#recap .rc-end{font-size:19px;color:var(--ink);letter-spacing:.1em;margin:0}
+#recap .rc-dots{display:flex;gap:8px;justify-content:center;margin-top:12px}
+#recap .rc-dots i{width:6px;height:6px;border-radius:50%;background:rgba(233,228,213,.22)}
+#recap .rc-dots i.on{background:var(--teal);box-shadow:0 0 8px rgba(84,224,200,.6)}
+
+/* 旅途完成撒花：像素小方块落下（金/青/羊皮纸/辅音蓝，与全剧同一像素语言） */
+.cf-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none}
+.cf-layer i{position:absolute;top:-12px;width:6px;height:6px;border-radius:1px;animation:cfFall 2.6s linear forwards}
+@keyframes cfFall{0%{transform:translateY(-10px) rotate(0deg);opacity:1}100%{transform:translateY(78vh) rotate(540deg);opacity:0}}
 
 /* 屏级元素是暗幕不是石板：透出底下的房间，石板只给内容盒子 */
 .screen.slab{background:rgba(8,9,13,.82);border:none;border-radius:0;box-shadow:none}

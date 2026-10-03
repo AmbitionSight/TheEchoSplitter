@@ -83,6 +83,27 @@ test('tile 铺满矩形且不越界绘制', () => {
   }
 });
 
+test('第二章新增 SPR 条目在 mi 图集内', () => {
+  for (const n of ['crate_big', 'crate_sm', 'jars2', 'tree']) {
+    const s = SPR[n]; assert.ok(s, `缺 ${n}`);
+    assert.ok(s.x + s.w <= ATLASES[s.a].w && s.y + s.h <= ATLASES[s.a].h, `${n} 越界`);
+  }
+});
+
+test('绳与窗改矢量：ch2b.js 不再引用、sprites.js 不再导出四条照片 SPR（Task 14）', () => {
+  const ch2b = readFileSync(join(JS_DIR, 'ch2b.js'), 'utf8');
+  const sprSrc = readFileSync(join(JS_DIR, 'sprites.js'), 'utf8');
+  for (const n of ['rope_broken', 'rope_fixed', 'window_closed', 'window_open']) {
+    assert.ok(!ch2b.includes(n), `ch2b.js 仍引用 ${n}`);
+    assert.ok(!sprSrc.includes(n), `sprites.js 仍含 ${n}`);
+    assert.ok(!SPR[n], `SPR 仍导出 ${n}`);
+  }
+  // §11 矢量绳三色（芯/暗边/高光）+ 生长前沿青光（84,224,200 = PAL.glowRune）
+  for (const c of ['#b98d55', '#6e4526', '#d9b878']) assert.ok(ch2b.includes(c), `绳缺 ${c}`);
+  assert.ok(ch2b.includes('84,224,200'), '绳端青光缺失（应改青 PAL.glowRune）');
+  assert.ok(!ch2b.includes('123,216,143'), '绳端仍是旧绿光 #7bd88f');
+});
+
 test('drawChar 以脚底为锚（y - 95*scale），flip 时镜像', () => {
   const ctx = fakeCtx();
   drawChar(ctx, { ch: fakeImg }, 'kid', 'down', 1, 500, 600);

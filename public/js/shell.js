@@ -11,7 +11,7 @@ import { loadProfile, saveProfile, mergeProfile } from './profile.js';
 import { loadAtlases } from './sprites.js';
 
 export const CHAPTER_NEXT = { 1: 'chapter2.html', 2: 'chapter3.html', 3: null };
-export const CHAPTER_DAY = { 1: '第一天', 2: '第二间房', 3: '第三间房' };
+export const CHAPTER_DAY = { 1: '第一天', 2: '第二章', 3: '第三间房' };
 
 export function mount(kit) {
   if (typeof document === 'undefined') return;
@@ -32,10 +32,21 @@ function bootShell(kit) {
   fit(); addEventListener('resize', fit);
 
   window.__errors = [];
-  addEventListener('error', e => __errors.push(String(e.message)));
-  addEventListener('unhandledrejection', e => __errors.push(String(e.reason)));
+  // 运行期错误既进 __errors，也直接显示在页面顶部（黑屏时一眼可读，不必开控制台）
+  const showErr = msg => {
+    let d = document.getElementById('__err');
+    if (!d) {
+      d = document.createElement('div'); d.id = '__err';
+      d.style.cssText = 'position:fixed;left:0;top:0;right:0;z-index:99999;background:rgba(120,0,0,.92);color:#fff;' +
+        'font:13px/1.5 ui-monospace,monospace;padding:10px 14px;white-space:pre-wrap;pointer-events:none;';
+      document.body.appendChild(d);
+    }
+    d.textContent = (d.textContent ? d.textContent + '\n' : '') + msg;
+  };
+  addEventListener('error', e => { __errors.push(String(e.message)); showErr('ERR ' + e.message + '  @ ' + (e.filename || '') + ':' + (e.lineno || '')); });
+  addEventListener('unhandledrejection', e => { __errors.push(String(e.reason)); showErr('REJ ' + e.reason); });
 
-  // —— 同页交接遮罩：第二间房走到尽头 → 崖壁（第二间房后半，纯视觉，不挡输入）——
+  // —— 同页交接遮罩：裂谷走到尽头 → 崖壁（第二章后半，纯视觉，不挡输入）——
   const veil = document.createElement('div');
   veil.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;' +
     'background:#05070b;color:#cfe6e0;font:600 30px/1 system-ui;letter-spacing:.35em;text-indent:.35em;' +
@@ -83,7 +94,7 @@ function bootShell(kit) {
   async function handoff(next) {                                // 淡出 → 拆当前章 → 载下一章 → 淡入
     if (switching) return;
     switching = true;
-    veil.textContent = CHAPTER_DAY[next.chapter] || '';
+    veil.textContent = next.label ?? (CHAPTER_DAY[next.chapter] || '');   // 章可给自定义遮罩文案，缺省按日次
     veil.style.opacity = '1';
     await wait(560);
     try {
@@ -203,12 +214,18 @@ function startShell({ kit, content, el, cv, ctx, atlases, onHandoff }) {
     const payload = kit.summaryMerge(game, w);
     const p = mergeProfile(loadProfile(localStorage), payload);
     saveProfile(localStorage, p);                        // 先存档：无缝交接时下一关开局要读到新 abilities
-    if (kit.next) { onHandoff?.(kit.next); return; }     // 无缝交接：不弹结算页，直接进入下一间房
-    const day = el('summary').querySelector('.day');
-    if (day) day.textContent = CHAPTER_DAY[kit.chapter] || '';
-    ui.summary(game);
+    const showSummary = !kit.next || kit.summaryFirst;   // summaryFirst：章末先弹结算，再由按钮无缝交接
+    if (showSummary) {
+      const day = el('summary').querySelector('.day'); if (day) day.textContent = CHAPTER_DAY[kit.chapter] || '';
+      // 章末卡：summaryFirst 的章（第二章两半）石数用合并后的档案累计，而不是只剩最后半段
+      ui.summary(game, { words: [...game.book], stones: kit.summaryFirst ? (p.picks ?? game.stonesPicked) : game.stonesPicked });
+      // 旅途完成（第三关内容带 recap）：结算卡停留一拍后自动走一段回顾走马灯
+      if (content.recap) setTimeout(() => ui.recap(content.recap), 1800);
+    }
     const walk = el('btn-walk');
-    const next = CHAPTER_NEXT[kit.chapter];
+    if (kit.next && !kit.summaryFirst) { onHandoff?.(kit.next); return; }   // 无缝交接：不弹结算
+    if (kit.next) { walk.textContent = '下一间房 →'; walk.onclick = () => onHandoff?.(kit.next); return; }
+    const next = CHAPTER_NEXT[kit.chapter];              // 无 kit.next 的章（一/三）：沿用整页跳转或收尾
     if (next) {
       walk.textContent = '下一间房 →';
       walk.onclick = () => { location.href = next; };

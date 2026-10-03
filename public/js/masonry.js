@@ -65,3 +65,48 @@ export function paintSlabs(x, rows, W, y0, H) {
     }
   }
 }
+
+// 4×4 拜耳矩阵（像素抖动，与砌石苔藓/暗海同一语言）
+export const BAYER4 = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+
+// 像素化纵向渐变：把平滑渐变量化成色带 + 拜耳抖动过渡（替代 CSS 式平滑渐变，才有像素质感）
+export function pixelGradientV(x, x0, x1, y0, y1, stops) {
+  const W = x1 - x0, h = y1 - y0, img = x.createImageData(W, h), d = img.data;
+  const cols = stops.map(([t, hex]) => { const n = parseInt(hex.slice(1), 16); return { t, r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 }; });
+  const at = t => {
+    for (let i = 0; i < cols.length - 1; i++) {
+      const a = cols[i], b = cols[i + 1];
+      if (t <= b.t) { const k = (t - a.t) / (b.t - a.t || 1); return [a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k]; }
+    }
+    const e = cols[cols.length - 1]; return [e.r, e.g, e.b];
+  };
+  const LV = 7, step = 255 / LV;
+  for (let y = 0; y < h; y++) {
+    const [r, g, b] = at(y / h);
+    for (let px = 0; px < W; px++) {
+      const th = (BAYER4[px & 3][y & 3] + 0.5) / 16 - 0.5;
+      const dq = v => Math.max(0, Math.min(255, Math.round(Math.floor(v / step + th) * step)));
+      const o = (y * W + px) * 4;
+      d[o] = dq(r); d[o + 1] = dq(g); d[o + 2] = dq(b); d[o + 3] = 255;
+    }
+  }
+  x.putImageData(img, x0, y0);
+}
+
+// 像素化径向光晕：拜耳抖动（避免平滑光斑的"塑料感"）；先画临时画布再叠上（可混合）
+export function pixelGlow(x, cx, cy, r, rgb, a) {
+  const s = Math.ceil(r * 2);
+  const c = document.createElement('canvas'); c.width = s; c.height = s;
+  const g = c.getContext('2d');
+  const img = g.createImageData(s, s), d = img.data;
+  for (let y = 0; y < s; y++) for (let px = 0; px < s; px++) {
+    const f = Math.max(0, 1 - Math.hypot(px - s / 2, y - s / 2) / (s / 2));
+    const th = (BAYER4[px & 3][y & 3] + 0.5) / 16;
+    if (f > th * 0.55) {
+      const o = (y * s + px) * 4;
+      d[o] = rgb[0]; d[o + 1] = rgb[1]; d[o + 2] = rgb[2]; d[o + 3] = Math.round(255 * a * f * f);
+    }
+  }
+  g.putImageData(img, 0, 0);
+  x.drawImage(c, cx - s / 2, cy - s / 2);
+}

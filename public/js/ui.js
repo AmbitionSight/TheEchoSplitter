@@ -38,16 +38,21 @@ export function createUI({ content, atlases, signal }) {
     if (isNew && book) { book.classList.add('armed'); setTimeout(() => book.classList.remove('armed'), 1600); }
   }
   function reveal(word) {
-    const def = content.words[word];
-    el('reveal-stones').innerHTML = def.phonemes.map(([p]) => `<span>${p}</span>`).join('');
+    const screen = el('reveal');
+    if (!screen) return Promise.resolve();               // 章节没有揭示卡：静默
+    const rev = content.words[word]?.reveal ?? {};       // 章可给 line/sub/ok；缺省回落 ch1 原文案
+    el('reveal-stones').innerHTML = (content.words[word]?.phonemes ?? []).map(([p]) => `<span>${p}</span>`).join('');
     el('reveal-word').textContent = word.toUpperCase();
-    el('reveal-ok').textContent = '把这个词，还给门';
-    el('reveal').classList.remove('hidden');
+    const line = screen.querySelector('h2'), sub = screen.querySelector('.sub');
+    if (line) line.textContent = rev.line ?? '你用声音打开了门';
+    if (sub) sub.textContent = rev.sub ?? '文字，是冻住的声音';
+    el('reveal-ok').textContent = rev.ok ?? '把这个词，还给门';
+    screen.classList.remove('hidden');
     return new Promise(res => {
       let settled = false;
       const done = () => {
         if (settled) return; settled = true;
-        el('reveal').classList.add('hidden');
+        screen.classList.add('hidden');
         document.removeEventListener('pointerdown', done);
         res();
       };
@@ -55,15 +60,18 @@ export function createUI({ content, atlases, signal }) {
       setTimeout(() => { if (!settled) document.addEventListener('pointerdown', done, { signal }); }, 12000); // 12s 后任意点按兜底（Task 13 评审 F；按钮仍是主路径）
     });
   }
-  function summary(g) {
-    el('summary-line').textContent = `你捡起了 ${g.book.size} 个词 · ${g.stonesPicked} 块声音石`;
-    el('summary-icons').innerHTML = [...g.book]
-      .map(w => `<img src="${iconURL(content.words[w].icon)}" alt="">`).join('');
+  function summary(g, info = {}) {
+    const words = info.words ?? [...g.book];                 // 章可传本章词（2b：jump+rope，跨两半）
+    const stones = info.stones ?? g.stonesPicked;            // 章可传石数（壳按结算载荷给）
+    el('summary-line').textContent = `你捡起了 ${words.length} 个词 · ${stones} 块声音石`;
+    el('summary-icons').innerHTML = words
+      .map(w => {
+        const def = content.words[w] ?? content.lexicon?.[w];   // 前几章词（如 2b 的 jump）经 lexicon 解析图标
+        return def ? `<img src="${iconURL(def.icon)}" alt="">` : '';
+      }).join('');
     el('summary').classList.remove('hidden');
   }
   el('btn-again').addEventListener('click', () => location.reload(), { signal });
-  el('btn-notes').addEventListener('click', () => el('notes').classList.remove('hidden'), { signal });
-  el('notes-close').addEventListener('click', () => el('notes').classList.add('hidden'), { signal });
   el('btn-walk').addEventListener('click', () => el('summary').classList.add('hidden'), { signal });
 
   // —— 左上小人面板（v2：头像 + 手持槽；有素材时用小孩精灵头像）——
@@ -96,5 +104,62 @@ export function createUI({ content, atlases, signal }) {
       slot.className = 'hand-slot item';
     }
   }
-  return { setHint, toast, echoStrip, reveal, summary, updateHand };
+  // —— 旅途回顾（走马灯）：第三关收尾自动播放；词只出图标不写字（拼写时刻只属于揭示卡）——
+  let rcEl = null, rcTimer = 0, rcIdx = 0, rcData = null, rcFired = false;
+  function recapBuild() {
+    if (rcEl) return rcEl;
+    rcEl = document.createElement('div');
+    rcEl.id = 'recap';
+    rcEl.className = 'screen center slab hidden';
+    rcEl.innerHTML = '<p class="rc-day"></p><p class="rc-place"></p><div class="rc-icons"></div><div class="rc-dots"></div>';
+    document.body.appendChild(rcEl);
+    rcEl.addEventListener('click', () => recapNext());
+    return rcEl;
+  }
+  function recapPaint() {
+    const n = rcData.slides.length, end = rcIdx >= n;
+    rcEl.querySelector('.rc-day').textContent = end ? (rcData.title || '') : (rcData.slides[rcIdx].day || '');
+    rcEl.querySelector('.rc-place').textContent = end ? '' : (rcData.slides[rcIdx].place || '');
+    rcEl.querySelector('.rc-icons').innerHTML = end
+      ? `<p class="rc-end">${rcData.end || ''}</p>`
+      : (rcData.slides[rcIdx].words || []).map(w => {
+          const def = content.words[w] ?? content.lexicon?.[w];
+          return def ? `<img src="${iconURL(def.icon)}" alt="">` : '';
+        }).join('');
+    rcEl.querySelector('.rc-dots').innerHTML = Array.from({ length: n + 1 }, (_, i) => `<i class="${i === rcIdx ? 'on' : ''}"></i>`).join('');
+    rcEl.classList.remove('hidden');                          // 建出来是 hidden，每帧绘制时亮起（漏这行=永远看不见）
+    if (end && !rcFired) { rcFired = true; confetti(rcEl); }  // 旅途完成：末段撒花（只撒一次）
+  }
+  function recapNext() {
+    rcIdx++;
+    if (rcIdx > rcData.slides.length) { recapStop(); return; }
+    recapPaint();
+    clearTimeout(rcTimer);
+    rcTimer = setTimeout(recapNext, rcIdx >= rcData.slides.length ? 3600 : 2400);
+  }
+  function recapStop() { clearTimeout(rcTimer); rcEl?.classList.add('hidden'); rcIdx = 0; rcFired = false; }
+  // 旅途完成撒花：像素小方块落下（金/青/羊皮纸/辅音蓝，与全剧同一像素语言）
+  function confetti(host) {
+    if (!host || typeof document === 'undefined') return;
+    const layer = document.createElement('div');
+    layer.className = 'cf-layer';
+    const cols = ['#FFD166', '#54E0C8', '#E9E4D5', '#8FC3FF'];
+    for (let i = 0; i < 64; i++) {
+      const p = document.createElement('i');
+      p.style.left = (Math.random() * 100) + '%';
+      p.style.background = cols[i % cols.length];
+      p.style.animationDelay = (Math.random() * 0.9).toFixed(2) + 's';
+      p.style.animationDuration = (2.2 + Math.random() * 1.4).toFixed(2) + 's';
+      layer.appendChild(p);
+    }
+    host.appendChild(layer);
+    setTimeout(() => layer.remove(), 4200);
+  }
+  function recap(data) {
+    if (!data?.slides?.length || typeof document === 'undefined') return;
+    rcData = data; recapBuild(); rcIdx = 0; recapPaint();
+    clearTimeout(rcTimer); rcTimer = setTimeout(recapNext, 2400);
+  }
+
+  return { setHint, toast, echoStrip, reveal, summary, recap, updateHand };
 }

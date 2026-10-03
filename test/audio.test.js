@@ -178,3 +178,9 @@ test('Speech.cancel：透传 synth.cancel 且无 synth 不抛错', () => {
   new Speech(null, null).cancel();
   assert.ok(true);
 });
+
+test('Sfx 新增 hop/thud/strain/gust 可调用且不抛错', () => {
+  const s = new Sfx(null);
+  for (const m of ['hop', 'thud', 'strain', 'gust']) assert.equal(typeof s[m], 'function');
+  assert.doesNotThrow(() => { s.hop(); s.thud(); s.strain(); s.gust(); });   // 无 ctx 时静默
+});

@@ -1,8 +1,10 @@
 // —— 横版共用件：移动/跳跃/攀爬物理核心 + 通用渲染（火把/合成台/石头/E 提示/暗角） ——
-import { PAL } from './art.js';
+import { PAL, drawRune } from './art.js';
+import { shade } from './masonry.js';
 import { isVowel, stoneCount } from './hotbar.js';
 import { drawBenchStones } from './workbench.js';
 import { blit, tile } from './sprites.js';
+import { rng } from './ch1/planners.js';
 
 export const SIDE = { W: 1280, H: 720 };
 
@@ -41,8 +43,13 @@ export function moveSide(w, dt) {
       p.climbing = true; p.x = rope.x();                // 抓住绳子：吸附到绳位（墙把玩家挡在两侧，起爬判定须放宽）
     }
     if (p.airborne || overGap) {
+      const py0 = p.y;
       p.vy += 1500 * dt; p.y += p.vy * dt; p.airborne = true;
-      if (p.vy > 0 && p.y >= geo.groundY && !overGap) {
+      // 跳上可跳平台（wall.jumpable，如第三关停泊的木筏）：下落穿越台面即落定
+      if (wall && wall.jumpable && p.vy > 0 && py0 <= wall.topY && p.y >= wall.topY &&
+          p.x > wall.X && p.x < wall.X + wall.W) {
+        p.y = wall.topY; p.vy = 0; p.airborne = false;
+      } else if (p.vy > 0 && p.y >= geo.groundY && !overGap) {
         p.y = geo.groundY; p.vy = 0; p.airborne = false;
         cfg.onLand?.(p.x);
       }
@@ -74,9 +81,28 @@ export function stepSideStone(s, dt, groundY) {
 // 落点自边界内侧向左散开，保证全部落在可达地面上（第二关边界=裂口左缘，第三关=墙左缘）
 export function planDropStones(wordDef, inv, dropXY, edgeX) {
   const ax = Math.min(dropXY[0], edgeX - 90);
-  return wordDef.phonemes.map(([ipa]) => ipa)
+  return wordDef.phonemes.map(([ipa]) => ipa).concat(wordDef.decoys || [])   // decoys：学过的干扰音，一并掉落
     .filter(ipa => stoneCount(inv, ipa) === 0)
     .map((ipa, i) => ({ ipa, x: ax - i * 46 }));
+}
+
+// 听声点浮标：一枚脉动的青点（走近更亮），提示"这里有声音"（第二关起）
+export function drawListenSpots(x, w) {
+  const spots = w.content?.listening;
+  if (!spots) return;
+  const t = w.view.t, px = w.player.x;
+  for (const spot of spots) {
+    const near = Math.abs(px - spot.x) < spot.r;
+    const pulse = 0.5 + Math.sin(t * 2.2 + spot.x * 0.03) * 0.5;
+    const a = (near ? 0.45 : 0.18) * (0.6 + pulse * 0.4);
+    const g = x.createRadialGradient(spot.x, spot.y, 2, spot.x, spot.y, 30 + pulse * 10);
+    g.addColorStop(0, `rgba(84,224,200,${a})`);
+    g.addColorStop(1, 'rgba(84,224,200,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(spot.x, spot.y, 40, 0, 7); x.fill();
+    x.fillStyle = `rgba(233,228,213,${0.30 + pulse * 0.35})`;
+    x.beginPath(); x.arc(spot.x, spot.y, 3, 0, 7); x.fill();
+  }
 }
 
 // —— 通用渲染 ——
@@ -94,7 +120,7 @@ export function drawSideStone(x, s, t) {
   x.restore();
 }
 
-export function drawTorchSide(x, tx, ty, t) {
+export function drawTorchSide(x, tx, ty, t, glow = null) {
   x.strokeStyle = PAL.wood2; x.lineWidth = 6;
   x.beginPath(); x.moveTo(tx, ty + 26); x.lineTo(tx, ty); x.stroke();
   const f = Math.sin(t * 13 + tx) * 0.12 + 1;
@@ -106,16 +132,29 @@ export function drawTorchSide(x, tx, ty, t) {
   x.fill();
   x.fillStyle = PAL.fireCore;
   x.beginPath(); x.arc(tx, ty + 2, 4, 0, 7); x.fill();
-  const g = x.createRadialGradient(tx, ty, 4, tx, ty, 110);
-  g.addColorStop(0, 'rgba(255,170,80,.22)'); g.addColorStop(1, 'rgba(255,170,80,0)');
-  x.fillStyle = g; x.beginPath(); x.arc(tx, ty, 110, 0, 7); x.fill();
+  // 动态光晕：可选第 5 参 {r,a}（缺省＝原 110/.22，ch2b/ch3 不受影响）；章节传 LIGHTS2 锚点的 r/s
+  const gr = glow?.r ?? 110, ga = glow?.a ?? 0.22;
+  const g = x.createRadialGradient(tx, ty, 4, tx, ty, gr);
+  g.addColorStop(0, `rgba(255,170,80,${ga})`); g.addColorStop(1, 'rgba(255,170,80,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(tx, ty, gr, 0, 7); x.fill();
 }
 
-export function drawBenchSide(x, imgs, bx, gy, hot, slots = null) {
+export function drawBenchSide(x, imgs, bx, gy, hot, slots = null, opts = {}) {
   x.fillStyle = 'rgba(0,0,0,.25)';
   x.beginPath(); x.ellipse(bx, gy + 6, 70, 9, 0, 0, 7); x.fill();
   blit(x, imgs, 'table', bx - 76, gy - 74);
   blit(x, imgs, 'table', bx, gy - 74);
+  if (opts.candle) {                                          // ch1 同款台面陈设：内嵌石槽板 + ᚹ 阴刻 + 蜡烛座
+    x.fillStyle = PAL.stone;
+    x.beginPath();
+    if (x.roundRect) x.roundRect(bx - 68, gy - 69, 136, 20, 6); else x.rect(bx - 68, gy - 69, 136, 20);
+    x.fill();
+    x.lineWidth = 3; x.strokeStyle = PAL.ink; x.stroke();
+    drawRune(x, 'ᚹ', bx, gy - 12, 12, 'rgba(217,164,65,.5)', 2);          // ᚹ 阴刻（金蚀，不发光）
+    x.fillStyle = '#d8d3c6'; x.fillRect(bx + 58, gy - 88, 8, 14);         // 蜡烛座（火苗由本函数动态层画）
+    x.lineWidth = 3; x.strokeStyle = PAL.ink; x.strokeRect(bx + 58, gy - 88, 8, 14);
+    x.fillStyle = '#9a958a'; x.fillRect(bx + 60, gy - 80, 4, 6);
+  }
   const sockets = [];
   for (let i = 0; i < 4; i++) {
     const sx = bx - 33 + i * 22;
@@ -127,6 +166,24 @@ export function drawBenchSide(x, imgs, bx, gy, hot, slots = null) {
     if (hot && !slots?.[i]) { x.fillStyle = 'rgba(84,224,200,.25)'; x.beginPath(); x.arc(sx, gy - 62, 9, 0, 7); x.fill(); }  // 手持音素石：只亮空槽
   }
   if (slots) drawBenchStones(x, slots, sockets);            // 槽内音素石上台面
+  if (opts.candle) {                                          // 火苗 + 光晕：位置读 benchCandle 锚点（与章节 LIGHTS2 同源）
+    const c = benchCandle(bx, gy), f = Math.sin((opts.t ?? 0) * 13 + bx) * 0.12 + 1, sz = 9, cy = c.y - 2;
+    x.fillStyle = PAL.fire2;
+    x.beginPath();
+    x.moveTo(c.x, cy - sz * f);
+    x.bezierCurveTo(c.x + sz * 0.55, cy - sz * 0.25, c.x + sz * 0.42, cy + sz * 0.3, c.x, cy + sz * 0.34);
+    x.bezierCurveTo(c.x - sz * 0.42, cy + sz * 0.3, c.x - sz * 0.55, cy - sz * 0.25, c.x, cy - sz * f);
+    x.closePath(); x.fill();
+    x.fillStyle = PAL.fireCore;
+    x.beginPath();
+    x.moveTo(c.x, cy - sz * 0.3 * f);
+    x.bezierCurveTo(c.x + sz * 0.24, cy, c.x + sz * 0.2, cy + sz * 0.26, c.x, cy + sz * 0.3);
+    x.bezierCurveTo(c.x - sz * 0.2, cy + sz * 0.26, c.x - sz * 0.24, cy, c.x, cy - sz * 0.3 * f);
+    x.closePath(); x.fill();
+    const g = x.createRadialGradient(c.x, c.y, 2, c.x, c.y, 48);
+    g.addColorStop(0, 'rgba(255,190,90,.26)'); g.addColorStop(1, 'rgba(255,190,90,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(c.x, c.y, 48, 0, 7); x.fill();
+  }
 }
 
 // 横版背墙：MI 墙面平铺 + 压暗
@@ -166,9 +223,79 @@ export function drawEHint(x, t, time) {
   x.restore();
 }
 
+// 环境光唯一事实源（规格 §6.4）：黄昏级色与暗角强度全章对齐 ch1（原两半 .30/.50）
+export const AMBIENT = { grade: 0.24, vignette: 0.42 };
+
+// 暗角：ch1 几何（中心 (640,360)、380→780）与 α；横版三章共用同一值
 export function vignette(x, W = SIDE.W, H = SIDE.H) {
-  const v = x.createRadialGradient(W / 2, H / 2 - 40, 340, W / 2, H / 2 - 40, 760);
-  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.5)');
+  const v = x.createRadialGradient(640, 360, 380, 640, 360, 780);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${AMBIENT.vignette})`);
   x.fillStyle = v; x.fillRect(0, 0, W, H);
+}
+export function benchCandle(bx, gy) { return { x: bx + 62, y: gy - 90 }; }
+// 点哪走哪（第一关 walkTarget 的横版移植；调在 moveSide 之后）
+export function stepWalkTo(w, dt) {
+  const t = w.walkTo; if (!t || w.keys.size) return;
+  const p = w.player, sp = w.cfg.walkSpeed ?? w.cfg.speed ?? 300, dx = t.x - p.x;
+  if (Math.abs(dx) <= 6) { w.walkTo = null; p.moving = false; return; }
+  p.x += Math.sign(dx) * Math.min(Math.abs(dx), sp * dt);
+  p.dir = p.facing = dx > 0 ? 'right' : 'left'; p.moving = true; p.walkT += dt;
+}
+// 落地接触影（全关统一）
+export function groundShadow(x, cx, gy, rx, ry = 7, a = 0.26) {
+  x.fillStyle = `rgba(0,0,0,${a})`;
+  x.beginPath(); x.ellipse(cx, gy + 4, rx, ry, 0, 0, 7); x.fill();
+}
+// —— 浮尘池（横版共用；rng 种子确定布局——规格 §6.4：26 粒、y<160 回 700）——
+export function makeDust(n, seed = 99, W = SIDE.W) {
+  const r = rng(seed), dust = [];
+  for (let i = 0; i < n; i++) dust.push({ x: r() * W, y: 160 + r() * 540, v: 6 + r() * 14, ph: r() * 6.28 });
+  return dust;
+}
+export function stepDust(dust, dt, W = SIDE.W) {
+  for (const d of dust) {
+    d.y -= d.v * dt; d.x += Math.sin(d.ph + d.y / 40) * 0.2;
+    if (d.y < 160) { d.y = 700; d.x = (d.x + W * 0.618) % W; }   // 确定性错列回卷，不聚成一柱
+  }
+}
+// 池内暖金 / 池外冷灰：pools = 章节光锚表（{x,y,r}），与烘焙光池/动态光晕同源
+export function drawDust(x, dust, t, pools = null) {
+  const P = pools ? Object.values(pools) : [];
+  for (const d of dust) {
+    const warm = P.some(l => Math.hypot(d.x - l.x, d.y - l.y) < l.r);
+    x.globalAlpha = warm ? 0.18 + Math.abs(Math.sin(d.ph + t)) * 0.3 : 0.10;
+    x.fillStyle = warm ? 'rgba(255,233,168,.5)' : '#8fa6b8';
+    x.fillRect(d.x, d.y, 2.4, 2.4);
+  }
+  x.globalAlpha = 1;
+}
+// 侧视矢量石拱（与 ch1 门拱同族；纯矢量、无章节几何）
+export function drawArchSide(x, cx, baseY, { w = 120, h = 230, opening = 76, mouth = '#141824', rune = null, runeSize = 26, runeColor = 'rgba(30,32,44,.85)', runeGlow = 0 } = {}) {
+  const hw = w / 2, top = baseY - h, ow = opening / 2, oh = h - 40;
+  x.save();
+  x.fillStyle = shade('#7b7669', 0.02);
+  x.beginPath();
+  x.moveTo(cx - hw, baseY); x.lineTo(cx - hw, top + 30);
+  x.quadraticCurveTo(cx, top - 8, cx + hw, top + 30);
+  x.lineTo(cx + hw, baseY); x.closePath(); x.fill();
+  x.lineWidth = 5; x.strokeStyle = PAL.ink; x.stroke();
+  x.fillStyle = mouth;
+  x.beginPath();
+  x.moveTo(cx - ow, baseY); x.lineTo(cx - ow, top + 44);
+  x.quadraticCurveTo(cx, top + 16, cx + ow, top + 44);
+  x.lineTo(cx + ow, baseY); x.closePath(); x.fill();
+  x.fillStyle = shade('#7b7669', 0.12);                       // 拱心石
+  x.fillRect(cx - 10, top + 18, 20, 20); x.strokeRect(cx - 10, top + 18, 20, 20);
+  x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(cx + hw - 16, top + 30, 16, baseY - top - 30);  // 右柱沉影
+  if (rune) {
+    if (runeGlow > 0) {
+      const g = x.createRadialGradient(cx, top + 6, 4, cx, top + 6, 44);
+      g.addColorStop(0, `rgba(84,224,200,${0.35 * runeGlow})`); g.addColorStop(1, 'rgba(84,224,200,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(cx, top + 6, 44, 0, 7); x.fill();
+    }
+    x.fillStyle = runeColor; x.font = `${runeSize}px serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(rune, cx, top + 6);
+  }
+  x.restore();
 }
 

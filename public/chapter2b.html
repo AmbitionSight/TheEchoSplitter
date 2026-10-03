@@ -3,8 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>析声者 · 第二间房 · 崖壁</title>
+<title>析声者 · 第二章 · 崖壁</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="icon" type="image/png" href="favicon.png">
 </head>
 <body>
 <div id="stage">
@@ -13,14 +14,14 @@
   <div id="title" class="screen center slab hidden">
     <div class="rune-float" aria-hidden="true">ᚱ</div>
     <h1>析声者</h1>
-    <p class="sub">ROOM THREE</p>
+    <p class="sub">CHAPTER TWO · CLIFF</p>
     <button id="btn-start" class="btn primary">开 始</button>
   </div>
 
   <div id="prologue" class="screen center slab hidden">
     <p>崖壁下面只有一条窄路。</p>
     <p>头顶的墙上，垂着一截断掉的绳子。</p>
-    <p>上面风声更大。</p>
+    <p>上面，风的声音更大了。</p>
     <p class="tap">点击继续</p>
   </div>
 
@@ -46,26 +47,27 @@
     </div>
   </div>
 
+  <button id="btn-jump" class="rune-btn jump hidden" title="跳跃" aria-label="跳跃"></button>
+
+  <div id="reveal" class="screen center slab hidden">
+    <div id="reveal-stones"></div>
+    <div id="reveal-word">OPEN</div>
+    <h2>你用声音打开了门</h2>
+    <p class="sub">文字，是冻住的声音</p>
+    <button id="reveal-ok" class="btn primary">……</button>
+  </div>
+
   <div id="summary" class="screen center slab hidden">
-    <p class="day">第二间房</p>
+    <p class="day">第二章</p>
     <h2 id="summary-line"></h2>
     <div id="summary-icons"></div>
-    <p class="next">风从更深的黑暗里吹来……（第三间房）</p>
+    <p class="next">风从更深的黑暗里吹来……（第三章）</p>
     <div class="row">
       <button id="btn-walk" class="btn ghost">继续走走</button>
-      <button id="btn-notes" class="btn ghost">设计说明</button>
       <button id="btn-again" class="btn primary">再来一次</button>
     </div>
   </div>
 
-  <div id="notes" class="screen center slab hidden">
-    <h2>设计说明</h2>
-    <div class="notes-body">
-      <p>绳断了，还挂着。</p>
-      <p>rope 里的 əʊ 和 p，前两间房就学会了。学过的声音会从记忆里凝出石头。越往里走，一件新工具只要一颗新声音。</p>
-    </div>
-    <button id="notes-close" class="btn primary">回到崖下</button>
-  </div>
 
   <div id="journal" class="screen slab hidden">
     <div class="journal-head slab">
