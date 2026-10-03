@@ -32,8 +32,19 @@ function bootShell(kit) {
   fit(); addEventListener('resize', fit);
 
   window.__errors = [];
-  addEventListener('error', e => __errors.push(String(e.message)));
-  addEventListener('unhandledrejection', e => __errors.push(String(e.reason)));
+  // 运行期错误既进 __errors，也直接显示在页面顶部（黑屏时一眼可读，不必开控制台）
+  const showErr = msg => {
+    let d = document.getElementById('__err');
+    if (!d) {
+      d = document.createElement('div'); d.id = '__err';
+      d.style.cssText = 'position:fixed;left:0;top:0;right:0;z-index:99999;background:rgba(120,0,0,.92);color:#fff;' +
+        'font:13px/1.5 ui-monospace,monospace;padding:10px 14px;white-space:pre-wrap;pointer-events:none;';
+      document.body.appendChild(d);
+    }
+    d.textContent = (d.textContent ? d.textContent + '\n' : '') + msg;
+  };
+  addEventListener('error', e => { __errors.push(String(e.message)); showErr('ERR ' + e.message + '  @ ' + (e.filename || '') + ':' + (e.lineno || '')); });
+  addEventListener('unhandledrejection', e => { __errors.push(String(e.reason)); showErr('REJ ' + e.reason); });
 
   // —— 同页交接遮罩：裂谷走到尽头 → 崖壁（第二章后半，纯视觉，不挡输入）——
   const veil = document.createElement('div');
