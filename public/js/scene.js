@@ -170,8 +170,7 @@ export function magnetStep(s, player, dt) {
 
 // ================= 渲染层（DOM 只在函数内） =================
 import { PAL, drawRune } from './art.js';
-import { blit, tile } from './sprites.js';
-import { drawMossyWall } from './sideview.js';
+import { blit } from './sprites.js';
 
 function thick(ctx, w = 5, color = PAL.ink) {
   ctx.lineWidth = w; ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -188,8 +187,63 @@ function shade(hex, f) {
 // 合成台石槽中心（v2.1：上移避开底部工具栏；拿石时由动态层点亮）
 export const BENCH_SOCKETS = [[592, 485], [624, 485], [656, 485], [688, 485]];
 
-function drawWallTextures(ctx, atlases) {
-  drawMossyWall(ctx, atlases, LAYOUT.W, 284, 23);                      // 第一/二关共用的青苔墙砖
+// —— 像素砌石上色（照 masonryPlan 单上色；拜耳抖动与暗海同一套像素语言，设计稿 §1/§3）——
+const BAYER = [[0, 2], [3, 1]];
+function drawMasonry(x, rows) {
+  x.fillStyle = '#26232b';                                    // 灰浆底
+  x.fillRect(0, 0, LAYOUT.W, WALL_SEAM.face);
+  for (const row of rows) for (const b of row.blocks) {
+    const base = '#7b7669';
+    x.fillStyle = shade(base, b.t - 1);          x.fillRect(b.x + 2, b.y + 2, b.w - 4, 38);
+    x.fillStyle = shade(base, b.t - 1 + 0.16);   x.fillRect(b.x + 2, b.y + 2, b.w - 4, 2); x.fillRect(b.x + 2, b.y + 2, 2, 36);   // 上/左受光
+    x.fillStyle = shade(base, b.t - 1 - 0.22);   x.fillRect(b.x + 2, b.y + 38, b.w - 4, 2); x.fillRect(b.x + b.w - 4, b.y + 4, 2, 36); // 下/右沉影
+    if (b.crack) {                                             // 斜裂一道
+      x.strokeStyle = 'rgba(30,28,34,.55)'; x.lineWidth = 2; x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(b.x + b.w * 0.3, b.y + 6);
+      x.lineTo(b.x + b.w * 0.45, b.y + 18);
+      x.lineTo(b.x + b.w * 0.38, b.y + 34);
+      x.stroke();
+    }
+    if (b.moss > 0) {                                          // 苔藓：下缘向上抖动生长
+      const mh = Math.round(4 + b.moss * 10);
+      for (let k = 0; k < mh; k += 2) {
+        const dens = b.moss * (1 - k / mh) * 0.85;
+        for (let px = b.x + 3; px < b.x + b.w - 3; px += 2) {
+          const th = BAYER[((px / 2) | 0) % 2][(((b.y + 38 - k) / 2) | 0) % 2] / 4;
+          if (dens * (0.3 + th * 0.9) > 0.45) {
+            x.fillStyle = (k < 3 && th > 0.4) ? '#3d5747' : '#4e6b52';
+            x.fillRect(px, b.y + 38 - k, 2, 2);
+          }
+        }
+      }
+    }
+  }
+  const wsh = x.createLinearGradient(0, 0, 0, WALL_SEAM.face);   // 顶暗（保留原气氛）
+  wsh.addColorStop(0, 'rgba(10,12,20,.42)'); wsh.addColorStop(0.6, 'rgba(10,12,20,0)');
+  x.fillStyle = wsh; x.fillRect(0, 0, LAYOUT.W, WALL_SEAM.face);
+}
+
+// —— 大石板上色（照 slabPlan 单上色，设计稿 §2）——
+function drawSlabs(x, rows) {
+  x.fillStyle = '#211f26';                                    // 板缝底
+  x.fillRect(0, WALL_SEAM.base, LAYOUT.W, LAYOUT.H - WALL_SEAM.base);
+  for (const row of rows) for (const s of row.blocks) {
+    const base = '#6b675c';
+    x.fillStyle = shade(base, s.t - 1);         x.fillRect(s.x + 3, s.y + 3, s.w - 6, s.h - 6);
+    x.fillStyle = shade(base, s.t - 1 + 0.13);  x.fillRect(s.x + 3, s.y + 3, s.w - 6, 4);   // 顶缘受光
+    x.fillStyle = shade(base, s.t - 1 - 0.2);   x.fillRect(s.x + 3, s.y + s.h - 7, s.w - 6, 4); // 底缘沉影
+    if (s.crack) {
+      x.strokeStyle = 'rgba(30,28,34,.5)'; x.lineWidth = 3; x.lineCap = 'round';
+      x.beginPath();
+      let cx = s.x + 20 + (s.w - 40) * 0.3, cy = s.y + 12; x.moveTo(cx, cy);
+      while (cy < s.y + s.h - 12) { cx += 10 - ((cx * 7) % 20); cy += 14; x.lineTo(cx, cy); }
+      x.stroke();
+    }
+  }
+  const fsh = x.createLinearGradient(0, WALL_SEAM.face + 8, 0, WALL_SEAM.foot);   // 墙脚落地阴影
+  fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = fsh; x.fillRect(0, WALL_SEAM.face + 8, LAYOUT.W, WALL_SEAM.foot - WALL_SEAM.face - 8);
 }
 
 export function prerenderStatic(atlases) {
@@ -197,21 +251,13 @@ export function prerenderStatic(atlases) {
   c.width = LAYOUT.W; c.height = LAYOUT.H;
   const x = c.getContext('2d');
   x.imageSmoothingEnabled = false;
-  if (!atlases) {                                       // 素材加载失败兜底：纯色房间
-    x.fillStyle = PAL.wallA; x.fillRect(0, 0, LAYOUT.W, 300);
-    x.fillStyle = PAL.floorB; x.fillRect(0, 300, LAYOUT.W, LAYOUT.H - 300);
-  }
-  // —— 地板：第一关砖石地砖（4x 素材按 0.25x 平铺，砖块约 42px 宽）——
-  tile(x, atlases, 'floor_brick', 0, 300, LAYOUT.W, LAYOUT.H - 300, 0.25);
-  // —— 墙：青苔墙砖随机拼接 + 踢脚线 + 顶部渐暗 + 墙脚阴影 ——
-  drawWallTextures(x, atlases);
-  tile(x, atlases, 'wall_base', 0, 284, LAYOUT.W, 16);
-  const wsh = x.createLinearGradient(0, 0, 0, 300);                  // 顶暗底亮的纵向渐变
-  wsh.addColorStop(0, 'rgba(10,12,20,.42)'); wsh.addColorStop(0.6, 'rgba(10,12,20,0)');
-  x.fillStyle = wsh; x.fillRect(0, 0, LAYOUT.W, 300);
-  const fsh = x.createLinearGradient(0, 292, 0, 336);                // 墙脚落地阴影
-  fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
-  x.fillStyle = fsh; x.fillRect(0, 292, LAYOUT.W, 44);
+  // —— 墙：像素砌石（石匠生成器，seed 23）+ 石质基座带，替代照片苔墙与白踢脚（设计稿 §1）——
+  drawMasonry(x, masonryPlan(23, LAYOUT.W, WALL_SEAM.face));
+  x.fillStyle = '#5d5a52'; x.fillRect(0, WALL_SEAM.face, LAYOUT.W, WALL_SEAM.base - WALL_SEAM.face);
+  x.fillStyle = '#7b7669'; x.fillRect(0, WALL_SEAM.face, LAYOUT.W, 4);
+  x.fillStyle = '#3a3833'; x.fillRect(0, WALL_SEAM.base - 4, LAYOUT.W, 4);
+  // —— 地：大块凿石板（seed 31），板缝少而大，音素石最跳（设计稿 §2）——
+  drawSlabs(x, slabPlan(31, LAYOUT.W, WALL_SEAM.base, LAYOUT.H - WALL_SEAM.base));
   // —— 月窗：MI 木框窗 + 玻璃区里画夜空/月亮/星星（窗 50x40，两格玻璃）——
   const WX = 305, WY = 140;
   blit(x, atlases, 'window', WX, WY);
@@ -230,8 +276,8 @@ export function prerenderStatic(atlases) {
   x.fillStyle = 'rgba(0,0,0,.12)';
   x.beginPath(); x.arc(WX + 5 + 10, WY + 6 + 7, 1.8, 0, 7); x.fill();
   x.restore();
-  // 月窗光池（洒在地板上）
-  const pool = x.createRadialGradient(330, 352, 10, 330, 352, 120);
+  // 月窗光池（洒在地板上，x 随 LIGHTS 窗心）
+  const pool = x.createRadialGradient(LIGHTS.window.x, 352, 10, LIGHTS.window.x, 352, 120);
   pool.addColorStop(0, 'rgba(214,224,255,.10)'); pool.addColorStop(1, 'rgba(214,224,255,0)');
   x.fillStyle = pool;
   x.beginPath(); x.ellipse(330, 352, 120, 46, 0, 0, 7); x.fill();
@@ -256,6 +302,12 @@ export function prerenderStatic(atlases) {
   blit(x, atlases, 'plant', 844, 330);
   blit(x, atlases, 'frame_sm', 930, 110);
   blit(x, atlases, 'frame_sm', 1030, 110);
+  // 西墙回声物：极淡青苔光晕——「声音在场」的倾听层标记（设计稿 §3）
+  for (const [hx, hy, hr] of [[66, 340, 30], [104, 346, 26], [148, 362, 22]]) {
+    const hg = x.createRadialGradient(hx, hy, 2, hx, hy, hr);
+    hg.addColorStop(0, 'rgba(84,224,200,.10)'); hg.addColorStop(1, 'rgba(84,224,200,0)');
+    x.fillStyle = hg; x.beginPath(); x.arc(hx, hy, hr, 0, 7); x.fill();
+  }
   // —— 井（块状石圈 + 深井口 + 水光 + 木架；中心随 LAYOUT.obstacles.well）——
   x.save(); x.translate(-40, -20);
   x.fillStyle = PAL.stone;                                                     // 石圈（圆角块）
@@ -328,13 +380,27 @@ export function prerenderStatic(atlases) {
   x.fill(); thick(x, 4); x.stroke();
   // —— 枯苗陶盆：MI 陶盆（苗/花由动态层画）——
   blit(x, atlases, 'pot', 250, 606);
-  // —— 北墙右端门洞：Props 石拱门框（关门门扇与开门金光由动态层画）——
-  blit(x, atlases, 'door_open', 1064, 157, { w: 95, h: 143 });
-  x.fillStyle = 'rgba(0,0,0,.3)';                                              // 门前落地影
+  // —— 北墙右端门洞：矢量石拱（替代 3.4x 非整数放大的 sprite，设计稿 §6）——
+  thick(x, 5, PAL.ink);
+  x.fillStyle = PAL.stone;                                       // 拱身
+  x.beginPath();
+  x.moveTo(1064, 300); x.lineTo(1064, 192);
+  x.quadraticCurveTo(1064, 157, 1096, 157); x.lineTo(1127, 157);
+  x.quadraticCurveTo(1159, 157, 1159, 192); x.lineTo(1159, 300);
+  x.closePath(); x.fill(); x.stroke();
+  x.fillStyle = '#141824';                                       // 门洞内衬（夜色，门扇后）
+  x.beginPath();
+  x.moveTo(1078, 296); x.lineTo(1078, 192);
+  x.quadraticCurveTo(1078, 176, 1096, 176); x.lineTo(1128, 176);
+  x.quadraticCurveTo(1146, 176, 1146, 192); x.lineTo(1146, 296);
+  x.closePath(); x.fill();
+  x.fillStyle = shade(PAL.stone, 0.12);                          // 拱心石
+  x.beginPath(); x.moveTo(1100, 157); x.lineTo(1124, 157); x.lineTo(1120, 176); x.lineTo(1104, 176); x.closePath(); x.fill();
+  thick(x, 3, PAL.ink); x.stroke();
+  x.fillStyle = shade(PAL.stone, -0.18);                         // 右柱沉影（受光自左）
+  x.fillRect(1146, 192, 6, 104);
+  x.fillStyle = 'rgba(0,0,0,.3)';                                // 门前落地影
   x.beginPath(); x.ellipse(1112, 303, 46, 8, 0, 0, 7); x.fill();
-  // —— 黄昏底色：压暗全场，保像素纹理（火光/灯光由动态层加暖）——
-  x.fillStyle = 'rgba(16,18,36,.30)';
-  x.fillRect(0, 0, LAYOUT.W, LAYOUT.H);
   return c;
 }
 
