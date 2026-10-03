@@ -1,5 +1,5 @@
 // —— 横版共用件：移动/跳跃/攀爬物理核心 + 通用渲染（火把/合成台/石头/E 提示/暗角） ——
-import { PAL } from './art.js';
+import { PAL, drawRune } from './art.js';
 import { shade } from './masonry.js';
 import { isVowel, stoneCount } from './hotbar.js';
 import { drawBenchStones } from './workbench.js';
@@ -114,7 +114,7 @@ export function drawSideStone(x, s, t) {
   x.restore();
 }
 
-export function drawTorchSide(x, tx, ty, t) {
+export function drawTorchSide(x, tx, ty, t, glow = null) {
   x.strokeStyle = PAL.wood2; x.lineWidth = 6;
   x.beginPath(); x.moveTo(tx, ty + 26); x.lineTo(tx, ty); x.stroke();
   const f = Math.sin(t * 13 + tx) * 0.12 + 1;
@@ -126,16 +126,29 @@ export function drawTorchSide(x, tx, ty, t) {
   x.fill();
   x.fillStyle = PAL.fireCore;
   x.beginPath(); x.arc(tx, ty + 2, 4, 0, 7); x.fill();
-  const g = x.createRadialGradient(tx, ty, 4, tx, ty, 110);
-  g.addColorStop(0, 'rgba(255,170,80,.22)'); g.addColorStop(1, 'rgba(255,170,80,0)');
-  x.fillStyle = g; x.beginPath(); x.arc(tx, ty, 110, 0, 7); x.fill();
+  // 动态光晕：可选第 5 参 {r,a}（缺省＝原 110/.22，ch2b/ch3 不受影响）；章节传 LIGHTS2 锚点的 r/s
+  const gr = glow?.r ?? 110, ga = glow?.a ?? 0.22;
+  const g = x.createRadialGradient(tx, ty, 4, tx, ty, gr);
+  g.addColorStop(0, `rgba(255,170,80,${ga})`); g.addColorStop(1, 'rgba(255,170,80,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(tx, ty, gr, 0, 7); x.fill();
 }
 
-export function drawBenchSide(x, imgs, bx, gy, hot, slots = null) {
+export function drawBenchSide(x, imgs, bx, gy, hot, slots = null, opts = {}) {
   x.fillStyle = 'rgba(0,0,0,.25)';
   x.beginPath(); x.ellipse(bx, gy + 6, 70, 9, 0, 0, 7); x.fill();
   blit(x, imgs, 'table', bx - 76, gy - 74);
   blit(x, imgs, 'table', bx, gy - 74);
+  if (opts.candle) {                                          // ch1 同款台面陈设：内嵌石槽板 + ᚹ 阴刻 + 蜡烛座
+    x.fillStyle = PAL.stone;
+    x.beginPath();
+    if (x.roundRect) x.roundRect(bx - 68, gy - 69, 136, 20, 6); else x.rect(bx - 68, gy - 69, 136, 20);
+    x.fill();
+    x.lineWidth = 3; x.strokeStyle = PAL.ink; x.stroke();
+    drawRune(x, 'ᚹ', bx, gy - 12, 12, 'rgba(217,164,65,.5)', 2);          // ᚹ 阴刻（金蚀，不发光）
+    x.fillStyle = '#d8d3c6'; x.fillRect(bx + 58, gy - 88, 8, 14);         // 蜡烛座（火苗由本函数动态层画）
+    x.lineWidth = 3; x.strokeStyle = PAL.ink; x.strokeRect(bx + 58, gy - 88, 8, 14);
+    x.fillStyle = '#9a958a'; x.fillRect(bx + 60, gy - 80, 4, 6);
+  }
   const sockets = [];
   for (let i = 0; i < 4; i++) {
     const sx = bx - 33 + i * 22;
@@ -147,6 +160,24 @@ export function drawBenchSide(x, imgs, bx, gy, hot, slots = null) {
     if (hot && !slots?.[i]) { x.fillStyle = 'rgba(84,224,200,.25)'; x.beginPath(); x.arc(sx, gy - 62, 9, 0, 7); x.fill(); }  // 手持音素石：只亮空槽
   }
   if (slots) drawBenchStones(x, slots, sockets);            // 槽内音素石上台面
+  if (opts.candle) {                                          // 火苗 + 光晕：位置读 benchCandle 锚点（与章节 LIGHTS2 同源）
+    const c = benchCandle(bx, gy), f = Math.sin((opts.t ?? 0) * 13 + bx) * 0.12 + 1, sz = 9, cy = c.y - 2;
+    x.fillStyle = PAL.fire2;
+    x.beginPath();
+    x.moveTo(c.x, cy - sz * f);
+    x.bezierCurveTo(c.x + sz * 0.55, cy - sz * 0.25, c.x + sz * 0.42, cy + sz * 0.3, c.x, cy + sz * 0.34);
+    x.bezierCurveTo(c.x - sz * 0.42, cy + sz * 0.3, c.x - sz * 0.55, cy - sz * 0.25, c.x, cy - sz * f);
+    x.closePath(); x.fill();
+    x.fillStyle = PAL.fireCore;
+    x.beginPath();
+    x.moveTo(c.x, cy - sz * 0.3 * f);
+    x.bezierCurveTo(c.x + sz * 0.24, cy, c.x + sz * 0.2, cy + sz * 0.26, c.x, cy + sz * 0.3);
+    x.bezierCurveTo(c.x - sz * 0.2, cy + sz * 0.26, c.x - sz * 0.24, cy, c.x, cy - sz * 0.3 * f);
+    x.closePath(); x.fill();
+    const g = x.createRadialGradient(c.x, c.y, 2, c.x, c.y, 48);
+    g.addColorStop(0, 'rgba(255,190,90,.26)'); g.addColorStop(1, 'rgba(255,190,90,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(c.x, c.y, 48, 0, 7); x.fill();
+  }
 }
 
 // 横版背墙：MI 墙面平铺 + 压暗

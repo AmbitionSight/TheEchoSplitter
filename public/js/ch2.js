@@ -105,12 +105,23 @@ export function jumpDebug(g, beat) {
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawListenSpots,
-         drawArchSide, groundShadow } from './sideview.js';
+         drawArchSide, groundShadow, benchCandle } from './sideview.js';
 import { blit } from './sprites.js';
 import { PAL } from './art.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
 import { shade, paintMasonry, paintSlabs, BAYER4, pixelGradientV, pixelGlow } from './masonry.js';
+
+// —— 2a 光法则（唯一事实源，规格 §6.1）：一个光源 = 一个坐标 = 烘焙光池（makeBg）= 动态光晕（draw）——
+export function LIGHTS2(geo) {
+  return {
+    torchL: { x: 90, y: 240, r: 170, s: 0.24 },                          // 左火把（火焰核心同点）
+    torchR: { x: geo.chasmR + 120, y: 240, r: 170, s: 0.24 },            // 右火把
+    candle: { ...benchCandle(geo.benchX, geo.groundY), r: 90, s: 0.20 }, // 合成台蜡烛（benchX+62, groundY−90）
+    chasm:  { x: (geo.chasmL + geo.chasmR) / 2, y: geo.groundY - 70, r: 300, s: 0.16 },  // 缝口暖核（对面有光）
+    exit:   { x: geo.exitX, y: geo.groundY - 180, r: 260, s: 0.12 }      // 出口石拱
+  };
+}
 
 export const kit = {
   chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
@@ -133,6 +144,7 @@ export const kit = {
     player.vy = 0; player.airborne = false; player.squash = 0;
     const w = {
       actors, player, geo,
+      lights: LIGHTS2(geo),                                    // 光锚唯一事实源（烘焙光池与动态光晕共用）
       stones: [],
       view: { t: 0, stars: [], puffs: [], bubbleT: 0, mist: [] },
       cfg: {
@@ -236,7 +248,7 @@ export const kit = {
   },
 
   draw(w, x, eTarget) {
-    const { view: v, geo, game } = w;
+    const { view: v, geo, game, lights: L } = w;
     x.clearRect(0, 0, SIDE.W, SIDE.H);
     if (!w.bg) w.bg = makeBg(w);                                            // 墙/地/陈设一次性预渲染
     x.drawImage(w.bg, 0, 0);
@@ -251,9 +263,9 @@ export const kit = {
       x.ellipse(geo.chasmL + ((m.o * span + Math.sin(m.ph) * 20 + span) % span), geo.groundY + 26 + Math.sin(m.ph * 1.3) * 8, 34, 10, 0, 0, 7);
       x.fill();
     }
-    drawTorchSide(x, 90, 240, v.t);                                         // 火把挪到墙面 y=240（离开岩脊带）
-    drawTorchSide(x, geo.chasmR + 120, 240, v.t);
-    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots);
+    drawTorchSide(x, L.torchL.x, L.torchL.y, v.t, { r: L.torchL.r, a: L.torchL.s });   // 火把（动态光晕读 LIGHTS2 锚点）
+    drawTorchSide(x, L.torchR.x, L.torchR.y, v.t, { r: L.torchR.r, a: L.torchR.s });
+    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
     x.save();
     if (w.player.airborne) { x.translate(w.player.x, w.player.y); x.scale(1, 0.92); x.translate(-w.player.x, -w.player.y); }
     if (w.player.squash > 0) { const q = 1 - Math.sin(w.player.squash * Math.PI) * 0.08; x.translate(w.player.x, w.player.y); x.scale(1.06, q); x.translate(-w.player.x, -w.player.y); }
@@ -579,9 +591,6 @@ function makeBg(w) {
   drawFarCliffs(x, 150, '#18202d', 'rgba(130,148,176,.08)', 37, ridge);
   // 缝内对壁：三层后退岩壁（值阶 #2a3546 → #1d2634 → #141a26），替换平色天空
   drawFarWallLayers(x, geo.chasmL, geo.chasmR - geo.chasmL, 200, gy, 61);
-  // 对面有光：缝口那侧的暖光（像素化光晕）——落在对壁上
-  const gx0 = (geo.chasmL + geo.chasmR) / 2;
-  pixelGlow(x, gx0, gy - 70, 300, [255, 214, 130], 0.16);
   // 近景崖壁：砌石（自 ridge 起），顶缘压一道崩裂岩脊。
   // 关键：裂缝处整面断开——峡谷贯穿上下，缝里透出天与远山，才读得出"悬崖"。
   const floorH = SIDE.H - gy;
@@ -626,9 +635,6 @@ function makeBg(w) {
   }
   // 深谷：渊底向 #070a0f 收（现渐变保留；岩层横纹由缝内三层对壁承担）
   pixelGradientV(x, geo.chasmL, geo.chasmR, gy, SIDE.H, [[0, '#33404f'], [0.42, '#1d2634'], [1, '#070a0f']]);
-  // 火把暖光落在崖壁上（像素化光晕）——光与墙发生关系，是"精致"的关键
-  pixelGlow(x, 90, 240, 180, [255, 198, 112], 0.34);
-  pixelGlow(x, geo.chasmR + 120, 240, 180, [255, 198, 112], 0.34);
   // 崖台细节：碎石 + 苔簇
   drawLedgeDetail(x, geo, 53);
   // —— 陈设（静态件，§5.1）：拱门 / 火把托架 / 行囊铺盖 / 货堆 / 石桥残墩 / 水洼 / 风幡 ——
@@ -652,6 +658,8 @@ function makeBg(w) {
   gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.42)');
   x.fillStyle = gsh;
   x.fillRect(0, gy, geo.chasmL, 130); x.fillRect(geo.chasmR, gy, SIDE.W - geo.chasmR, 130);
+  // 光池烘焙：唯一事实源 LIGHTS2（暖火族一色）——火把/蜡烛/缝口/出口同表同坐标，一次预渲染（规格 §6.2-①）
+  for (const t of Object.values(w.lights)) pixelGlow(x, t.x, t.y, t.r, [255, 198, 112], t.s);
   // 黄昏级色不再烘焙进背景：改到 draw() 角色之后统一压暗（与第一关同法）
   return c;
 }

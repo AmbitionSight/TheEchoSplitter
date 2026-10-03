@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, jumpDebug, startGame, kit } from '../public/js/ch2.js';
+import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2 } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
-import { planDropStones } from '../public/js/sideview.js';
+import { planDropStones, drawTorchSide, drawBenchSide } from '../public/js/sideview.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter2.json', import.meta.url), 'utf8'));
 const ch1Profile = mergeProfile(createProfile(), {
@@ -145,4 +145,56 @@ test('内容：听声点带 sfx、warm 在火把 (90,240)、reveal 齐备', () =
 test('2a 陈设与纵深：源码含入口拱/出口拱/石桥残墩/对壁三层', async () => {
   const src = await readFile(new URL('../public/js/ch2.js', import.meta.url), 'utf8');
   for (const k of ['drawArchSide', 'drawBridgePier', 'drawFarWallLayers', 'crate_big', 'jars2', '风幡']) assert.ok(src.includes(k), `缺 ${k}`);
+});
+
+test('LIGHTS2：锚点由几何推导、烘焙=动态同源', () => {
+  const L = LIGHTS2(content.geometry);
+  assert.deepEqual([L.torchL.x, L.torchL.y], [90, 240]);
+  assert.equal(L.torchR.x, content.geometry.chasmR + 120);
+  assert.equal(L.candle.x, content.geometry.benchX + 62);
+  assert.equal(L.exit.x, content.geometry.exitX);
+  for (const v of Object.values(L)) assert.ok(v.r > 0 && v.s > 0 && v.s <= 1);
+  // 规格 §6.1 2a 表逐项锁定（五锚、几何推导、半径/强度）
+  assert.deepEqual(Object.keys(L).sort(), ['candle', 'chasm', 'exit', 'torchL', 'torchR']);
+  assert.deepEqual([L.torchR.y, L.torchL.r, L.torchL.s, L.torchR.r, L.torchR.s], [240, 170, 0.24, 170, 0.24]);
+  assert.deepEqual([L.candle.y, L.candle.r, L.candle.s], [content.geometry.groundY - 90, 90, 0.20]);
+  assert.deepEqual([L.chasm.x, L.chasm.y, L.chasm.r, L.chasm.s],
+    [(content.geometry.chasmL + content.geometry.chasmR) / 2, content.geometry.groundY - 70, 300, 0.16]);
+  assert.deepEqual([L.exit.y, L.exit.r, L.exit.s], [content.geometry.groundY - 180, 260, 0.12]);
+});
+
+test('drawTorchSide：第 5 参 glow 缺省＝现状 r110，传入后按表取 r', () => {
+  const radii = [];
+  const mk = () => new Proxy({}, {
+    get(t, k) {
+      if (k === 'createRadialGradient') return () => ({ addColorStop() {} });
+      if (k === 'arc') return (_cx, _cy, r) => radii.push(r);
+      return () => undefined;
+    },
+    set() { return true; }
+  });
+  drawTorchSide(mk(), 100, 200, 1);
+  assert.ok(radii.includes(110), '缺省光晕半径 110（ch2b/ch3 行为不变）');
+  radii.length = 0;
+  drawTorchSide(mk(), 100, 200, 1, { r: 170, a: 0.24 });
+  assert.ok(radii.includes(170), '传入 glow 后光晕读表 r');
+});
+
+test('drawBenchSide：opts.candle 缺省关闭、开启后不抛错（mock ctx）', () => {
+  const mk = () => new Proxy({}, {
+    get(t, k) {
+      if (k === 'createRadialGradient') return () => ({ addColorStop() {} });
+      return () => undefined;
+    },
+    set() { return true; }
+  });
+  assert.doesNotThrow(() => drawBenchSide(mk(), null, 420, 600, false, null));
+  assert.doesNotThrow(() => drawBenchSide(mk(), null, 420, 600, false, null, { candle: true, t: 1.2 }));
+});
+
+test('2a 光法则单源：光池烘焙读表、蜡烛陈设开启（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2.js', import.meta.url), 'utf8');
+  assert.match(src, /Object\.values\(w\.lights\)/, 'makeBg 光池循环锚点表');
+  assert.ok(!/pixelGlow\(x, 90, 240/.test(src), '火把光池不得再硬编码');
+  assert.match(src, /candle: true/, 'ch2 合成台开启 ch1 同款蜡烛陈设');
 });
