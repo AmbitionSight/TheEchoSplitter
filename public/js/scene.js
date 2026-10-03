@@ -437,9 +437,11 @@ export function drawScene(x, sc, view) {
     x.beginPath(); x.arc(sx, sy + 21, 2.5, 0, 7); x.fill();
     if (!on) glow(x, sx, sy, 46 + view.doorPulse * 16, 'rgba(123,216,143,ALPHA)', 0.28 + view.doorPulse * 0.22);
   }
-  // —— 合成台石槽：手持音素石时亮起招手 ——
+  // —— 合成台石槽：手持音素石时只亮空槽 ——
   if (view.benchHot) {
-    for (const [sx, sy] of BENCH_SOCKETS) glow(x, sx, sy, 18, 'rgba(84,224,200,ALPHA)', 0.35);
+    BENCH_SOCKETS.forEach(([sx, sy], i) => {
+      if (!view.craftSlots?.[i]) glow(x, sx, sy, 18, 'rgba(84,224,200,ALPHA)', 0.35);
+    });
   }
   // —— 火光们 ——
   flame(x, 480, 470, 30, t, 1); glow(x, 480, 472, 130, 'rgba(255,140,60,ALPHA)', 0.3);   // 火盆

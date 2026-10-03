@@ -54,6 +54,20 @@ export function canPlace(slots, inv, ipa) {
   return inSlots < stoneCount(inv, ipa);
 }
 
+// 自动放置：下一个可放位置 = 第一个空槽；槽满或库存守卫不过返回 -1（纯函数）
+export function placeNextIndex(slots, inv, ipa) {
+  if (!inv) return -1;
+  const i = slots.indexOf(null);
+  if (i < 0) return -1;
+  return canPlace(slots, inv, ipa) ? i : -1;
+}
+
+// 两槽对调（原位交换，含空槽）（纯函数）
+export function swapSlots(slots, a, b) {
+  const t = slots[a]; slots[a] = slots[b]; slots[b] = t;
+  return slots;
+}
+
 export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord, onCraft, onTakeItem, onDropItem }) {
   const el = id => document.getElementById(id);
   const root = el('hotbar'), craftRow = el('craft-row');
@@ -78,10 +92,60 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
   }
 
   async function runCraft(word) {
+    playCraftFx(word);                 // 音素合体动画（须在清槽前抓取槽内音素）
     slots.fill(null);
     refreshSlots();
     await onCraft(word);               // main：gameEvent('CRAFT')（事件机统一消耗库存）+ 共鸣音效
     if (inv) refresh(inv);
+  }
+
+  // —— 合成动画：槽内音素汇聚 → 闪光 → 词具图标弹出并飞入物品栏 ——
+  function playCraftFx(word) {
+    const filled = [];
+    slotEls.forEach((el, i) => { if (slots[i]) filled.push({ el, ipa: slots[i] }); });
+    if (!filled.length) return;
+    const rowR = craftRow.getBoundingClientRect();
+    const cx = rowR.left + rowR.width / 2, cy = rowR.top + rowR.height / 2;
+    const itemR = itemBox.getBoundingClientRect();
+    const ix = itemR.left + itemR.width / 2, iy = itemR.top + itemR.height / 2;
+
+    for (const { el, ipa } of filled) {
+      const r = el.getBoundingClientRect();
+      const fly = document.createElement('div');
+      fly.className = `cell stone-${isVowel(ipa) ? 'v' : 'c'} craft-fx-stone`;
+      fly.innerHTML = `<span class="glyph">${ipa}</span>`;
+      fly.style.cssText = `position:fixed;left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;margin:0;z-index:120;pointer-events:none`;
+      document.body.appendChild(fly);
+      const dx = cx - (r.left + r.width / 2), dy = cy - (r.top + r.height / 2);
+      fly.animate([
+        { transform: 'translate(0,0) scale(1)', opacity: 1 },
+        { transform: `translate(${dx * 0.45}px, ${dy * 0.45 - 16}px) scale(1.06)`, opacity: 1, offset: 0.45 },
+        { transform: `translate(${dx}px, ${dy}px) scale(.22)`, opacity: 0 }
+      ], { duration: 480, easing: 'cubic-bezier(.6,.05,.7,.5)', fill: 'forwards' }).onfinish = () => fly.remove();
+    }
+
+    const flash = document.createElement('div');
+    flash.className = 'craft-fx-flash';
+    flash.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;z-index:121;pointer-events:none;` +
+      'background:radial-gradient(circle,rgba(255,255,255,.95),rgba(84,224,200,.5) 45%,rgba(84,224,200,0) 72%)';
+    document.body.appendChild(flash);
+    flash.animate([
+      { transform: 'scale(.4)', opacity: 0 },
+      { transform: 'scale(7)', opacity: 1, offset: 0.5 },
+      { transform: 'scale(11)', opacity: 0 }
+    ], { duration: 620, delay: 400, easing: 'ease-out', fill: 'both' }).onfinish = () => flash.remove();
+
+    const icon = document.createElement('img');
+    icon.src = iconURL(words[word].icon);
+    icon.className = 'craft-fx-icon';
+    icon.style.cssText = `position:fixed;left:${cx}px;top:${cy}px;width:44px;height:44px;margin:-22px 0 0 -22px;z-index:122;pointer-events:none;image-rendering:pixelated`;
+    document.body.appendChild(icon);
+    icon.animate([
+      { transform: 'scale(0)', opacity: 0 },
+      { transform: 'scale(1.35)', opacity: 1, offset: 0.3 },
+      { transform: 'scale(1)', opacity: 1, offset: 0.52 },
+      { transform: `translate(${ix - cx}px, ${iy - cy}px) scale(.45)`, opacity: 0 }
+    ], { duration: 1000, delay: 430, easing: 'ease-in-out', fill: 'both' }).onfinish = () => icon.remove();
   }
 
   function placeStone(ipa, idx) {
@@ -132,7 +196,7 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
         ghost.innerHTML = payload.kind === 'item'
           ? `<img src="${iconURL(words[payload.word].icon)}" style="width:40px;height:40px">`
           : `<span class="glyph">${payload.ipa}</span>`;
-        if (payload.kind === 'item') cell.style.opacity = '.35';
+        if (payload.kind === 'item' || payload.fromSlot != null) cell.style.opacity = '.35';
       }
       if (moved) { ghost.style.left = `${ev.clientX}px`; ghost.style.top = `${ev.clientY}px`; }
     };
@@ -143,15 +207,22 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
       window.removeEventListener('pointercancel', cancel);
       ghost.classList.add('hidden');
       cell.style.opacity = '';
-      if (!moved) {                                        // 轻点 = 点读（石）/ 拿到手上（词具）
-        if (payload.kind === 'stone') onSpeakCarrier(payload.ipa);
+      if (!moved) {                                        // 轻点 = 点读（库存石）/ 收回（槽里的石）/ 拿到手上（词具）
+        if (payload.kind === 'stone') {
+          if (payload.fromSlot != null) returnStone(payload.fromSlot);
+          else onSpeakCarrier(payload.ipa);
+        }
         else if (onTakeItem) onTakeItem(payload.word);
         else if (onSpeakWord) onSpeakWord(payload.word);
         return;
       }
-      if (payload.kind === 'stone') {                     // 只能投槽位；投空=原地无事（库存从未动过）
+      if (payload.kind === 'stone') {                     // 投槽位：库存石=放入；槽里的石拖到别的槽=对调；投空=原地无事
         const hit = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('.slot');
-        if (hit) placeStone(payload.ipa, Number(hit.dataset.slot));
+        if (hit) {
+          const j = Number(hit.dataset.slot);
+          if (payload.fromSlot != null) { if (j !== payload.fromSlot) { swapSlots(slots, payload.fromSlot, j); refreshSlots(); } }
+          else placeStone(payload.ipa, j);
+        }
       } else {                                             // 词具 → 画布（main 做命中）
         onDropItem(payload.word, ev.clientX, ev.clientY);
       }
@@ -169,11 +240,19 @@ export function createHotbar({ words, crafting = {}, onSpeakCarrier, onSpeakWord
     window.addEventListener('pointercancel', cancel);
   }
 
-  slotEls.forEach((s, i) => s.addEventListener('click', () => returnStone(i)));
+  slotEls.forEach((s, i) => s.addEventListener('pointerdown', e => {
+    if (e.button > 0 || !slots[i]) return;               // 空槽不响应
+    startDrag(e, s, { kind: 'stone', ipa: slots[i], fromSlot: i });
+  }));
 
   return {
     refresh,
     show() { root.classList.remove('hidden'); },
-    pulseBag() { /* v2：右下计数袋已移除（物品栏自带堆叠计数） */ }
+    pulseBag() { /* v2：右下计数袋已移除（物品栏自带堆叠计数） */ },
+    getSlots: () => slots,
+    placeNext(ipa) {                                     // 存石自动进槽：第一个空槽
+      const i = placeNextIndex(slots, inv, ipa);
+      if (i >= 0) { slots[i] = ipa; refreshSlots(); }
+    }
   };
 }

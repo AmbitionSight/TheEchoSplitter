@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working in this
 
 ## Project Overview
 
-Echo Stone is a zero-dependency, browser-based three-chapter language puzzle game. The client is native ES modules, Canvas 2D, DOM/CSS UI, Web Speech synthesis, WebAudio effects, and Pointer Events. Game content is stored separately from logic in `content/chapter*.json` and is fetched from the local Node server.
+Echo Stone is a zero-dependency, browser-based four-chapter language puzzle game. The client is native ES modules, Canvas 2D, DOM/CSS UI, Web Speech synthesis, WebAudio effects, and Pointer Events. Game content is stored separately from logic in `content/chapter*.json` and is fetched from the local Node server.
 
 The repository uses Node's built-in test runner and has no build step, package dependencies, linter, or formatter configured.
 
@@ -21,9 +21,9 @@ PORT=3002 npm start                   # use a different port
 AUTH=0 npm start                      # disable Basic auth for local-only use
 ```
 
-The server listens on port `3001` by default and binds to `0.0.0.0`. Authentication is enabled by default. `npm test` currently runs 73 tests. There is no `npm run build`, lint, or format command.
+The server listens on port `3001` by default and binds to `0.0.0.0`. Authentication is enabled by default. `npm test` currently runs 114 tests. There is no `npm run build`, lint, or format command.
 
-For browser validation, run `npm start` and open `/` for chapter 1, `/chapter2.html` for chapter 2, or `/chapter3.html` for chapter 3. The game is designed for a browser because the visual and interaction layers depend on Canvas, DOM, speech synthesis, WebAudio, and pointer input; Node tests cover the importable logic but not the rendered experience.
+For browser validation, run `npm start` and open `/` for chapter 1, `/chapter2.html` for chapter 2, `/chapter3.html` for chapter 3, or `/chapter4.html` for chapter 4. The game is designed for a browser because the visual and interaction layers depend on Canvas, DOM, speech synthesis, WebAudio, and pointer input; Node tests cover the importable logic but not the rendered experience.
 
 Useful browser/debug hooks:
 
@@ -53,6 +53,7 @@ Each HTML page selects one chapter module:
 - `public/index.html` loads `public/js/main.js` (chapter 1, top-down stone room).
 - `public/chapter2.html` loads `public/js/ch2.js` (chapter 2, side-view chasm).
 - `public/chapter3.html` loads `public/js/ch3.js` (chapter 3, side-view wall and rope).
+- `public/chapter4.html` loads `public/js/ch4.js` (chapter 4, side-view river journey with three rooms).
 
 The chapter modules contain two layers in one file:
 
@@ -61,12 +62,16 @@ The chapter modules contain two layers in one file:
 
 `public/js/shell.js` is the shared runtime. It loads the chapter JSON, scales the logical canvas, initializes speech and sound, loads persistent profile data and sprite atlases, creates the shared hotbar/UI, interprets standard event instructions, handles keyboard/pointer input, runs the animation loop, and saves chapter summaries. Keep chapter-specific rules in the chapter event machine or kit rather than duplicating them in the shell.
 
+`public/js/chapter.js` holds the segments every chapter's event machine and kit share: the event-machine core cases (`pickupStone`, `bankHeld`, `holdItem`, `craftWord` — chapters pass only their first-pickup/craft hints) and common kit behavior (`chapterOnE` stone/bench handling, `syncHeld`, `seedBegin`, the `dropExtra`/`dropBackExtra` instruction factories, `stepWorldStones`). Chapter files keep only what is genuinely chapter-specific (USE/TICK, special targets, staging). When a shared rule changes, edit `chapter.js` once and all four chapters follow — do not re-copy event cases into a chapter file.
+
 ### Shared systems
 
-- `public/js/hotbar.js`: inventory counts, stone consumption, craft matching, vowel classification, and the DOM drag/drop hotbar.
+- `public/js/hotbar.js`: inventory counts, stone consumption, craft matching, vowel classification, and the DOM drag/drop hotbar (slot drag/swap/tap-return, craft animation, `getSlots`/`placeNext`).
+- `public/js/chapter.js`: shared chapter event-machine core (pickup/bank/hold/craft with per-chapter hint hooks) and shared kit behavior (common E handling, held-item sync, memory-stone seeding, drop instruction factories, stone stepping). The single place to change rules common to all chapters.
+- `public/js/workbench.js`: shared crafting-bench operations for every chapter — the standard `bank` instruction (deposit + auto-place into the first empty slot), per-frame `craftSlots` sync into `view`, and the bench-stone world renderer (socket geometry comes from each chapter).
 - `public/js/door.js`: chapter 1 door state machine and ritual seat geometry.
 - `public/js/profile.js`: `localStorage` profile serialization and cross-chapter memory seeding. Previously picked phonemes, crafted words, abilities, and completed chapters persist as unions.
-- `public/js/audio.js`: speech-synthesis voice selection/fallback timing and WebAudio sound effects.
+- `public/js/audio.js`: speech-synthesis voice selection/fallback timing, the two-lane `SpeechQueue` (dialogue lines stay serialized; phoneme carrier taps are latest-wins so rapid tapping never builds a speech backlog), and WebAudio sound effects.
 - `public/js/ui.js`: hints, toast/reveal/summary UI, and icon-driven presentation.
 - `public/js/journal.js`: word cards and the 48-phoneme rune book.
 - `public/js/art.js`: palette, rune stroke data, and Canvas-drawn icons. Do not replace game icons with emoji.

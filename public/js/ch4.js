@@ -1,15 +1,16 @@
 // 回响之石 · 第四章：超级拼装（log / rope / raft / pole）
-import { createInventory, addStone, canConsume, consume, stoneCount, isVowel } from './hotbar.js';
+import { createInventory, addStone } from './hotbar.js';
+import { pickupStone, bankHeld, holdItem, craftWord,
+         chapterOnE, syncHeld, dropBackExtra, stepWorldStones } from './chapter.js';
 import { mount } from './shell.js';
 import {
-  SIDE, moveSide, spawnSideStone, stepSideStone, drawSideStone,
+  SIDE, moveSide, spawnSideStone, drawSideStone,
   drawBenchSide, drawEHint, vignette
 } from './sideview.js';
 import { PAL, drawIcon, drawBulb, drawCross } from './art.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { screenToLogical } from './scene.js';
 
-const cap = word => word[0].toUpperCase() + word.slice(1) + '.';
 const PHONEMES = {
   log: ['l', 'ɒ', 'g'],
   rope: ['r', 'əʊ', 'p'],
@@ -66,20 +67,10 @@ function roomEvent(g, room) {
   return [{ t: 'effect', name: 'roomTransition', room }, { t: 'hint', key }, { t: 'beat', beat: key }];
 }
 
+// 合成 = chapter.craftWord + 本章合成后的指向提示
+const CRAFT_HINT = { log: 'log', rope: 'raft', raft: 'raftReady', pole: 'poled' };
 function craft(g, word) {
-  const def = g.content.words[word];
-  if (!def || g.inv.items.has(word)) return [];
-  const sequence = def.phonemes.map(([ipa]) => ipa);
-  if (!canConsume(g.inv, sequence)) return [];
-  consume(g.inv, sequence);
-  g.inv.items.set(word, true);
-  g.book.add(word);
-  return [
-    { t: 'resonate', word },
-    { t: 'speak', who: 'child', text: cap(word) },
-    { t: 'itemIn', word },
-    { t: 'hint', key: word === 'log' ? 'log' : word === 'rope' ? 'raft' : word === 'raft' ? 'raftReady' : 'poled' }
-  ];
+  return craftWord(g, word, [{ t: 'hint', key: CRAFT_HINT[word] }]);
 }
 
 function useItem(g, word, target) {
@@ -155,32 +146,12 @@ export function gameEvent(g, ev, arg = null) {
         ];
       }
       return [{ t: 'speak', who: 'door', text: g.content.flows.pole.listen[0], slow: true }];
-    case 'PICKUP': {
-      const ipa = arg;
-      const out = [];
-      if (g.hand?.kind === 'stone') out.push({ t: 'dropBack', ipa: g.hand.ipa });
-      g.hand = { kind: 'stone', ipa };
-      g.inv.everPicked.add(ipa);
-      g.stonesPicked++;
-      out.push({ t: 'carrier', ipa }, { t: 'hand' });
-      return out;
-    }
-    case 'BANK': {
-      if (g.hand?.kind !== 'stone') return [];
-      const ipa = g.hand.ipa;
-      g.hand = null;
-      addStone(g.inv, ipa);
-      return [{ t: 'bank', ipa }, { t: 'hand' }];
-    }
-    case 'HOLD_ITEM': {
-      if (!g.inv.items.has(arg)) return [];
-      if (g.hand?.kind === 'item' && g.hand.word === arg) {
-        g.hand = null;
-        return [{ t: 'hand' }];
-      }
-      g.hand = { kind: 'item', word: arg };
-      return [{ t: 'hand' }, { t: 'hint', key: 'raft' }];
-    }
+    case 'PICKUP':
+      return pickupStone(g, arg);
+    case 'BANK':
+      return bankHeld(g);
+    case 'HOLD_ITEM':
+      return holdItem(g, arg, { hint: 'raft' });
     case 'CRAFT':
       return craft(g, arg);
     case 'USE': {
@@ -392,7 +363,7 @@ export const kit = {
       }
     }
 
-    for (const stone of w.stones) if (stone.state !== 'idle') stepSideStone(stone, dt, currentGround(w));
+    stepWorldStones(w, dt, currentGround);
     view.puffs = view.puffs.filter(p => { p.r += dt * 40; p.a -= dt * 2; return p.a > 0; });
   },
 
@@ -427,15 +398,9 @@ export const kit = {
     return best;
   },
 
-  onE(w, target) {
+  // 石头/合成台公共段走 chapterOnE；其余为本章专属目标
+  onE: chapterOnE(gameEvent, (w, target) => {
     const { game } = w;
-    if (target.kind === 'stone') {
-      const i = w.stones.indexOf(target.stone);
-      if (i >= 0) w.stones.splice(i, 1);
-      w.run(gameEvent(game, 'PICKUP', target.ipa));
-      return;
-    }
-    if (target.id === 'bench') { w.run(gameEvent(game, 'BANK')); return; }
     if (target.id === 'creviceDoor') { w.run(gameEvent(game, 'ROOM', 'crevice')); return; }
     if (target.id === 'bankDoor') { w.run(gameEvent(game, 'ROOM', 'bank')); return; }
     if (target.id === 'creviceLog') { w.run(gameEvent(game, 'CREVICE')); return; }
@@ -459,7 +424,7 @@ export const kit = {
     if (target.id === 'self' && game.hand?.kind === 'item') {
       w.run(gameEvent(game, 'USE', { word: game.hand.word, target: 'player' }));
     }
-  },
+  }),
 
   onPointerDown(w, e, cv) {
     const p = screenToLogical(e.clientX, e.clientY, cv.getBoundingClientRect());
@@ -495,21 +460,16 @@ export const kit = {
     if (target) w.run(gameEvent(game, 'USE', { word, target }));
   },
 
-  syncHeld(w) {
-    const h = w.game.hand;
-    if (!h) { w.player.held = null; w.player.heldIcon = null; w.player.heldVowel = false; return; }
-    if (h.kind === 'stone') { w.player.held = h.ipa; w.player.heldIcon = null; w.player.heldVowel = isVowel(h.ipa); }
-    else { w.player.held = null; w.player.heldIcon = w.content.words[h.word].icon; w.player.heldVowel = false; }
-  },
+  syncHeld,
 
   runExtras: {
-    drop(w, ins) {
+    drop(w, ins) {                        // 本章掉落按 only 名单定点排布（与公共 dropExtra 的散开策略不同）
       const def = w.content.words[ins.word];
       const flow = w.content.flows[ins.word];
       const only = ins.only || def.phonemes.map(([ipa]) => ipa);
       only.forEach((ipa, i) => spawnSideStone(w.stones, ipa, flow.drop[0] + i * 42, flow.drop[1] - 120, (Math.random() - 0.5) * 35, -120));
     },
-    dropBack(w, ins) { spawnSideStone(w.stones, ins.ipa, w.player.x - 20, currentGround(w) - 120, -50, -100); },
+    dropBack: dropBackExtra(currentGround, -50),
     shrug(w) { w.view.shrugT = 1.2; },
     bubble(w) { w.view.bubbleT = 2.6; },
     effect(w, ins) {
@@ -607,7 +567,7 @@ function drawRoom(w, x) {
 
 function drawBankObjects(w, x) {
   const geo = w.geo.bank;
-  drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true);
+  drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true, w.view.craftSlots);
   x.fillStyle = '#67727d'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
   x.beginPath(); x.roundRect ? x.roundRect(565, geo.groundY - 100, 150, 90, 12) : x.rect(565, geo.groundY - 100, 150, 90); x.fill(); x.stroke();
   x.fillStyle = '#b28a58'; x.fillRect(590, geo.groundY - 70, 100, 12);
@@ -622,7 +582,7 @@ function drawBankObjects(w, x) {
 
 function drawCreviceObjects(w, x) {
   const geo = w.geo.crevice;
-  drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true);
+  drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true, w.view.craftSlots);
   x.fillStyle = '#10151c'; x.strokeStyle = '#75808b'; x.lineWidth = 8;
   x.beginPath(); x.moveTo(500, 0); x.lineTo(560, 160); x.lineTo(520, 310); x.lineTo(610, 455); x.lineTo(560, geo.groundY); x.lineTo(820, geo.groundY); x.lineTo(760, 430); x.lineTo(820, 280); x.lineTo(750, 120); x.lineTo(790, 0); x.closePath(); x.fill(); x.stroke();
   drawLog(x, geo.logX, geo.groundY - 16);
@@ -634,7 +594,7 @@ function drawCreviceObjects(w, x) {
 
 function drawDeepObjects(w, x) {
   const geo = w.geo.deep;
-  if (w.game.stalled) drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true);
+  if (w.game.stalled) drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, true, w.view.craftSlots);
   x.fillStyle = 'rgba(120,205,230,.10)'; x.fillRect(0, geo.groundY - 80, SIDE.W, 80);
   x.strokeStyle = '#c1a76b'; x.lineWidth = 5;
   x.beginPath(); x.moveTo(geo.muralX - 120, 190); x.lineTo(geo.muralX, 100); x.lineTo(geo.muralX + 110, 190); x.stroke();

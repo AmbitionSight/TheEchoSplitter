@@ -1,9 +1,9 @@
 // —— 回响之石 · 第二间房：jump（dʒ·ʌ·m·p；p 为第一间房旧识）——
-import { createInventory, addStone, canConsume, consume } from './hotbar.js';
+import { createInventory } from './hotbar.js';
+import { pickupStone, bankHeld, holdItem, craftWord,
+         chapterOnE, syncHeld, seedBegin, dropExtra, dropBackExtra, stepWorldStones } from './chapter.js';
 
-const cap = w => w[0].toUpperCase() + w.slice(1) + '.';
-
-// ================= 纯事件机（Node 可测，行为与重构前一致） =================
+// ================= 纯事件机（Node 可测，行为与重构前一致；公共段见 chapter.js） =================
 export function createGame(content, profile) {
   return {
     content, beat: 'start',
@@ -36,49 +36,14 @@ export function gameEvent(g, ev, arg = null) {
       if (first) out.push({ t: 'drop', word: 'jump' }, { t: 'hint', key: 'attempt' });
       return out;
     }
-    case 'PICKUP': {
-      const ipa = arg;
-      const out = [];
-      if (g.hand?.kind === 'stone') out.push({ t: 'dropBack', ipa: g.hand.ipa });
-      g.hand = { kind: 'stone', ipa };
-      g.inv.everPicked.add(ipa);
-      g.stonesPicked++;
-      out.push({ t: 'carrier', ipa }, { t: 'hand' });
-      if (g.stonesPicked === 1) out.push({ t: 'hint', key: 'carrying' });
-      return out;
-    }
-    case 'BANK': {
-      if (g.hand?.kind !== 'stone') return [];
-      const ipa = g.hand.ipa;
-      g.hand = null;
-      addStone(g.inv, ipa);
-      return [{ t: 'bank', ipa }, { t: 'hand' }];
-    }
-    case 'HOLD_ITEM': {
-      const word = arg;
-      if (!g.inv.items.has(word)) return [];
-      if (g.hand?.kind === 'item' && g.hand.word === word) {
-        g.hand = null;                                   // 再点一次 = 放下
-        return [{ t: 'hand' }];
-      }
-      g.hand = { kind: 'item', word };
-      return [{ t: 'hand' }, { t: 'hint', key: 'give' }];
-    }
-    case 'CRAFT': {
-      const word = arg;
-      if (!c.words[word] || g.inv.items.has(word)) return [];
-      const phon = c.words[word].phonemes.map(p => p[0]);
-      if (!canConsume(g.inv, phon)) return [];
-      consume(g.inv, phon);
-      g.inv.items.set(word, true);
-      g.book.add(word);
-      return [
-        { t: 'resonate', word },
-        { t: 'speak', who: 'child', text: cap(word) },
-        { t: 'itemIn', word },
-        { t: 'hint', key: 'give' }
-      ];
-    }
+    case 'PICKUP':
+      return pickupStone(g, arg, { onFirst: [{ t: 'hint', key: 'carrying' }] });
+    case 'BANK':
+      return bankHeld(g);
+    case 'HOLD_ITEM':
+      return holdItem(g, arg);
+    case 'CRAFT':
+      return craftWord(g, arg, [{ t: 'hint', key: 'give' }]);
     case 'USE': {
       const { word, target } = arg;
       const def = c.words[word]?.use;
@@ -131,13 +96,11 @@ export function jumpDebug(g, beat) {
 
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
-import { SIDE, moveSide, sideJump, spawnSideStone, stepSideStone, planDropStones,
+import { SIDE, moveSide, sideJump,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawMossyWall } from './sideview.js';
 import { PAL } from './art.js';
 import { tile } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
-import { seedMemory, neededSeeds } from './profile.js';
-import { isVowel } from './hotbar.js';
 import { rng } from './scene.js';
 
 const kit = {
@@ -173,12 +136,7 @@ const kit = {
     return w;
   },
 
-  onBegin(w) {
-    const seeds = neededSeeds(w.content, w.profile.everPicked);              // 只带本章需要的旧音素（p）
-    const seeded = seedMemory(w.game.inv, addStone, seeds);
-    if (seeded.length) setTimeout(() => { w.sfx.chime(); w.hb.refresh(w.game.inv); }, 900);
-    w.hb.refresh(w.game.inv);
-  },
+  onBegin(w) { seedBegin(w); },                   // 开局记忆石：只带本章需要的旧音素（p）
 
   onSpace(w) {
     if (w.game.jumpUnlocked) { sideJump(w); w.sfx.click(); }
@@ -198,12 +156,9 @@ const kit = {
     if (w.player.moving && (w.keys.has('l') || w.keys.has('r'))) w.player.walkT += dt;  // 行走帧推进（仅水平移动）
     // 走到走廊尽头：不再有门，直接进入下一关
     if (!w.game.exited && w.game.crossed && w.player.x >= geo.exitX - 10) w.run(gameEvent(w.game, 'EXIT'));
-    for (const s of w.stones) {
-      if (s.state === 'idle') continue;
-      stepSideStone(s, dt, geo.groundY);
-      if (s.state === 'idle' && s.x >= geo.chasmL && s.x <= geo.chasmR)
-        s.x = geo.chasmL - 30 - Math.random() * 40;                         // 保险：石头绝不落在裂隙里
-    }
+    // 保险：石头绝不落在裂隙里
+    stepWorldStones(w, dt, () => geo.groundY,
+      x => (x >= geo.chasmL && x <= geo.chasmR) ? geo.chasmL - 30 - Math.random() * 40 : null);
     for (const m of v.mist) m.ph += dt * m.v * 0.1;
     v.stars = v.stars.filter(st => (st.a -= dt * 1.2) > 0);
     v.puffs = v.puffs.filter(p => { p.r += dt * 40; p.a -= dt * 2; return p.a > 0; });
@@ -221,33 +176,16 @@ const kit = {
     return best;
   },
 
-  onE(w, t) {
-    const { game, geo } = w;
-    if (t.kind === 'stone') {
-      const i = w.stones.indexOf(t.stone);
-      if (i >= 0) w.stones.splice(i, 1);
-      w.run(gameEvent(game, 'PICKUP', t.ipa));
-    }
-    else if (t.id === 'bench') w.run(gameEvent(game, 'BANK'));
-    else if (t.id === 'self' && game.hand?.kind === 'item') w.run(gameEvent(game, 'USE', { word: game.hand.word, target: 'player' }));
+  onE: chapterOnE(gameEvent, (w, t) => {
+    if (t.id === 'self' && w.game.hand?.kind === 'item') w.run(gameEvent(w.game, 'USE', { word: w.game.hand.word, target: 'player' }));
     else w.sfx.mutter();
-  },
+  }),
 
-  syncHeld(w) {
-    const p = w.player, h = w.game.hand;
-    if (!h) { p.held = null; p.heldVowel = false; p.heldIcon = null; return; }
-    if (h.kind === 'stone') { p.held = h.ipa; p.heldVowel = isVowel(h.ipa); p.heldIcon = null; }
-    else { p.held = null; p.heldVowel = false; p.heldIcon = w.content.words[h.word].icon; }
-  },
+  syncHeld,
 
   runExtras: {
-    drop(w, ins) {
-      const f = w.content.flows[ins.word];
-      for (const s of planDropStones(w.content.words[ins.word], w.game.inv, f.drop, w.geo.chasmL)) {
-        spawnSideStone(w.stones, s.ipa, s.x, f.drop[1] - 180, (Math.random() - 0.5) * 40, -120);
-      }
-    },
-    dropBack(w, ins) { spawnSideStone(w.stones, ins.ipa, w.player.x - 20, w.geo.groundY - 120, -60, -100); },
+    drop: dropExtra(w => w.geo.chasmL),
+    dropBack: dropBackExtra(),
     shrug(w) { w.player.squash = 0.9; },
     bubble(w) { w.view.bubbleT = 2.6; },
     fell(w) {
@@ -297,7 +235,7 @@ const kit = {
     }
     drawTorchSide(x, 90, 180, v.t);
     drawTorchSide(x, geo.chasmR + 120, 180, v.t);
-    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone');
+    drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots);
     x.save();
     if (w.player.airborne) { x.translate(w.player.x, w.player.y); x.scale(1, 0.92); x.translate(-w.player.x, -w.player.y); }
     if (w.player.squash > 0) { const q = 1 - Math.sin(w.player.squash * Math.PI) * 0.08; x.translate(w.player.x, w.player.y); x.scale(1.06, q); x.translate(-w.player.x, -w.player.y); }

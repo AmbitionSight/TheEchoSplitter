@@ -1,7 +1,7 @@
 // 规格 §12：fetch 失败时的内联兜底。test/fallback.test.js 保证它与磁盘 JSON 不漂移。
 export const INLINE_CONTENT = {
   meta: {
-    title: "回响之石", titleEn: "THE ECHO STONE",
+    title: "回响之石", titleEn: "THE ECHO STONE", chapter: 1,
     intro: ["你的语言被偷走了。", "你走进一间陌生的石室，只有一个声音在等你。", "碰一碰这里的东西，声音会掉出来。"]
   },
   words: {

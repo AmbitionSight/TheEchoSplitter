@@ -1,15 +1,14 @@
 // —— 公共壳：启动/标题序章/音频语音链/物品栏/E 系统骨架/指令解释器/结算存档 ——
 // 每关 = 一份 content JSON + 一个 kit（事件机 + 世界 + tick/draw/E 钩子），壳只有这一份。
 import { createHotbar, isVowel } from './hotbar.js';
+import { bankStone, syncCraftSlots } from './workbench.js';
 import { createUI } from './ui.js';
-import { Speech, Sfx, pickVoices } from './audio.js';
+import { Speech, Sfx, pickVoices, SpeechQueue } from './audio.js';
 import { loadProfile, saveProfile, mergeProfile } from './profile.js';
 import { loadAtlases } from './sprites.js';
 
 export const CHAPTER_NEXT = { 1: 'chapter2.html', 2: 'chapter3.html', 3: '/chapter4.html', 4: null };
 export const CHAPTER_DAY = { 1: '第一天', 2: '第二间房', 3: '第三间房', 4: '第四天' };
-
-const cap = w => w[0].toUpperCase() + w.slice(1) + '.';
 
 export function mount(kit) {
   if (typeof document === 'undefined') return;
@@ -68,14 +67,17 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
   if (speech.ready) speechSynthesis.addEventListener('voiceschanged', scan);
   addEventListener('pointerdown', () => { sfx.ctx?.resume(); speech.warmup(); }, { once: true });
 
-  let chain = Promise.resolve();
+  const speechQ = new SpeechQueue(speech);      // 台词串行；点读音素最新优先（不排长队）
   function speak(text, who = 'door', slow = false) {
     const conf = (kit.voices?.(voices) || voices)[who] || {};
     const rate = slow ? (conf.rateSlow ?? Math.min(0.6, conf.rate ?? 1)) : conf.rate;
-    chain = chain.then(() => speech.speak(text, { ...conf, rate, pitch: conf.pitch }))
-      .catch(() => {});
+    const p = speechQ.line(text, { ...conf, rate, pitch: conf.pitch });
     kit.onSpeak?.(text, who, slow);
-    return chain;
+    return p;
+  }
+  function speakCarrier(text) {
+    const conf = (kit.voices?.(voices) || voices).child || {};
+    return speechQ.carrier(text, { ...conf, pitch: conf.pitch });
   }
 
   // —— 世界 ——
@@ -91,7 +93,7 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
   const hb = createHotbar({
     words: content.words,
     crafting: content.crafting || { progressiveGlow: true },
-    onSpeakCarrier: ipa => { sfx.click(); speak(content.carriers[ipa], 'child'); },
+    onSpeakCarrier: ipa => { sfx.click(); speakCarrier(content.carriers[ipa]); },
     onCraft: word => run(kit.gameEvent(game, 'CRAFT', word)),
     onTakeItem: word => run(kit.gameEvent(game, 'HOLD_ITEM', word)),
     onDropItem: (word, cx, cy) => kit.onDropItem?.(w, word, cx, cy)
@@ -106,10 +108,10 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
       if (kit.runExtras?.[ins.t]) { kit.runExtras[ins.t](w, ins); continue; }
       switch (ins.t) {
         case 'speak': speak(ins.text, ins.who, ins.slow); break;
-        case 'carrier': sfx.click(); speak(content.carriers[ins.ipa], 'child'); break;
+        case 'carrier': sfx.click(); speakCarrier(content.carriers[ins.ipa]); break;
         case 'hint': ui.setHint(ins.key); break;
         case 'beat': game.beat = ins.beat; break;
-        case 'bank': sfx.itemIn(); hb.refresh(game.inv); break;
+        case 'bank': bankStone(w, ins); break;               // 合成台存石：进库存后自动进槽（workbench）
         case 'hand': ui.updateHand(game.hand); kit.syncHeld?.(w); break;
         case 'resonate': sfx.resonate(); hb.refresh(game.inv); break;
         case 'itemIn': sfx.itemIn(); hb.refresh(game.inv); break;
@@ -144,10 +146,10 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
 
   // —— E 系统 ——
   let eTarget = null;
-  function doE() {
-    if (!eTarget) return;
+  function doE(t = eTarget) {               // 可传显式目标：鼠标走到后自动交互与按 E 同一条路径
+    if (!t) return;
     sfx.click();
-    kit.onE(w, eTarget);
+    kit.onE(w, t);
   }
   w.doE = doE;
 
@@ -172,6 +174,7 @@ function startShell({ kit, content, el, cv, ctx, atlases }) {
       kit.tick(w, dt);
       eTarget = kit.findE(w);
       run(kit.gameEvent(game, 'TICK', dt));
+      syncCraftSlots(w);                   // 合成槽 → 台面显示（全章节统一）
     }
     kit.draw(w, ctx, eTarget);
     requestAnimationFrame(frame);

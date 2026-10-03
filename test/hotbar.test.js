@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createInventory, addStone, stoneCount, canConsume, consume, craftMatch, canPlace, isVowel } from '../public/js/hotbar.js';
+import { createInventory, addStone, stoneCount, canConsume, consume, craftMatch, canPlace, placeNextIndex, swapSlots, isVowel } from '../public/js/hotbar.js';
 
 const data = JSON.parse(await readFile(new URL('../content/chapter1.json', import.meta.url), 'utf8'));
 const WORDS = data.words;
@@ -74,4 +74,23 @@ test('canPlace：槽内同音素数不得超过库存', () => {
 test('isVowel：元音/辅音分类正确', () => {
   assert.ok(isVowel('əʊ') && isVowel('ə') && isVowel('æ'));
   assert.ok(!isVowel('p') && !isVowel('n') && !isVowel('ŋ'));
+});
+
+test('placeNextIndex：依次填第一个空槽；满槽/超库存返回 -1', () => {
+  const inv = invWith([['h', 1], ['ə', 1]]);
+  assert.equal(placeNextIndex([null, null, null, null], inv, 'h'), 0);
+  assert.equal(placeNextIndex(['h', null, null, null], inv, 'ə'), 1);
+  assert.equal(placeNextIndex(['h', 'ə', 'h', 'ə'], inv, 'h'), -1);        // 槽满
+  assert.equal(placeNextIndex(['h', null, null, null], inv, 'h'), -1);     // 库存只有 1 颗 h，槽里已有 1
+  assert.equal(placeNextIndex([null, null, null, null], null, 'h'), -1);   // 无库存引用
+});
+
+test('swapSlots：两槽对调（含空槽移动）', () => {
+  const s = ['h', 'ə', null, null];
+  swapSlots(s, 0, 1);
+  assert.deepEqual(s, ['ə', 'h', null, null]);
+  swapSlots(s, 1, 2);
+  assert.deepEqual(s, ['ə', null, 'h', null]);
+  swapSlots(s, 0, 0);
+  assert.deepEqual(s, ['ə', null, 'h', null]);
 });

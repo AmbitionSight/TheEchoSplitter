@@ -1,10 +1,9 @@
 // —— 回响之石 · 第一间房：hello 教学 + open 开关主线（E 键手持交互）——
-import { createInventory, addStone, canConsume, consume, isVowel } from './hotbar.js';
+import { createInventory, isVowel } from './hotbar.js';
 import { createDoor, doorEvent } from './door.js';
+import { pickupStone, bankHeld, holdItem, craftWord, cap, syncHeld } from './chapter.js';
 
-const cap = w => w[0].toUpperCase() + w.slice(1) + '.';
-
-// ================= 纯事件机（Node 可测，行为与重构前一致） =================
+// ================= 纯事件机（Node 可测，行为与重构前一致；公共段见 chapter.js） =================
 export function createGame(content) {
   return {
     content, beat: 'hello-listen',
@@ -86,51 +85,16 @@ export function gameEvent(g, ev, arg = null) {
       }
       return [];
     }
-    case 'PICKUP': {                    // E 拾地面石 → 手上（纯手持制，一次一块）
-      const ipa = arg;
-      const out = [];
-      if (g.hand?.kind === 'stone') out.push({ t: 'dropBack', ipa: g.hand.ipa }); // 旧石放回地面
-      g.hand = { kind: 'stone', ipa };
-      g.inv.everPicked.add(ipa);
-      g.stonesPicked++;
-      out.push({ t: 'carrier', ipa }, { t: 'hand' });
-      if (g.stonesPicked === 1) out.push({ t: 'hotbarShow' }, { t: 'hint', key: 'bench' }, { t: 'beat', beat: 'first-stone' });
-      return out;
-    }
-    case 'HOLD_ITEM': {                 // 点物品栏词具 → 拿起 / 再点一次 → 放下
-      const word = arg;
-      if (!g.inv.items.has(word)) return [];
-      if (g.hand?.kind === 'item' && g.hand.word === word) {
-        g.hand = null;
-        return [{ t: 'hand' }];
-      }
-      g.hand = { kind: 'item', word };
-      return [{ t: 'hand' },
-              { t: 'hint', key: word === 'open' ? 'openItem' : 'helloGive' }];
-    }
-    case 'BANK': {                      // 合成台：手上的石存入底部物品栏
-      if (g.hand?.kind !== 'stone') return [];
-      const ipa = g.hand.ipa;
-      g.hand = null;
-      addStone(g.inv, ipa);
-      return [{ t: 'bank', ipa }, { t: 'hand' }];
-    }
+    case 'PICKUP':                      // E 拾地面石 → 手上（纯手持制，一次一块）；首块亮物品栏+指合成台
+      return pickupStone(g, arg, { onFirst: [{ t: 'hotbarShow' }, { t: 'hint', key: 'bench' }, { t: 'beat', beat: 'first-stone' }] });
+    case 'HOLD_ITEM':                   // 点物品栏词具 → 拿起 / 再点一次 → 放下
+      return holdItem(g, arg, { hint: arg === 'open' ? 'openItem' : 'helloGive' });
+    case 'BANK':                        // 合成台：手上的石存入底部物品栏
+      return bankHeld(g);
     case 'CRAFT': {
-      const word = arg;
-      if (!c.words[word] || g.inv.items.has(word)) return [];
-      const phon = c.words[word].phonemes.map(p => p[0]);
-      if (!canConsume(g.inv, phon)) return [];
-      consume(g.inv, phon);
-      g.inv.items.set(word, true);
-      g.book.add(word);
-      const out = [
-        { t: 'resonate', word },
-        { t: 'speak', who: 'child', text: cap(word) },
-        { t: 'itemIn', word }
-      ];
-      if (word === 'hello') out.push({ t: 'hint', key: 'helloGive' });   // 拿着气泡去见大叔
-      if (word === 'open') out.push({ t: 'hint', key: 'openItem' });
-      return out;
+      const extra = arg === 'hello' ? [{ t: 'hint', key: 'helloGive' }]   // 拿着气泡去见大叔
+                : arg === 'open' ? [{ t: 'hint', key: 'openItem' }] : [];
+      return craftWord(g, arg, extra);
     }
     case 'USE': {
       const { word, target } = arg;
@@ -194,6 +158,16 @@ export function jump(g, beat) {
   switch (beat) {
     case 'hello-meet': return gameEvent(g, 'INTERACT', 'npc');
     case 'hello': return collect(g, 'hello');
+    case 'bench': {                                // 调试：台上先摆两块（验收合成台显示）
+      let out = gameEvent(g, 'INTERACT', 'npc');
+      for (const ipa of ['h', 'ə']) out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
+      return out;
+    }
+    case 'craft': {                                // 调试：按正确顺序存满四块，最后一块自动合成（验收合成动画）
+      let out = gameEvent(g, 'INTERACT', 'npc');
+      for (const ipa of ['h', 'ə', 'l', 'əʊ']) out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
+      return out;
+    }
     case 'light':                                  // 调试：只开灯（验收右半与门）
       g.lit = true; g.switchOn = true;
       return [{ t: 'illuminate' }, { t: 'forceLight' }];
@@ -210,13 +184,14 @@ export function jump(g, beat) {
 // ================= 浏览器 kit（俯视石室） =================
 import { mount } from './shell.js';
 import { PAL } from './art.js';
-import { LAYOUT, createScene, initScene, updateScene, drawScene, drawOverlay,
+import { LAYOUT, BENCH_SOCKETS, createScene, initScene, updateScene, drawScene, drawOverlay,
          screenToLogical, moveToward, resolveCollisions, makeStone, stepStone } from './scene.js';
 import { createActors, updateActors, drawPlayer, drawNpc, drawCat, setGesture } from './actors.js';
 import { RITUAL_STEP, ritualSeats } from './door.js';
 import { drawEHint } from './sideview.js';
+import { drawBenchStones } from './workbench.js';
 
-const kit = {
+export const kit = {
   chapter: 1, W: LAYOUT.W, H: LAYOUT.H, titleRune: 'ᚫ',
 
   createGame: (content) => createGame(content),
@@ -290,7 +265,7 @@ const kit = {
         if (arrived || Math.hypot(p.x - t.x, p.y - t.y) < 110) {
           w.walkTarget = null; w.pendingInteract = null;
           if (done.kind === 'stone') takeStone(w, nearestStone(w, done.ipa));
-          else w.doEFor({ kind: 'obj', id: done.id });
+          else w.doE({ kind: 'obj', id: done.id });     // 与按 E 同一条路径（修重构遗留的 doEFor 幽灵调用）
         }
       } else if (arrived) w.walkTarget = null;
       if (w.walkTarget) {
@@ -369,12 +344,7 @@ const kit = {
     else w.run(gameEvent(w.game, 'INTERACT', t.id));
   },
 
-  syncHeld(w) {
-    const p = w.actors.player, h = w.game.hand;
-    if (!h) { p.held = null; p.heldVowel = false; p.heldIcon = null; return; }
-    if (h.kind === 'stone') { p.held = h.ipa; p.heldVowel = isVowel(h.ipa); p.heldIcon = null; }
-    else { p.held = null; p.heldVowel = false; p.heldIcon = w.content.words[h.word].icon; }
-  },
+  syncHeld,
 
   runExtras: {
     drop(w, ins) {
@@ -416,6 +386,7 @@ const kit = {
     const { view, sc, ritual } = w;
     x.clearRect(0, 0, LAYOUT.W, LAYOUT.H);
     drawScene(x, sc, view);
+    drawBenchStones(x, view.craftSlots, BENCH_SOCKETS);  // 合成槽内容 → 台面四个石槽
     const byY = [['npc', w.actors.npc.y], ['cat', w.actors.cat.y], ['player', w.actors.player.y]].sort((a, b) => a[1] - b[1]);
     for (const [who] of byY) {
       if (who === 'npc') drawNpc(x, w.actors.npc, view.t, w.atlases);

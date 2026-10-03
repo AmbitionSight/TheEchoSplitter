@@ -1,6 +1,7 @@
 // —— 横版共用件：移动/跳跃/攀爬物理核心 + 通用渲染（火把/合成台/石头/E 提示/暗角） ——
 import { PAL } from './art.js';
 import { isVowel, stoneCount } from './hotbar.js';
+import { drawBenchStones } from './workbench.js';
 import { blit, tile } from './sprites.js';
 
 export const SIDE = { W: 1280, H: 720 };
@@ -116,19 +117,22 @@ export function drawTorchSide(x, tx, ty, t) {
   x.fillStyle = g; x.beginPath(); x.arc(tx, ty, 110, 0, 7); x.fill();
 }
 
-export function drawBenchSide(x, imgs, bx, gy, hot) {
+export function drawBenchSide(x, imgs, bx, gy, hot, slots = null) {
   x.fillStyle = 'rgba(0,0,0,.25)';
   x.beginPath(); x.ellipse(bx, gy + 6, 70, 9, 0, 0, 7); x.fill();
   blit(x, imgs, 'table', bx - 76, gy - 74);
   blit(x, imgs, 'table', bx, gy - 74);
+  const sockets = [];
   for (let i = 0; i < 4; i++) {
     const sx = bx - 33 + i * 22;
+    sockets.push([sx, gy - 62]);
     x.fillStyle = 'rgba(20,22,34,.55)';
     x.beginPath(); x.arc(sx, gy - 62, 5, 0, 7); x.fill();
     x.strokeStyle = 'rgba(255,255,255,.28)'; x.lineWidth = 1.2;
     x.beginPath(); x.arc(sx, gy - 62, 5, -2.2, 0.6); x.stroke();
-    if (hot) { x.fillStyle = 'rgba(84,224,200,.25)'; x.beginPath(); x.arc(sx, gy - 62, 9, 0, 7); x.fill(); }
+    if (hot && !slots?.[i]) { x.fillStyle = 'rgba(84,224,200,.25)'; x.beginPath(); x.arc(sx, gy - 62, 9, 0, 7); x.fill(); }  // 手持音素石：只亮空槽
   }
+  if (slots) drawBenchStones(x, slots, sockets);            // 槽内音素石上台面
 }
 
 // 横版背墙：MI 墙面平铺 + 压暗
