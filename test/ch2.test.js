@@ -46,10 +46,10 @@ test('掉落规划：p 已由记忆石补位则不再落地；落点全部在裂
   const inv = createInventory();
   addStone(inv, 'p');
   const plan = planDropStones(content.words.jump, inv, content.flows.jump.drop, content.geometry.chasmL);
-  assert.deepEqual(plan.map(s => s.ipa), ['dʒ', 'ʌ', 'm']);            // p 是旧识，不再掉一颗
+  assert.deepEqual(plan.map(s => s.ipa), ['dʒ', 'ʌ', 'm', 'h', 'l']);  // p 是旧识不掉；h/l 是干扰音（须听辨排除）
   for (const s of plan) assert.ok(s.x < content.geometry.chasmL, `石头 ${s.ipa} 落进裂隙 x=${s.x}`);
   const fresh = planDropStones(content.words.jump, createInventory(), content.flows.jump.drop, content.geometry.chasmL);
-  assert.deepEqual(fresh.map(s => s.ipa), ['dʒ', 'ʌ', 'm', 'p']);      // 无书档新档：p 仍须实地捡
+  assert.deepEqual(fresh.map(s => s.ipa), ['dʒ', 'ʌ', 'm', 'p', 'h', 'l']);  // 无书档：p 仍须实地捡；含干扰音
 });
 
 test('全流程：E 搬运（p 由记忆补位）→ 合成 jump → 对自己用 → 解锁 → 过坑 → 出口结算', () => {
@@ -107,4 +107,30 @@ test('无缝交接：第二间房声明后继为崖壁（第二间房后半）�
   assert.equal(nextKit.contentId, '2b');
   assert.equal(typeof nextKit.createGame, 'function');
   assert.equal(typeof nextKit.makeWorld, 'function');
+});
+
+test('听声点：LISTEN 返回回声指令；裂口回声随解锁跳跃变化；未知 id 安全', () => {
+  const g = createGame(content, ch1Profile);
+  assert.ok(gameEvent(g, 'LISTEN', 'warm').some(i => i.t === 'echo' && i.say === 'Warm.'));
+  assert.ok(gameEvent(g, 'LISTEN', 'fall').some(i => i.t === 'echo' && i.say === 'Fall.'));
+  gameEvent(g, 'USE', { word: 'jump', target: 'player' });        // 解锁跳跃（能过坑）
+  assert.ok(gameEvent(g, 'LISTEN', 'fall').some(i => i.t === 'echo' && i.say === 'Free.'));
+  assert.deepEqual(gameEvent(g, 'LISTEN', 'nope'), []);
+});
+
+test('听声点内容：每个音素都有载词（回声条能念）', () => {
+  for (const spot of content.listening) {
+    for (const ipa of spot.echo) assert.ok(content.carriers[ipa] || content.phonemeBook.carriers[ipa], `${spot.id} 缺载词 ${ipa}`);
+  }
+});
+
+test('听声点是实体物件：findE 认得，按 E 走 LISTEN（auto 的火把不占 E）', () => {
+  const g = createGame(content, ch1Profile);
+  const ran = [];
+  const w = { game: g, content, player: { x: 690, y: 600 }, geo: content.geometry, stones: [], run: ins => ran.push(...ins) };
+  const t = kit.findE(w);
+  assert.equal(t.id, 'fall');                                   // 站在裂口边，E 目标是听声点
+  kit.onE(w, t);
+  assert.ok(ran.some(i => i.t === 'echo' && i.say === 'Fall.'));
+  assert.equal(kit.findE({ ...w, player: { x: 90, y: 600 } }), null);   // 火把是 auto 环境声，不是 E 目标
 });

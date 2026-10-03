@@ -3,12 +3,19 @@
             "intro": ["门后是一条幽深的走廊。", "地板在这里断开了一道裂缝。", "对面有光。"] },
   "words": {
     "jump": { "icon": "jump", "phonemes": [["dʒ",90],["ʌ",80],["m",90],["p",80]],
+               "decoys": ["h","l"],
                "use": { "target": "player", "effect": "jumpUnlock", "once": true } }
   },
   "flows": {
     "jump": { "listen": ["Jump."], "puzzled": ["Jump?"], "drop": [640, 560] }
   },
-  "carriers": { "dʒ": "Jge.", "ʌ": "Up.", "m": "Mm.", "p": "P." },
+  "listening": [
+    { "id": "warm",  "x": 90,  "y": 180, "r": 90, "auto": true, "echo": ["w","ɔː","m"], "say": "Warm." },
+    { "id": "fall",  "x": 690, "y": 580, "r": 84, "echo": ["f","ɔː","l"], "say": "Fall.",
+      "after": { "echo": ["f","r","iː"], "say": "Free." } },
+    { "id": "shine", "x": 950, "y": 580, "r": 84, "echo": ["ʃ","aɪ","n"], "say": "Shine." }
+  ],
+  "carriers": { "dʒ": "Jge.", "ʌ": "Up.", "m": "Mm.", "p": "P.", "r": "Err." },
   "geometry": { "chasmL": 700, "chasmR": 940, "groundY": 600, "exitX": 1150, "benchX": 420, "spawnX": 140 },
   "phonemeBook": {
     "total": 48,

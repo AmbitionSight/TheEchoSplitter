@@ -11,7 +11,7 @@ export function createGame(content, profile) {
     book: new Set(), stonesPicked: 0,
     hand: null, attempted: false,
     mended: profile.abilities.includes('climb') ? true : false,
-    climbed: false, exited: false, teaseClock: 0
+    climbed: false, exited: false, heard: new Set(), teaseClock: 0
   };
 }
 
@@ -59,6 +59,11 @@ export function gameEvent(g, ev, arg = null) {
       g.beat = 'summary';
       return [{ t: 'summary' }];
     }
+    case 'LISTEN': {                                          // 听声点：走近按 E 触发（纯听觉，不进库存）
+      const spot = (c.listening || []).find(s => s.id === arg);
+      if (!spot) return [];
+      return [{ t: 'sfx', name: 'glowTick' }, { t: 'echo', ipas: spot.echo, say: spot.say }];
+    }
     case 'TICK': {
       g.teaseClock += arg;
       if (g.teaseClock < 45) return [];
@@ -92,7 +97,7 @@ export function ropeDebug(g, beat) {
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide } from './sideview.js';
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots } from './sideview.js';
 import { PAL } from './art.js';
 import { blit, SPR } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
@@ -182,6 +187,14 @@ export const kit = {
     stepWorldStones(w, dt, () => geo.groundY,
       x => (x >= geo.wallX && x <= geo.wallX + geo.wallW) ? geo.wallX - 30 - Math.random() * 40 : null);
     v.puffs = v.puffs.filter(p => { p.r += dt * 40; p.a -= dt * 2; return p.a > 0; });
+    // 环境听声点（火把等）：走近自动响，不用按 E
+    for (const spot of (w.content.listening || [])) {
+      if (!spot.auto) continue;
+      const near = Math.abs(w.player.x - spot.x) < spot.r;
+      const st = (v.listen ||= {})[spot.id] ||= { near: false };
+      if (near && !st.near) w.run(gameEvent(w.game, 'LISTEN', spot.id));
+      st.near = near;
+    }
   },
 
   findE(w) {
@@ -194,6 +207,10 @@ export const kit = {
       consider(Math.hypot(player.x - s.x, player.y - s.y), { kind: 'stone', ipa: s.ipa, x: s.x, y: s.y, stone: s }, 56);
     }
     consider(Math.abs(player.x - geo.benchX), { kind: 'obj', id: 'bench', x: geo.benchX, y: geo.groundY }, 80);
+    for (const spot of (w.content.listening || [])) {           // 听声点：实体物件，走近按 E（auto 的自动响，不占 E）
+      if (spot.auto) continue;
+      consider(Math.abs(player.x - spot.x), { kind: 'obj', id: spot.id, x: spot.x, y: spot.y }, spot.r);
+    }
     if (w.game.mended && player.y >= geo.groundY - 20) {
       consider(Math.abs(player.x - ropeX), { kind: 'obj', id: 'rope', x: ropeX, y: geo.groundY }, 65);
     }
@@ -216,6 +233,7 @@ export const kit = {
 
   onE: chapterOnE(gameEvent, (w, t) => {
     const { game } = w;
+    if (w.content.listening?.some(s => s.id === t.id)) { w.run(gameEvent(game, 'LISTEN', t.id)); return; }
     if (t.id === 'rope' && game.mended) {
       w.player.climbing = true;
       w.player.airborne = false;
@@ -245,7 +263,7 @@ export const kit = {
   },
 
   summaryMerge(game) {
-    return { everPicked: [...game.inv.everPicked], words: [...game.book], abilities: ['climb'], chapter: 2 };
+    return { everPicked: [...game.inv.everPicked], heard: [...game.heard], words: [...game.book], abilities: ['climb'], chapter: 2 };
   },
 
   onFinal(w) {
@@ -279,6 +297,7 @@ export const kit = {
     // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
     x.fillStyle = 'rgba(16,18,36,.30)';
     x.fillRect(0, 0, SIDE.W, SIDE.H);
+    drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
     vignette(x);
   }

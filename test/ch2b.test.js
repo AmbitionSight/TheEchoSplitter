@@ -42,11 +42,11 @@ test('掉落规划：əʊ/p 已由记忆石补位则不再落地；落点全部�
   const inv = createInventory();
   addStone(inv, 'əʊ'); addStone(inv, 'p');
   const plan = planDropStones(content.words.rope, inv, content.flows.rope.drop, content.geometry.wallX);
-  assert.deepEqual(plan.map(s => s.ipa), ['r']);                        // əʊ/p 是旧识，不再掉
+  assert.deepEqual(plan.map(s => s.ipa), ['r', 'h', 'm']);             // əʊ/p 是旧识不掉；h/m 是干扰音（须听辨排除）
   const wallL = content.geometry.wallX - 14;                            // 玩家最多贴到墙左 14px
   for (const s of plan) assert.ok(s.x < wallL, `石头 ${s.ipa} 落进墙里 x=${s.x}`);
   const fresh = planDropStones(content.words.rope, createInventory(), content.flows.rope.drop, content.geometry.wallX);
-  assert.deepEqual(fresh.map(s => s.ipa), ['r', 'əʊ', 'p']);            // 无书档新档：三颗都落地
+  assert.deepEqual(fresh.map(s => s.ipa), ['r', 'əʊ', 'p', 'h', 'm']); // 无书档：全部落地；含干扰音
 });
 
 test('窗户以下没有空气墙：地面可走进墙下，墙顶平台语义保留', () => {
@@ -111,4 +111,28 @@ test('无缝交接：崖壁走到尽头声明后继为第三间房（暗河）�
   const nextKit = await kit.next.load();          // 真实动态导入，守住 ch3.js 必须导出 kit
   assert.equal(nextKit.chapter, 3);
   assert.equal(typeof nextKit.createGame, 'function');
+});
+
+test('听声点：LISTEN 返回回声指令（纯听觉，不进库存）；未知 id 安全', () => {
+  const g = createGame(content, ch2Profile);
+  const out = gameEvent(g, 'LISTEN', 'stone');
+  assert.ok(out.some(i => i.t === 'echo' && i.say === 'Stone.'));
+  assert.ok(!out.some(i => i.t === 'bank' || i.t === 'drop'));    // 不掉石、不进库存
+  assert.deepEqual(gameEvent(g, 'LISTEN', 'nope'), []);
+});
+
+test('听声点内容：每个音素都有载词（回声条能念）', () => {
+  for (const spot of content.listening) {
+    for (const ipa of spot.echo) assert.ok(content.carriers[ipa] || content.phonemeBook.carriers[ipa], `${spot.id} 缺载词 ${ipa}`);
+  }
+});
+
+test('听声点是实体物件：findE 认得，按 E 走 LISTEN（非走过即响）', () => {
+  const g = createGame(content, ch2Profile);
+  const ran = [];
+  const w = { game: g, content, player: { x: 780, y: 620 }, geo: content.geometry, stones: [], run: ins => ran.push(...ins) };
+  const t = kit.findE(w);
+  assert.equal(t.id, 'stone');
+  kit.onE(w, t);
+  assert.ok(ran.some(i => i.t === 'echo' && i.say === 'Stone.'));
 });

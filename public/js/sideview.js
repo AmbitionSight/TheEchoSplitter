@@ -75,9 +75,28 @@ export function stepSideStone(s, dt, groundY) {
 // 落点自边界内侧向左散开，保证全部落在可达地面上（第二关边界=裂口左缘，第三关=墙左缘）
 export function planDropStones(wordDef, inv, dropXY, edgeX) {
   const ax = Math.min(dropXY[0], edgeX - 90);
-  return wordDef.phonemes.map(([ipa]) => ipa)
+  return wordDef.phonemes.map(([ipa]) => ipa).concat(wordDef.decoys || [])   // decoys：学过的干扰音，一并掉落
     .filter(ipa => stoneCount(inv, ipa) === 0)
     .map((ipa, i) => ({ ipa, x: ax - i * 46 }));
+}
+
+// 听声点浮标：一枚脉动的青点（走近更亮），提示"这里有声音"（第二关起）
+export function drawListenSpots(x, w) {
+  const spots = w.content?.listening;
+  if (!spots) return;
+  const t = w.view.t, px = w.player.x;
+  for (const spot of spots) {
+    const near = Math.abs(px - spot.x) < spot.r;
+    const pulse = 0.5 + Math.sin(t * 2.2 + spot.x * 0.03) * 0.5;
+    const a = (near ? 0.45 : 0.18) * (0.6 + pulse * 0.4);
+    const g = x.createRadialGradient(spot.x, spot.y, 2, spot.x, spot.y, 30 + pulse * 10);
+    g.addColorStop(0, `rgba(84,224,200,${a})`);
+    g.addColorStop(1, 'rgba(84,224,200,0)');
+    x.fillStyle = g;
+    x.beginPath(); x.arc(spot.x, spot.y, 40, 0, 7); x.fill();
+    x.fillStyle = `rgba(233,228,213,${0.30 + pulse * 0.35})`;
+    x.beginPath(); x.arc(spot.x, spot.y, 3, 0, 7); x.fill();
+  }
 }
 
 // —— 通用渲染 ——

@@ -26,6 +26,7 @@
           80
         ]
       ],
+      "decoys": ["h", "m"],
       "use": {
         "target": "rope",
         "effect": "mendRope",
@@ -47,6 +48,11 @@
       ]
     }
   },
+  "listening": [
+    { "id": "warm",  "x": 90,  "y": 180, "r": 90, "auto": true, "echo": ["w","ɔː","m"], "say": "Warm." },
+    { "id": "stone", "x": 780, "y": 300, "r": 70, "echo": ["s","t","əʊ","n"], "say": "Stone." },
+    { "id": "high",  "x": 920, "y": 120, "r": 60, "echo": ["h","aɪ"], "say": "High." }
+  ],
   "carriers": {
     "r": "Err.",
     "əʊ": "Oh.",
