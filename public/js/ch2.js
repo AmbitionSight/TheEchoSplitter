@@ -97,11 +97,11 @@ export function jumpDebug(g, beat) {
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawMossyWall } from './sideview.js';
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette } from './sideview.js';
 import { PAL } from './art.js';
-import { tile } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
-import { rng } from './scene.js';
+import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
+import { paintMasonry, paintSlabs, shade } from './masonry.js';
 
 export const kit = {
   chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
@@ -227,8 +227,8 @@ export const kit = {
     gg.addColorStop(0, '#05060a'); gg.addColorStop(1, '#000');
     x.fillStyle = gg; x.fillRect(geo.chasmL, geo.groundY, geo.chasmR - geo.chasmL, 220);
     // 断口两侧：苔藓巨石断崖
-    drawCliffCluster(x, w.atlases, geo.chasmL, +1, geo.groundY, 71);
-    drawCliffCluster(x, w.atlases, geo.chasmR, -1, geo.groundY, 72);
+    drawCliffCluster(x, geo.chasmL, +1, geo.groundY, 71);
+    drawCliffCluster(x, geo.chasmR, -1, geo.groundY, 72);
     x.fillStyle = 'rgba(90,100,120,.14)';
     for (const m of v.mist) {
       const span = geo.chasmR - geo.chasmL;
@@ -246,6 +246,9 @@ export const kit = {
     x.restore();
     for (const s of w.stones) drawSideStone(x, s, v.t);
     drawFX(w, x);
+    // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
+    x.fillStyle = 'rgba(16,18,36,.30)';
+    x.fillRect(0, 0, SIDE.W, SIDE.H);
     drawEHint(x, eTarget, v.t);
     vignette(x);
   }
@@ -253,8 +256,7 @@ export const kit = {
 
 // —— 裂口断崖：大块苔藓巨石参差咬合（顶面受光、底面没入深渊）+ 路面裂缝 + 碎石 ——
 // dir=+1：左路肩（石块伸向裂口右方）；dir=-1：右路肩（伸向左方）
-const CLIFF_TEX = { wallClean: [1104, 1128], wallMoss: [814, 818], wallHalfMoss: [1128, 1142] };
-function drawCliffCluster(x, imgs, ex, dir, gy, seed) {
+function drawCliffCluster(x, ex, dir, gy, seed) {
   const r = rng(seed);
   x.fillStyle = 'rgba(0,0,0,.32)';                         // 巨石压在路缘的接触阴影
   x.beginPath(); x.ellipse(ex + dir * 6, gy + 7, 34, 6, 0, 0, 7); x.fill();
@@ -280,23 +282,12 @@ function drawCliffCluster(x, imgs, ex, dir, gy, seed) {
     x.closePath();
     x.save();
     x.clip();
-    const sw = Math.round(rk.w * 3.2), shh = Math.round(rk.h * 3.2);
-    if (imgs?.wallClean) {                                 // 石块本体：墙体同材质
-      const [W0, H0] = CLIFF_TEX.wallClean;
-      const sx0 = Math.round(r() * (W0 - sw)), sy0 = Math.round(r() * (H0 - shh));
-      x.drawImage(imgs.wallClean, sx0, sy0, sw, shh, cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h + 16);
-    } else {
-      x.fillStyle = PAL.stoneD;
-      x.fillRect(cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h + 16);
-    }
-    if (imgs?.wallMoss && rk.moss > 0) {                   // 顶面苔藓盖头（两块错位补丁打散直缝）
-      const [W1, H1] = CLIFF_TEX.wallMoss;
-      const mw = Math.round(rk.w * 2.6), mh = Math.round(rk.h * 1.4);
-      for (const [hFrac, aFrac, oyF] of [[0.5, rk.moss, -4], [0.36, rk.moss * 0.65, rk.h * 0.36]]) {
-        x.globalAlpha = aFrac;
-        const mx0 = Math.round(r() * (W1 - mw)), my0 = Math.round(r() * (H1 - mh));
-        x.drawImage(imgs.wallMoss, mx0, my0, mw, mh, cx - rx - 8, cy - ry - 8 + oyF, rk.w + 16, rk.h * hFrac + 8);
-      }
+    x.fillStyle = shade('#7b7669', -0.08 + rk.moss * 0.05);   // 石块本体：砌石同族石色
+    x.fillRect(cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h + 16);
+    if (rk.moss > 0) {                                        // 顶面苔藓盖头（去饱和绿，与砌石苔藓同族）
+      x.globalAlpha = 0.55 * rk.moss;
+      x.fillStyle = '#446355';
+      x.fillRect(cx - rx - 8, cy - ry - 8, rk.w + 16, rk.h * 0.5 + 8);
       x.globalAlpha = 1;
     }
     const sh = x.createLinearGradient(0, cy - ry - 8, 0, cy + ry + 8);   // 顶受光、底没入深渊
@@ -337,30 +328,34 @@ function makeBg(w) {
   c.width = SIDE.W; c.height = SIDE.H;
   const x = c.getContext('2d');
   x.imageSmoothingEnabled = false;
-  // 墙：第一关同款青苔墙砖随机拼接 + 顶部渐暗
-  drawMossyWall(x, w.atlases, SIDE.W, geo.groundY - 16, 23);
-  const wsh = x.createLinearGradient(0, 0, 0, geo.groundY - 16);
-  wsh.addColorStop(0, 'rgba(10,12,20,.42)'); wsh.addColorStop(0.6, 'rgba(10,12,20,0)');
-  x.fillStyle = wsh; x.fillRect(0, 0, SIDE.W, geo.groundY - 16);
-  // 墙脚踢脚线（裂缝两侧断开）
-  tile(x, w.atlases, 'wall_base', 0, geo.groundY - 16, geo.chasmL, 16);
-  tile(x, w.atlases, 'wall_base', geo.chasmR, geo.groundY - 16, SIDE.W - geo.chasmR, 16);
-  // 地面（裂缝两侧）：第一关同款砖石地砖 + 顶缘亮线 + 下部压暗
-  tile(x, w.atlases, 'floor_brick', 0, geo.groundY, geo.chasmL, 130, 0.25);
-  tile(x, w.atlases, 'floor_brick', geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130, 0.25);
-  x.fillStyle = 'rgba(255,236,200,.09)';
+  const wallH = geo.groundY - 16;                              // 墙带高
+  // 墙：程序生成像素砌石（seed 23），与第一关同源；替退役的照片苔墙
+  paintMasonry(x, masonryPlan(23, SIDE.W, wallH), SIDE.W, wallH);
+  // 石质基座带（墙脚踢脚线，裂缝两侧断开）
+  for (const [bx, bw] of [[0, geo.chasmL], [geo.chasmR, SIDE.W - geo.chasmR]]) {
+    x.fillStyle = '#5d5a52'; x.fillRect(bx, wallH, bw, 16);
+    x.fillStyle = '#7b7669'; x.fillRect(bx, wallH, bw, 4);
+    x.fillStyle = '#3a3833'; x.fillRect(bx, wallH + 12, bw, 4);
+  }
+  // 地：大块凿石板（seed 31），裂缝两侧断开
+  const floorH = SIDE.H - geo.groundY;
+  const slabRows = slabPlan(31, SIDE.W, geo.groundY, floorH);
+  for (const [bx, bw] of [[0, geo.chasmL], [geo.chasmR, SIDE.W - geo.chasmR]]) {
+    x.save(); x.beginPath(); x.rect(bx, geo.groundY, bw, floorH); x.clip();
+    paintSlabs(x, slabRows, SIDE.W, geo.groundY, floorH);
+    x.restore();
+  }
+  x.fillStyle = 'rgba(255,236,200,.09)';                       // 地面顶缘亮线（裂缝两侧）
   x.fillRect(0, geo.groundY, geo.chasmL, 2); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 2);
   // 墙脚落地阴影（压住墙/地交界）
   const fsh = x.createLinearGradient(0, geo.groundY - 8, 0, geo.groundY + 36);
   fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
   x.fillStyle = fsh; x.fillRect(0, geo.groundY - 8, SIDE.W, 44);
-  const gsh = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 130);
+  const gsh = x.createLinearGradient(0, geo.groundY, 0, geo.groundY + 130);   // 地面下部压暗
   gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.42)');
   x.fillStyle = gsh;
   x.fillRect(0, geo.groundY, geo.chasmL, 130); x.fillRect(geo.chasmR, geo.groundY, SIDE.W - geo.chasmR, 130);
-  // 黄昏底色：与第一关同一层压暗，统一氛围
-  x.fillStyle = 'rgba(16,18,36,.30)';
-  x.fillRect(0, 0, SIDE.W, SIDE.H);
+  // 黄昏级色不再烘焙进背景：改到 draw() 角色之后统一压暗（与第一关同法）
   return c;
 }
 

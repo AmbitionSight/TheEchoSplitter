@@ -1,5 +1,6 @@
 // —— 析声者 · 第一关渲染层：自 scene.js 渲染段原样迁入（预渲染/上色/场景对象/遮罩）——
 import { LAYOUT, rng, clamp, WALL_SEAM, LIGHTS, masonryPlan, slabPlan } from './planners.js';
+import { shade, paintMasonry, paintSlabs } from '../masonry.js';
 
 // ================= 渲染层（DOM 只在函数内） =================
 import { PAL, drawRune } from '../art.js';
@@ -9,75 +10,11 @@ function thick(ctx, w = 5, color = PAL.ink) {
   ctx.lineWidth = w; ctx.strokeStyle = color; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 }
 
-// 十六进制色明度微调（每砖扰动用）
-function shade(hex, f) {
-  const n = parseInt(hex.slice(1), 16);
-  const cl = v => Math.max(0, Math.min(255, Math.round(v)));
-  const r0 = cl(((n >> 16) & 255) * (1 + f)), g0 = cl(((n >> 8) & 255) * (1 + f)), b0 = cl((n & 255) * (1 + f));
-  return `rgb(${r0},${g0},${b0})`;
-}
-
 // 合成台石槽中心（v2.1：上移避开底部工具栏；拿石时由动态层点亮）
 export const BENCH_SOCKETS = [[592, 485], [624, 485], [656, 485], [688, 485]];
 
 // —— 像素砌石上色（照 masonryPlan 单上色；拜耳抖动与暗海同一套像素语言，设计稿 §1/§3）——
-const BAYER = [[0, 2], [3, 1]];
-function drawMasonry(x, rows) {
-  x.fillStyle = '#26232b';                                    // 灰浆底
-  x.fillRect(0, 0, LAYOUT.W, WALL_SEAM.face);
-  for (const row of rows) for (const b of row.blocks) {
-    const base = '#7b7669';
-    x.fillStyle = shade(base, b.t - 1);          x.fillRect(b.x + 2, b.y + 2, b.w - 4, 38);
-    x.fillStyle = shade(base, b.t - 1 + 0.16);   x.fillRect(b.x + 2, b.y + 2, b.w - 4, 2); x.fillRect(b.x + 2, b.y + 2, 2, 36);   // 上/左受光
-    x.fillStyle = shade(base, b.t - 1 - 0.22);   x.fillRect(b.x + 2, b.y + 38, b.w - 4, 2); x.fillRect(b.x + b.w - 4, b.y + 4, 2, 36); // 下/右沉影
-    if (b.crack) {                                             // 斜裂一道
-      x.strokeStyle = 'rgba(30,28,34,.55)'; x.lineWidth = 2; x.lineCap = 'round';
-      x.beginPath();
-      x.moveTo(b.x + b.w * 0.3, b.y + 6);
-      x.lineTo(b.x + b.w * 0.45, b.y + 18);
-      x.lineTo(b.x + b.w * 0.38, b.y + 34);
-      x.stroke();
-    }
-    if (b.moss > 0) {                                          // 苔藓：下缘向上抖动生长
-      const mh = Math.round(8 + b.moss * 14);
-      for (let k = 0; k < mh; k += 2) {
-        const dens = b.moss * (1 - k / mh) * 0.95;
-        for (let px = b.x + 3; px < b.x + b.w - 3; px += 2) {
-          const th = BAYER[((px / 2) | 0) & 1][(((b.y + 38 - k) / 2) | 0) & 1] / 4;   // &1 对负 x 也恒为 0/1
-          if (dens * (0.3 + th * 0.9) > 0.30) {
-            x.fillStyle = (k < 4 && th > 0.4) ? '#35523f' : '#446355';
-            x.fillRect(px, b.y + 38 - k, 2, 2);
-          }
-        }
-      }
-    }
-  }
-  const wsh = x.createLinearGradient(0, 0, 0, WALL_SEAM.face);   // 顶暗（保留原气氛）
-  wsh.addColorStop(0, 'rgba(10,12,20,.42)'); wsh.addColorStop(0.6, 'rgba(10,12,20,0)');
-  x.fillStyle = wsh; x.fillRect(0, 0, LAYOUT.W, WALL_SEAM.face);
-}
-
-// —— 大石板上色（照 slabPlan 单上色，设计稿 §2）——
-function drawSlabs(x, rows) {
-  x.fillStyle = '#211f26';                                    // 板缝底
-  x.fillRect(0, WALL_SEAM.base, LAYOUT.W, LAYOUT.H - WALL_SEAM.base);
-  for (const row of rows) for (const s of row.blocks) {
-    const base = '#6b675c';
-    x.fillStyle = shade(base, s.t - 1);         x.fillRect(s.x + 3, s.y + 3, s.w - 6, s.h - 6);
-    x.fillStyle = shade(base, s.t - 1 + 0.13);  x.fillRect(s.x + 3, s.y + 3, s.w - 6, 4);   // 顶缘受光
-    x.fillStyle = shade(base, s.t - 1 - 0.2);   x.fillRect(s.x + 3, s.y + s.h - 7, s.w - 6, 4); // 底缘沉影
-    if (s.crack) {
-      x.strokeStyle = 'rgba(30,28,34,.5)'; x.lineWidth = 3; x.lineCap = 'round';
-      x.beginPath();
-      let cx = s.x + 20 + (s.w - 40) * 0.3, cy = s.y + 12; x.moveTo(cx, cy);
-      while (cy < s.y + s.h - 12) { cx += 10 - ((cx * 7) % 20); cy += 14; x.lineTo(cx, cy); }
-      x.stroke();
-    }
-  }
-  const fsh = x.createLinearGradient(0, WALL_SEAM.face + 8, 0, WALL_SEAM.foot);   // 墙脚落地阴影
-  fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
-  x.fillStyle = fsh; x.fillRect(0, WALL_SEAM.face + 8, LAYOUT.W, WALL_SEAM.foot - WALL_SEAM.face - 8);
-}
+// 材质上色已抽到 ../masonry.js（与第二关同源）：paintMasonry / paintSlabs。
 
 export function prerenderStatic(atlases) {
   const c = document.createElement('canvas');
@@ -85,12 +22,15 @@ export function prerenderStatic(atlases) {
   const x = c.getContext('2d');
   x.imageSmoothingEnabled = false;
   // —— 墙：像素砌石（石匠生成器，seed 23）+ 石质基座带，替代照片苔墙与白踢脚（设计稿 §1）——
-  drawMasonry(x, masonryPlan(23, LAYOUT.W, WALL_SEAM.face));
+  paintMasonry(x, masonryPlan(23, LAYOUT.W, WALL_SEAM.face), LAYOUT.W, WALL_SEAM.face);
   x.fillStyle = '#5d5a52'; x.fillRect(0, WALL_SEAM.face, LAYOUT.W, WALL_SEAM.base - WALL_SEAM.face);
   x.fillStyle = '#7b7669'; x.fillRect(0, WALL_SEAM.face, LAYOUT.W, 4);
   x.fillStyle = '#3a3833'; x.fillRect(0, WALL_SEAM.base - 4, LAYOUT.W, 4);
   // —— 地：大块凿石板（seed 31），板缝少而大，音素石最跳（设计稿 §2）——
-  drawSlabs(x, slabPlan(31, LAYOUT.W, WALL_SEAM.base, LAYOUT.H - WALL_SEAM.base));
+  paintSlabs(x, slabPlan(31, LAYOUT.W, WALL_SEAM.base, LAYOUT.H - WALL_SEAM.base), LAYOUT.W, WALL_SEAM.base, LAYOUT.H - WALL_SEAM.base);
+  const fsh = x.createLinearGradient(0, WALL_SEAM.face + 8, 0, WALL_SEAM.foot);   // 墙脚落地阴影
+  fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = fsh; x.fillRect(0, WALL_SEAM.face + 8, LAYOUT.W, WALL_SEAM.foot - WALL_SEAM.face - 8);
   // —— 月窗：MI 木框窗 + 玻璃区里画夜空/月亮/星星（窗 50x40，两格玻璃）——
   const WX = 305, WY = 140;
   blit(x, atlases, 'window', WX, WY);

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, ropeDebug, startGame } from '../public/js/ch2b.js';
+import { createGame, gameEvent, ropeDebug, startGame, kit } from '../public/js/ch2b.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { moveSide, planDropStones } from '../public/js/sideview.js';
@@ -103,4 +103,12 @@ test('ropeDebug：mended 拍状态正确', () => {
   ropeDebug(g, 'mended');
   assert.ok(g.inv.items.has('rope'));
   assert.equal(g.mended, true);
+});
+
+test('无缝交接：崖壁走到尽头声明后继为第三间房（暗河），且可动态载入其 kit', async () => {
+  assert.equal(kit.next?.chapter, 3);
+  assert.equal(typeof kit.next.load, 'function');
+  const nextKit = await kit.next.load();          // 真实动态导入，守住 ch3.js 必须导出 kit
+  assert.equal(nextKit.chapter, 3);
+  assert.equal(typeof nextKit.createGame, 'function');
 });

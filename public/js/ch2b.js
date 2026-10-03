@@ -91,17 +91,22 @@ export function ropeDebug(g, beat) {
 
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
-import { SIDE, shade, moveSide, sideJump,
-         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawMossyWall } from './sideview.js';
-import { PAL, drawRune } from './art.js';
-import { blit, tile, SPR } from './sprites.js';
+import { SIDE, moveSide, sideJump,
+         drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide } from './sideview.js';
+import { PAL } from './art.js';
+import { blit, SPR } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
-import { screenToLogical } from './scene.js';
+import { screenToLogical } from './ch1/physics.js';
+import { masonryPlan, slabPlan } from './ch1/planners.js';
+import { paintMasonry, paintSlabs } from './masonry.js';
 
 export const kit = {
   chapter: 2, contentId: '2b', W: SIDE.W, H: SIDE.H, titleRune: 'ᚱ',
 
   createGame, startGame, gameEvent, debug: ropeDebug,
+
+  // 崖壁走到尽头：无缝交接进入第三间房（暗河）——壳读 kit.next
+  next: { chapter: 3, page: 'chapter3.html', load: () => import('./ch3.js').then(m => m.kit) },
 
   voices: v => ({
     child: { voice: v.child, pitch: 1.25, rate: 1, rateSlow: 0.8 },
@@ -271,6 +276,9 @@ export const kit = {
       x.beginPath(); x.arc(pf.x, pf.y - 6, pf.r, 0, 7); x.fill();
     }
     x.globalAlpha = 1;
+    // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
+    x.fillStyle = 'rgba(16,18,36,.30)';
+    x.fillRect(0, 0, SIDE.W, SIDE.H);
     drawEHint(x, eTarget, v.t);
     vignette(x);
   }
@@ -282,17 +290,15 @@ function makeBg(w) {
   c.width = SIDE.W; c.height = SIDE.H;
   const x = c.getContext('2d');
   x.imageSmoothingEnabled = false;
-  // 全墙：一二关同款青苔墙砖（整面都是墙）
-  drawMossyWall(x, w.atlases, SIDE.W, SIDE.H, 23);
-  const wsh = x.createLinearGradient(0, 0, 0, 340);
-  wsh.addColorStop(0, 'rgba(10,12,20,.42)'); wsh.addColorStop(0.6, 'rgba(10,12,20,0)');
-  x.fillStyle = wsh; x.fillRect(0, 0, SIDE.W, 340);
+  // 全墙：程序生成像素砌石（seed 23），与第一关同源；替退役的照片苔墙
+  paintMasonry(x, masonryPlan(23, SIDE.W, geo.groundY), SIDE.W, geo.groundY);
   // 窗沿（塔顶平台沿）
   drawFloorSide(x, w.atlases, geo.wallX, geo.topY - 14, geo.wallW, 16);
   x.fillStyle = 'rgba(255,236,200,.10)';
   x.fillRect(geo.wallX, geo.topY - 14, geo.wallW, 2);
-  // 地面：一二关同款砖石地砖
-  tile(x, w.atlases, 'floor_brick', 0, geo.groundY, SIDE.W, SIDE.H - geo.groundY, 0.25);
+  // 地：大块凿石板（seed 31）
+  const floorH = SIDE.H - geo.groundY;
+  paintSlabs(x, slabPlan(31, SIDE.W, geo.groundY, floorH), SIDE.W, geo.groundY, floorH);
   x.fillStyle = 'rgba(255,236,200,.09)'; x.fillRect(0, geo.groundY, SIDE.W, 2);
   const fsh = x.createLinearGradient(0, geo.groundY - 8, 0, geo.groundY + 36);
   fsh.addColorStop(0, 'rgba(0,0,0,.30)'); fsh.addColorStop(1, 'rgba(0,0,0,0)');
@@ -300,9 +306,7 @@ function makeBg(w) {
   const gsh = x.createLinearGradient(0, geo.groundY, 0, SIDE.H);
   gsh.addColorStop(0, 'rgba(0,0,0,0)'); gsh.addColorStop(1, 'rgba(0,0,0,.40)');
   x.fillStyle = gsh; x.fillRect(0, geo.groundY, SIDE.W, SIDE.H - geo.groundY);
-  // 黄昏底色：与一二关统一
-  x.fillStyle = 'rgba(16,18,36,.30)';
-  x.fillRect(0, 0, SIDE.W, SIDE.H);
+  // 黄昏级色不再烘焙进背景：改到 draw() 角色之后统一压暗
   return c;
 }
 
