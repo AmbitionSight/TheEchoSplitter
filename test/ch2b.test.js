@@ -106,6 +106,32 @@ test('ropeDebug：mended 拍状态正确', () => {
   assert.equal(g.mended, true);
 });
 
+test('调试拍名：§3.6 总表正名逐拍可 G.jump（rope-first/craft-rope/mend-rope/climb/top/window/summary/listen-*）', () => {
+  const mk = () => {
+    const g = createGame(content, ch2Profile);
+    seedMemory(g.inv, addStone, ch2Profile.everPicked);        // əʊ/p 记忆石（同真实开局）
+    return g;
+  };
+  // 正名与旧别名（drop/crafted/mended）等价（规格 §3.6）
+  assert.ok(ropeDebug(mk(), 'rope-first').some(i => i.t === 'drop' && i.word === 'rope'), 'rope-first → 掉石');
+  assert.ok(ropeDebug(mk(), 'craft-rope').some(i => i.t === 'revealCard' && i.word === 'rope'), 'craft-rope → 揭示卡');
+  const gm = mk(); ropeDebug(gm, 'mend-rope'); assert.equal(gm.mended, true, 'mend-rope → 接绳');
+  const gc = mk(); ropeDebug(gc, 'climb'); assert.equal(gc.mended, true, 'climb → 先接绳再起爬');
+  const gt = mk(); ropeDebug(gt, 'top'); assert.equal(gt.climbed, true, 'top → 登顶');
+  const gw = mk(); assert.ok(ropeDebug(gw, 'window').some(i => i.t === 'windowExit'), 'window → 推窗');
+  // summary：全链推进 → 结算指令（章末卡由 shell 的 finish() 出，规格 §3.3 拍 11）
+  const gs = mk();
+  const out = ropeDebug(gs, 'summary');
+  assert.ok(out.some(i => i.t === 'summary'), 'summary → 结算指令');
+  assert.equal(gs.exited, true);
+  assert.equal(gs.beat, 'summary');
+  // listen-*：三个听声点拍可直接跳
+  for (const id of ['warm', 'stone', 'high']) {
+    const g = mk();
+    assert.ok(ropeDebug(g, 'listen-' + id).some(i => i.t === 'echo'), `listen-${id} → 回声`);
+  }
+});
+
 test('无缝交接：崖壁走到尽头声明后继为第三章（暗河），且可动态载入其 kit', async () => {
   assert.equal(kit.next?.chapter, 3);
   assert.equal(kit.next?.label, '第三章');              // veil 文案（规格 §11）
@@ -278,6 +304,20 @@ test('2b 绘制冒烟：makeBg（含全部新陈设）+ draw 三态不抛（模�
   assert.doesNotThrow(() => kit.draw(w, x, { kind: 'obj', id: 'rope', x: 912, y: 620 }), '修复态 draw');
   w.player.climbing = true; w.player.y = 300;
   assert.doesNotThrow(() => kit.draw(w, x, null), '攀爬态 draw');
+});
+
+test('2b 浮尘：22 粒、rng(99) 确定布局、tick 步进且 y<160 回 700（规格 §6.4）', async () => {
+  const { w } = stageWorld();
+  assert.equal(w.view.dust.length, 22, '2b 浮尘 22 粒（≥16，规格 §14）');
+  const snapshot = w.view.dust.map(d => [d.x, d.y]);
+  const w2 = kit.makeWorld({ content, profile: ch2Profile, game: createGame(content, ch2Profile), cv: w.cv, signal: undefined });
+  assert.deepEqual(w2.view.dust.map(d => [d.x, d.y]), snapshot, 'rng(99) 布局确定');
+  for (let i = 0; i < 60; i++) kit.tick(w, 0.05);                  // 3s
+  assert.ok(w.view.dust.some((d, i) => Math.abs(d.y - snapshot[i][1]) > 1), '浮尘在动态层步进');
+  for (const d of w.view.dust) assert.ok(d.y >= 160, 'y<160 回 700（不落地面）');
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  assert.match(src, /makeDust\(22, 99\)/, '源码：22 粒、rng(99) 确定布局');
+  assert.match(src, /drawDust\(x, v\.dust, v\.t, L\)/, '源码：池内暖金 / 池外冷灰（读 LIGHTS2）');
 });
 
 // ================= Task 16：2b 演出与音频（规格 §3.3 / §7） =================

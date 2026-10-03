@@ -102,6 +102,44 @@ test('jumpDebug：crafted/unlocked 拍状态正确', () => {
   assert.equal(g.jumpUnlocked, true);
 });
 
+test('调试拍名：§3.6 总表正名逐拍可 G.jump（chasm-try/craft-jump/use-jump/fell/exit-2a/listen-*）', () => {
+  const mk = () => {
+    const g = createGame(content, ch1Profile);
+    seedMemory(g.inv, addStone, ch1Profile.everPicked);        // p 记忆石（同真实开局）
+    return g;
+  };
+  // 正名 chasm-try 与旧别名 drop 等价
+  for (const b of ['chasm-try', 'drop']) {
+    const g = mk();
+    assert.ok(jumpDebug(g, b).some(i => i.t === 'drop' && i.word === 'jump'), `${b} → 掉石`);
+    assert.equal(g.attempted, true, `${b} → chasm-try 状态`);
+  }
+  // 正名 craft-jump 与旧别名 crafted 等价（+0.9s 揭示卡 = reveal-jump 拍）
+  for (const b of ['craft-jump', 'crafted']) {
+    const g = mk();
+    assert.ok(jumpDebug(g, b).some(i => i.t === 'revealCard' && i.word === 'jump'), `${b} → 揭示卡`);
+    assert.ok(g.book.has('jump'), `${b} → 合成成功`);
+  }
+  // use-jump / unlocked：同一条路（解锁跳跃）
+  for (const b of ['use-jump', 'unlocked']) {
+    const g = mk();
+    jumpDebug(g, b);
+    assert.equal(g.jumpUnlocked, true, `${b} → 解锁跳跃`);
+  }
+  // fell：坠落演出（wind + thud + 崖缘滑回由 runExtras.fell 给）
+  const gf = mk();
+  assert.ok(jumpDebug(gf, 'fell').some(i => i.t === 'fell'), 'fell → 坠落演出');
+  // exit-2a：位置依赖拍 → 传送到出口（规格 §3.5）
+  const ge = mk();
+  assert.deepEqual(jumpDebug(ge, 'exit-2a'),
+    [{ t: 'teleport', x: content.geometry.exitX, y: content.geometry.groundY }], 'exit-2a → 传送出口');
+  // listen-*：三个听声点拍可直接跳
+  for (const id of ['warm', 'fall', 'shine']) {
+    const g = mk();
+    assert.ok(jumpDebug(g, 'listen-' + id).some(i => i.t === 'echo'), `listen-${id} → 回声`);
+  }
+});
+
 test('无缝交接：裂谷声明后继为崖壁（第二章后半），且可动态载入其 kit', async () => {
   assert.equal(kit.next?.chapter, 2);
   assert.equal(kit.next?.label, '第二章 · 崖壁');       // veil 文案（规格 §11）

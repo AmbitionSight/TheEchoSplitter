@@ -96,19 +96,27 @@ export function gameEvent(g, ev, arg = null) {
 
 export function jumpDebug(g, beat) {
   switch (beat) {
-    case 'drop': return gameEvent(g, 'CHASM');
-    case 'crafted': {
-      let out = jumpDebug(g, 'drop');
+    case 'chasm-try': case 'drop': return gameEvent(g, 'CHASM');   // 拍名总表正名 + 旧调试名别名（规格 §3.6）
+    case 'craft-jump': case 'crafted': {
+      let out = jumpDebug(g, 'chasm-try');
       for (const [ipa] of g.content.words.jump.phonemes) {
         out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
       }
-      return out.concat(gameEvent(g, 'CRAFT', 'jump'));
+      return out.concat(gameEvent(g, 'CRAFT', 'jump'));            // 成功后 +0.9s 揭示卡（reveal-jump 随此拍）
     }
-    case 'unlocked': return jumpDebug(g, 'crafted').concat(gameEvent(g, 'USE', { word: 'jump', target: 'player' }));
+    case 'use-jump': case 'unlocked':
+      return jumpDebug(g, 'craft-jump').concat(gameEvent(g, 'USE', { word: 'jump', target: 'player' }));
     case 'crossed': {                                            // 位置依赖拍：先传送到对岸再演出（runExtras.teleport，规格 §3.5）
       const geo = g.content.geometry;
       return [{ t: 'teleport', x: geo.chasmR + 20, y: geo.groundY }, ...gameEvent(g, 'CROSS')];
     }
+    case 'fell': return gameEvent(g, 'FELL');                    // 坠谷拍：wind + thud + 崖缘滑回（规格 §3.2）
+    case 'exit-2a': {                                            // 位置依赖拍：传送到出口（crossed 后由 tick 的 EXIT 判定自然收章）
+      const geo = g.content.geometry;
+      return [{ t: 'teleport', x: geo.exitX, y: geo.groundY }];
+    }
+    case 'listen-warm': case 'listen-fall': case 'listen-shine':
+      return gameEvent(g, 'LISTEN', beat.slice(7));              // 听声点拍（规格 §3.6）
     default: return [];
   }
 }

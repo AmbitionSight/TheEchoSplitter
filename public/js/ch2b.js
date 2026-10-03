@@ -107,6 +107,9 @@ export function ropeDebug(g, beat) {
       return ropeDebug(g, 'mend-rope').concat([{ t: 'teleport', x: geo.wallX + 35, y: geo.topY }, gameEvent(g, 'CLIMBED')]);
     }
     case 'window': return ropeDebug(g, 'top').concat([{ t: 'windowExit' }]);     // 位置依赖拍：窗边推窗
+    case 'summary': return ropeDebug(g, 'window').concat(gameEvent(g, 'EXIT'));  // 章末：全链推进 → 结算卡（规格 §3.3 拍 11）
+    case 'listen-warm': case 'listen-stone': case 'listen-high':
+      return gameEvent(g, 'LISTEN', beat.slice(7));                              // 听声点拍（规格 §3.6）
     default: return [];
   }
 }
@@ -115,7 +118,7 @@ export function ropeDebug(g, beat) {
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump, stepWalkTo, AMBIENT,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots,
-         drawArchSide, groundShadow, benchCandle } from './sideview.js';
+         drawArchSide, groundShadow, benchCandle, makeDust, stepDust, drawDust } from './sideview.js';
 import { PAL, drawRune, iconURL } from './art.js';
 import { blit } from './sprites.js';
 import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
@@ -223,7 +226,8 @@ export const kit = {
         swayKick: 0, tautT: 0,                                 // 断绳一摆 / 绷直一沉（Task 16）
         climbT: 0, climbStrain: 0,                             // 攀爬 strain 节律（每 0.6s，≤6 次）
         mendPuffT: 0, fibres: [],                              // 重编纤维 puff 节拍 + 断口/生长纤维粒子
-        winT: 0, motes: [], catGo: false                       // 推窗 hold 计时 / 12 风尘扑入 / 猫先钻出窗
+        winT: 0, motes: [], catGo: false,                      // 推窗 hold 计时 / 12 风尘扑入 / 猫先钻出窗
+        dust: makeDust(22, 99)                                 // 浮尘 22 粒（rng(99) 确定布局，规格 §6.4）
       },
       cfg: {
         wall: { X: geo.wallX, W: geo.wallW, topY: geo.topY, blockGround: false },  // 出口已是高窗：窗户以下墙面畅通，仅保留墙顶平台
@@ -309,6 +313,7 @@ export const kit = {
       }
     }
     stepFibres(v, dt);
+    stepDust(v.dust, dt);                                      // 浮尘：y<160 回 700（rng(99) 布局，规格 §6.4）
     // window：光柱下泄 1.4s + hold 1.8s → 自动 EXIT（结算卡；规格 §3.3 拍 10）
     if (v.winOpen && !w.game.exited) {
       v.winT += dt;
@@ -492,6 +497,7 @@ export const kit = {
     x.fillRect(0, 0, SIDE.W, SIDE.H);
     // 夜色面纱：画在级色之后、青声之前（规格 §6.2-③；四孔已按 LIGHTS2 veil 锚挖好，一次性预渲染）
     if (w.veil) x.drawImage(w.veil, 0, 0);
+    drawDust(x, v.dust, v.t, L);                           // 浮尘：池内暖金 / 池外冷灰（画在面纱之上，ch1 同序；规格 §6.4）
     drawWindowBeat(w, x);                                  // 推窗：光柱 1.4s + 台面光池 + 12 风尘（画在级色/面纱之上读作光）
     drawSillRune(x, geo.exitX, geo.topY, game.climbed, v.t);   // 窗台 ᚩ：登顶后呼吸青（规格 §5.3 符文链 ᚵ→ᚱ→ᚩ 收口）
     drawListenSpots(x, w);
