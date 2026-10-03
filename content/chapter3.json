@@ -4,63 +4,79 @@
     "titleEn": "ROOM THREE",
     "chapter": 3,
     "intro": [
-      "崖壁下面只有一条窄路。",
-      "头顶的墙上，垂着一截断掉的绳子。",
-      "上面，风的声音更大了。"
+      "地下暗河在脚边缓慢流过。",
+      "岸边有一张合成台，水面上没有桥。",
+      "更深处的声音，正在等你拼出一件东西。"
     ]
   },
   "words": {
+    "log": {
+      "icon": "log",
+      "phonemes": [["l", 100], ["ɒ", 160], ["g", 90]],
+      "use": { "target": "bank", "effect": "placeLog", "once": true }
+    },
     "rope": {
       "icon": "rope",
-      "phonemes": [
-        [
-          "r",
-          90
-        ],
-        [
-          "əʊ",
-          160
-        ],
-        [
-          "p",
-          80
-        ]
-      ],
-      "use": {
-        "target": "rope",
-        "effect": "mendRope",
-        "once": true
-      }
+      "phonemes": [["r", 90], ["əʊ", 160], ["p", 80]],
+      "use": { "target": "logs", "effect": "assembleRaft", "once": true }
+    },
+    "raft": {
+      "icon": "raft",
+      "phonemes": [["r", 90], ["æ", 150], ["f", 120], ["t", 80]],
+      "use": { "target": "player", "effect": "raftRiderUnlock", "once": true }
+    },
+    "pole": {
+      "icon": "pole",
+      "phonemes": [["p", 80], ["əʊ", 160], ["l", 100]],
+      "use": { "target": "player", "effect": "poleRiver", "once": true }
     }
   },
   "flows": {
-    "rope": {
-      "listen": [
-        "Rope."
-      ],
-      "puzzled": [
-        "Rope?"
-      ],
-      "drop": [
-        880,
-        600
-      ]
-    }
+    "log": { "listen": ["Log."], "puzzled": ["Log?"], "drop": [450, 520], "stones": ["l", "l", "ɒ", "g"] },
+    "rope": { "listen": ["Rope."], "drop": [350, 540], "stones": [] },
+    "raft": { "listen": ["Raft."], "puzzled": ["Raft?"], "drop": [820, 520], "stones": ["æ", "f", "t"] },
+    "pole": { "listen": ["Pole."], "drop": [780, 420], "stones": ["l"] }
   },
   "carriers": {
+    "l": "Light.",
+    "ɒ": "On.",
+    "g": "Go.",
     "r": "Err.",
     "əʊ": "Oh.",
-    "p": "P."
+    "p": "P.",
+    "æ": "Apple.",
+    "f": "Fish.",
+    "t": "Two."
   },
   "geometry": {
-    "wallX": 900,
-    "wallW": 110,
-    "groundY": 620,
-    "topY": 120,
-    "exitX": 980,
-    "benchX": 420,
-    "spawnX": 140
+    "groundY": 590,
+    "spawnX": 170,
+    "bank": {
+      "groundY": 590,
+      "spawnX": 170,
+      "benchX": 360,
+      "doorX": 650,
+      "waterX": 760,
+      "raftX": 880
+    },
+    "crevice": {
+      "groundY": 590,
+      "spawnX": 150,
+      "benchX": 300,
+      "logX": 590,
+      "exitX": 1120
+    },
+    "deep": {
+      "groundY": 590,
+      "spawnX": 260,
+      "benchX": 500,
+      "raftX": 360,
+      "stallX": 760,
+      "muralX": 960,
+      "exitX": 1280
+    }
   },
+  "crafting": { "slots": 4, "progressiveGlow": true },
   "phonemeBook": {
     "total": 48,
     "groups": [
@@ -79,13 +95,19 @@
     "jump":  { "icon": "jump", "phonemes": [["dʒ",90],["ʌ",80],["m",90],["p",80]] }
   },
   "hints": {
-    "start": "墙太高。点击断绳听听声音。",
-    "attempt": "点击悬挂的断绳。",
-    "carrying": "搬去桌上，按 E 放下。",
-    "craft": "拖进右下的槽，拼成一个词。",
-    "give": "点物品栏的绳圈，点击断绳把它接上。",
-    "mended": "绳子接上了。走到绳下按 E 攀爬。",
-    "top": "上去右边，到窗边按 E 推窗跳出。",
-    "end": "更深处还有风声。（未完待续）"
+    "start": "暗河挡住了去路。岸边的东西，或许能拼出一条路。",
+    "bank": "走近合成台，看看记忆里的声音够不够。",
+    "crevice": "石壁的缝隙里卡着什么。走近，按 E。",
+    "log": "原木在水边等着。把它放到滩涂上。",
+    "craftLog": "三颗声音石，能拼出原木。",
+    "craftRope": "绳子还在记忆里。把 r、əʊ、p 拼起来。",
+    "raft": "原木漂起来了。再把绳子给它。",
+    "raftListen": "木筏在低语——它还缺少一种声音。",
+    "raftReady": "木筏会动了。走到水边，按 E 登上去。",
+    "deep": "水流把你带进更深处。",
+    "stalled": "水流停了。石壁上的画，像是在说什么。",
+    "pole": "把最后的声音拼成 pole，再把它交给自己。",
+    "poled": "木篙撑住了石壁。顺流而下，别停。",
+    "end": "阳光在前面。第三间房完成了。"
   }
 }

@@ -20,9 +20,9 @@ npm start                             # start the server
 PORT=3002 npm start                   # use a different port
 ```
 
-The server listens on port `3000` by default and binds to `0.0.0.0`. `npm test` currently runs 154 tests. There is no `npm run build`, lint, or format command.
+The server listens on port `3000` by default and binds to `0.0.0.0`. `npm test` currently runs 155 tests. There is no `npm run build`, lint, or format command.
 
-For browser validation, run `npm start` and open `/` for chapter 1, `/chapter2.html` for chapter 2, `/chapter3.html` for chapter 3, or `/chapter4.html` for chapter 4. The game is designed for a browser because the visual and interaction layers depend on Canvas, DOM, speech synthesis, WebAudio, and pointer input; Node tests cover the importable logic but not the rendered experience.
+For browser validation, run `npm start` and open `/` for chapter 1, `/chapter2.html` for chapter 2 (it flows seamlessly into its cliff half, `/chapter2b.html`), or `/chapter3.html` for chapter 3. The game is designed for a browser because the visual and interaction layers depend on Canvas, DOM, speech synthesis, WebAudio, and pointer input; Node tests cover the importable logic but not the rendered experience.
 
 Useful browser/debug hooks:
 
@@ -54,21 +54,23 @@ Each HTML page selects one chapter module:
 
 - `public/index.html` loads `public/js/main.js` (chapter 1, top-down stone room).
 - `public/chapter2.html` loads `public/js/ch2.js` (chapter 2, side-view chasm).
-- `public/chapter3.html` loads `public/js/ch3.js` (chapter 3, side-view wall and rope).
-- `public/chapter4.html` loads `public/js/ch4.js` (chapter 4, side-view river journey with three rooms).
+- `public/chapter2b.html` loads `public/js/ch2b.js` (chapter 2's second half, side-view cliff and rope; normally entered seamlessly from chapter 2, but kept as a standalone page as the handoff fallback).
+- `public/chapter3.html` loads `public/js/ch3.js` (chapter 3, side-view river journey with three rooms).
 
-Chapters 1 and 4 are split into layered modules under `public/js/ch1/` and `public/js/ch4/`. The HTML-facing entries (`main.js`, `ch4.js`) are pure re-export compatibility layers, as is the internal `scene.js` import path; none hold logic, and existing import paths keep working. Chapter 1's layers are strictly one-way — `planners` is the base, `physics` and `render` build on it, and `kit` sits on top; chapter 4 has the smaller `event`/`render`/`kit` stack. In both, the event machines are pure, importing only `chapter.js` and `hotbar.js` (chapter 1's also imports the chapter-specific `door.js`). A new module must never import an entry file.
+Chapters 1 and 3 are split into layered modules under `public/js/ch1/` and `public/js/ch3/`. The HTML-facing entries (`main.js`, `ch3.js`) are pure re-export compatibility layers, as is the internal `scene.js` import path; none hold logic, and existing import paths keep working. Chapter 1's layers are strictly one-way — `planners` is the base, `physics` and `render` build on it, and `kit` sits on top; chapter 3 has the smaller `event`/`render`/`kit` stack. In both, the event machines are pure, importing only `chapter.js` and `hotbar.js` (chapter 1's also imports the chapter-specific `door.js`). A new module must never import an entry file.
 
 - `public/js/ch1/planners.js`: chapter 1 layout, deterministic `rng`, wall/light constants, and the pure masonry/slab planners.
 - `public/js/ch1/physics.js`: chapter 1 collision, screen-to-logical conversion, walk stepping, and phoneme-stone physics.
 - `public/js/ch1/render.js`: chapter 1 scene creation, per-frame update, and top-down rendering.
-- `public/js/ch1/event.js` and `public/js/ch4/event.js`: the pure, Node-testable event machine (`createGame`, `startGame`, `gameEvent`, and a debug jump function).
-- `public/js/ch1/kit.js` and `public/js/ch4/kit.js`: the browser `kit` passed to `mount()`, with chapter geometry, world creation, input handling, ticking, drawing, and mappings from event instructions to visual effects.
-- `public/js/ch4/render.js`: chapter 4 room and object drawing.
+- `public/js/ch1/event.js` and `public/js/ch3/event.js`: the pure, Node-testable event machine (`createGame`, `startGame`, `gameEvent`, and a debug jump function).
+- `public/js/ch1/kit.js` and `public/js/ch3/kit.js`: the browser `kit` passed to `mount()`, with chapter geometry, world creation, input handling, ticking, drawing, and mappings from event instructions to visual effects.
+- `public/js/ch3/render.js`: chapter 3 room and object drawing.
 
-Chapters 2 and 3 remain single-file (`ch2.js`, `ch3.js`) with the same two layers — a pure event machine and a browser kit — in one file.
+Chapter 2 is two single-file halves — `ch2.js` (chasm) and `ch2b.js` (cliff) — each with the same two layers (a pure event machine and a browser kit) in one file, joined by the seamless in-page handoff.
 
 `public/js/shell.js` is the shared runtime. It loads the chapter JSON, scales the logical canvas, initializes speech and sound, loads persistent profile data and sprite atlases, creates the shared hotbar/UI, interprets standard event instructions, handles keyboard/pointer input, runs the animation loop, and saves chapter summaries. Keep chapter-specific rules in the chapter event machine or kit rather than duplicating them in the shell.
+
+The shell can also swap chapters in place. When a kit declares `next` (chapter 2 does, pointing at its cliff half, chapter 2b), reaching the end of that chapter fades out, disposes the current shell, and boots the next kit on the same page — no reload, and the next chapter's title screen is skipped. All per-chapter listeners (shell, hotbar, UI, journal) are registered against one `AbortController` so `dispose()` removes them cleanly; the profile is saved before the swap, so the next chapter's `createGame` sees the new abilities.
 
 `public/js/chapter.js` holds the segments every chapter's event machine and kit share: the event-machine core cases (`pickupStone`, `bankHeld`, `holdItem`, `craftWord` — chapters pass only their first-pickup/craft hints) and common kit behavior (`chapterOnE` stone/bench handling, `syncHeld`, `seedBegin`, the `dropExtra`/`dropBackExtra` instruction factories, `stepWorldStones`). Chapter files keep only what is genuinely chapter-specific (USE/TICK, special targets, staging). When a shared rule changes, edit `chapter.js` once and all four chapters follow — do not re-copy event cases into a chapter file.
 
@@ -96,7 +98,7 @@ Chapter 2 and chapter 3 seed relevant phoneme stones from the profile collected 
 
 ### Testing boundary and module convention
 
-Tests live in `test/` and use `node:test` with `node:assert`. The test suite primarily exercises pure event machines, inventory/crafting, door transitions, physics/collision, content invariants, profile persistence, audio fallbacks, sprite metadata, and server responses. For the split chapters, tests import the `ch1/`/`ch4/` modules directly to lock the layer boundaries (e.g. `test/ch1-physics.test.js` imports `public/js/ch1/physics.js`), while other tests still import through the `main.js`/`scene.js`/`ch4.js` compatibility entries.
+Tests live in `test/` and use `node:test` with `node:assert`. The test suite primarily exercises pure event machines, inventory/crafting, door transitions, physics/collision, content invariants, profile persistence, audio fallbacks, sprite metadata, and server responses. For the split chapters, tests import the `ch1/`/`ch3/` modules directly to lock the layer boundaries (e.g. `test/ch1-physics.test.js` imports `public/js/ch1/physics.js`), while other tests still import through the `main.js`/`scene.js`/`ch3.js` compatibility entries.
 
 Keep browser-only global access (`document`, `window`, `localStorage`, Canvas setup, and browser APIs) inside functions or browser entry paths so modules can be imported by Node tests. Inject storage or browser-like dependencies where an existing module already supports it. When changing a chapter event instruction, update both the event-machine tests and the corresponding kit/shell handling if the instruction is not already standard.
 

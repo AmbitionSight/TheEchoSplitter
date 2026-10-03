@@ -53,7 +53,7 @@ test('content 中不含 emoji（铁律）', () => {
 });
 
 test('跨关词库 lexicon：旧章词在后续章可展示（icon+音素时长齐备，不与本章词重复）', async () => {
-  for (const n of [2, 3, 4]) {
+  for (const n of [2, '2b', 3]) {
     const c = JSON.parse(await readFile(new URL(`../content/chapter${n}.json`, import.meta.url), 'utf8'));
     for (const [w, def] of Object.entries(c.lexicon || {})) {
       assert.ok(def.icon, `ch${n}.${w} 缺 icon`);

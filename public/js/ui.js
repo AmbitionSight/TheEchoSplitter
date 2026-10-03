@@ -2,7 +2,7 @@ import { iconURL } from './art.js';
 import { CHAR_BLOCK } from './sprites.js';
 import { isVowel } from './hotbar.js';
 
-export function createUI({ content, atlases }) {
+export function createUI({ content, atlases, signal }) {
   const el = id => document.getElementById(id);
   const hint = el('hintbar'), hintText = el('hint-text'), toastEl = el('toast');
   let toastTimer = 0;
@@ -51,8 +51,8 @@ export function createUI({ content, atlases }) {
         document.removeEventListener('pointerdown', done);
         res();
       };
-      el('reveal-ok').addEventListener('click', done, { once: true });
-      setTimeout(() => { if (!settled) document.addEventListener('pointerdown', done); }, 12000); // 12s 后任意点按兜底（Task 13 评审 F；按钮仍是主路径）
+      el('reveal-ok').addEventListener('click', done, { once: true, signal });
+      setTimeout(() => { if (!settled) document.addEventListener('pointerdown', done, { signal }); }, 12000); // 12s 后任意点按兜底（Task 13 评审 F；按钮仍是主路径）
     });
   }
   function summary(g) {
@@ -61,10 +61,10 @@ export function createUI({ content, atlases }) {
       .map(w => `<img src="${iconURL(content.words[w].icon)}" alt="">`).join('');
     el('summary').classList.remove('hidden');
   }
-  el('btn-again').addEventListener('click', () => location.reload());
-  el('btn-notes').addEventListener('click', () => el('notes').classList.remove('hidden'));
-  el('notes-close').addEventListener('click', () => el('notes').classList.add('hidden'));
-  el('btn-walk').addEventListener('click', () => el('summary').classList.add('hidden'));
+  el('btn-again').addEventListener('click', () => location.reload(), { signal });
+  el('btn-notes').addEventListener('click', () => el('notes').classList.remove('hidden'), { signal });
+  el('notes-close').addEventListener('click', () => el('notes').classList.add('hidden'), { signal });
+  el('btn-walk').addEventListener('click', () => el('summary').classList.add('hidden'), { signal });
 
   // —— 左上小人面板（v2：头像 + 手持槽；有素材时用小孩精灵头像）——
   const fig = el('avatar-fig');

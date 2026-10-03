@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, jumpDebug, startGame } from '../public/js/ch2.js';
+import { createGame, gameEvent, jumpDebug, startGame, kit } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { planDropStones } from '../public/js/sideview.js';
@@ -97,4 +97,14 @@ test('jumpDebug：crafted/unlocked 拍状态正确', () => {
   jumpDebug(g, 'unlocked');
   assert.ok(g.inv.items.has('jump'));
   assert.equal(g.jumpUnlocked, true);
+});
+
+test('无缝交接：第二间房声明后继为崖壁（第二间房后半），且可动态载入其 kit', async () => {
+  assert.equal(kit.next?.chapter, 2);
+  assert.equal(typeof kit.next.load, 'function');
+  const nextKit = await kit.next.load();          // 真实动态导入，守住 ch2b.js 必须导出 kit
+  assert.equal(nextKit.chapter, 2);
+  assert.equal(nextKit.contentId, '2b');
+  assert.equal(typeof nextKit.createGame, 'function');
+  assert.equal(typeof nextKit.makeWorld, 'function');
 });

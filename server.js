@@ -15,7 +15,7 @@ export function createServer() {
   return http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');
-      const api = url.pathname.match(/^\/api\/chapter([1-9])$/);
+      const api = url.pathname.match(/^\/api\/chapter([1-9][a-z]?)$/);
       if (api) {
         const body = await readFile(join(ROOT, 'content', `chapter${api[1]}.json`));
         res.writeHead(200, { 'Content-Type': MIME['.json'], 'Cache-Control': 'no-store' });

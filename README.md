@@ -24,7 +24,7 @@
 
 没有英文字幕，没有中文翻译。碰一碰屋里的东西，声音会掉出来，结成石头。捡起来，搬到合成台上，把几块石头拼成一个词，词就变成一件道具：拼出 open 的声音，就能把这句话说给门听，门会开。
 
-一套规则贯穿全部四章：**碰，捡，拼，用。**
+一套规则贯穿全部三章：**碰，捡，拼，用。**
 
 <div align="center">
 <img src="docs/screenshots/workbench.png" alt="主角捡起四枚声音石：金色元音石与蓝色辅音石" width="480">
@@ -43,22 +43,22 @@ PORT=3002 npm start   # 换端口
 npm test              # 全部自动化测试（node --test）
 ```
 
-- 浏览器打开：`/` 是第一章，`/chapter2.html` 到 `/chapter4.html` 是后三章。
+- 浏览器打开：`/` 是第一章，`/chapter2.html` 是第二章（走到走廊尽头会无缝进入崖壁后半段），`/chapter3.html` 是第三章。
 - 评审快速通道：第一章网址加 `?autostart=1&beat=<段名>`，可直达任意教学拍——
   `bench`（合成台）、`craft`（拼词）、`door-open`（开门），三分钟走完核心闭环。
 
 ## 技术实现
 
-- **分层模块架构**：事件机 / 规划器 / 物理 / 渲染各为一层，四个章节共享同一套规则引擎：
+- **分层模块架构**：事件机 / 规划器 / 物理 / 渲染各为一层，三个章节共享同一套规则引擎：
 
 ```
 server.js        静态分发与内容装载（游戏逻辑全部在前端，教室局域网离线可跑）
 public/js/
 ├─ shell.js      入口与章节装配（?autostart / ?beat 调试通道）
 ├─ ch1/          侧视章节：event 事件机 · planners 规划器 · physics 物理 · render 渲染
-├─ ch2 / ch3 / ch4/   后三章，复用同一套事件机与 kit
+├─ ch2 / ch2b / ch3/   三章（第二章含崖壁后半段），复用同一套事件机与 kit
 └─ audio / workbench / journal …   语音队列、合成台、析声录
-content/         四章词表与关卡数据（JSON）
+content/         三章词表与关卡数据（JSON）
 test/            模块级单测 + 端到端关卡测试
 ```
 

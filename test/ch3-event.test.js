@@ -1,11 +1,11 @@
-// —— 直接单测 ch4 分层模块：event（绕过 ch4.js 兼容入口，锁死层边界）——
+// —— 直接单测 ch3 分层模块：event（绕过 ch3.js 兼容入口，锁死层边界）——
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { createGame, startGame, gameEvent, ch4Debug } from '../public/js/ch4/event.js';
+import { createGame, startGame, gameEvent, ch3Debug } from '../public/js/ch3/event.js';
 import { stoneCount } from '../public/js/hotbar.js';
 
-const content = JSON.parse(await readFile(new URL('../content/chapter4.json', import.meta.url), 'utf8'));
+const content = JSON.parse(await readFile(new URL('../content/chapter3.json', import.meta.url), 'utf8'));
 const profile = { everPicked: ['p', 'əʊ', 'r'], words: [], abilities: [], chaptersDone: [] };
 
 function collect(g, word, stones) {
@@ -20,8 +20,8 @@ function craftLog(g) {
 }
 const beatOf = out => out.find(i => i.t === 'beat')?.beat;
 
-test('ch4/event 为纯模块：直接导入可用，开局播种与 beat 确定', () => {
-  for (const fn of [createGame, startGame, gameEvent, ch4Debug]) {
+test('ch3/event 为纯模块：直接导入可用，开局播种与 beat 确定', () => {
+  for (const fn of [createGame, startGame, gameEvent, ch3Debug]) {
     assert.equal(typeof fn, 'function');
   }
   const g = createGame(content, profile);

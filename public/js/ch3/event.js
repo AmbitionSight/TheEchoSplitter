@@ -1,4 +1,4 @@
-// —— 析声者 · 第四关事件机（纯逻辑，Node 可测）：自 ch4.js 事件段原样迁入 ——
+// —— 析声者 · 第三关事件机（纯逻辑，Node 可测）：自 ch3.js 事件段原样迁入 ——
 import { createInventory, addStone } from '../hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord } from '../chapter.js';
 
@@ -220,20 +220,20 @@ function collectWord(g, word) {
   return out.concat(gameEvent(g, 'CRAFT', word));
 }
 
-export function ch4Debug(g, beat) {
+export function ch3Debug(g, beat) {
   switch (beat) {
     case 'crevice':
     case 'log':
     case 'logged':
       return gameEvent(g, 'ROOM', 'crevice').concat(gameEvent(g, 'CREVICE'));
     case 'crafted': {
-      let out = ch4Debug(g, 'logged');
+      let out = ch3Debug(g, 'logged');
       out = out.concat(collectWord(g, 'log'));
       out = out.concat(collectWord(g, 'rope'));
       return out;
     }
     case 'assembled': {
-      let out = ch4Debug(g, 'crafted');
+      let out = ch3Debug(g, 'crafted');
       out = out.concat(gameEvent(g, 'ROOM', 'bank'));
       out = out.concat(gameEvent(g, 'HOLD_ITEM', 'log'));
       out = out.concat(gameEvent(g, 'USE', { word: 'log', target: 'bank' }));
@@ -242,7 +242,7 @@ export function ch4Debug(g, beat) {
       return out;
     }
     case 'raft-unlocked': {
-      let out = ch4Debug(g, 'assembled');
+      let out = ch3Debug(g, 'assembled');
       out = out.concat(gameEvent(g, 'RAFT'));
       for (const ipa of ['æ', 'f', 't']) out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
       out = out.concat(gameEvent(g, 'CRAFT', 'raft'));
@@ -250,17 +250,17 @@ export function ch4Debug(g, beat) {
       return out;
     }
     case 'embarked':
-      return ch4Debug(g, 'raft-unlocked').concat(gameEvent(g, 'BOARD'));
+      return ch3Debug(g, 'raft-unlocked').concat(gameEvent(g, 'BOARD'));
     case 'stalled':
-      return ch4Debug(g, 'embarked').concat(gameEvent(g, 'STALL'), gameEvent(g, 'POLE'));
+      return ch3Debug(g, 'embarked').concat(gameEvent(g, 'STALL'), gameEvent(g, 'POLE'));
     case 'poled': {
-      let out = ch4Debug(g, 'stalled');
+      let out = ch3Debug(g, 'stalled');
       for (const ipa of ['p', 'əʊ', 'l']) out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
       out = out.concat(gameEvent(g, 'CRAFT', 'pole'));
       return out.concat(gameEvent(g, 'USE', { word: 'pole', target: 'player' }));
     }
     case 'summary':
-      return ch4Debug(g, 'poled').concat(gameEvent(g, 'EXIT'));
+      return ch3Debug(g, 'poled').concat(gameEvent(g, 'EXIT'));
     default:
       return [];
   }
