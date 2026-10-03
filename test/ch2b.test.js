@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil } from '../public/js/ch2b.js';
+import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil, CATB } from '../public/js/ch2b.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { moveSide, planDropStones } from '../public/js/sideview.js';
@@ -276,4 +276,177 @@ test('2b 绘制冒烟：makeBg（含全部新陈设）+ draw 三态不抛（模�
   assert.doesNotThrow(() => kit.draw(w, x, { kind: 'obj', id: 'rope', x: 912, y: 620 }), '修复态 draw');
   w.player.climbing = true; w.player.y = 300;
   assert.doesNotThrow(() => kit.draw(w, x, null), '攀爬态 draw');
+});
+
+// ================= Task 16：2b 演出与音频（规格 §3.3 / §7） =================
+
+// 模拟世界：makeWorld 骨架 + 记录指令 + 音效桩（tick 走真实逻辑，不渲染）
+function stageWorld(sounds = []) {
+  const g = createGame(content, ch2Profile);
+  const cv = { style: {}, addEventListener() {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 1280, height: 720 }) };
+  const w = kit.makeWorld({ content, profile: ch2Profile, game: g, cv, signal: undefined });
+  const ran = [];
+  w.content = content; w.game = g; w.atlases = null;
+  w.keys = new Set();
+  w.run = ins => ran.push(...ins);
+  const hit = name => sounds.push(name);
+  w.sfx = new Proxy({}, { get: (t, k) => (typeof k === 'string' ? () => hit(k) : undefined) });
+  w.ui = { setHint() {} };
+  return { w, g, ran, sounds };
+}
+
+test('rope-first：断绳含 strain 与 swayKick 演出，首次掉 r + 干扰 h/m', () => {
+  const g = createGame(content, ch2Profile);
+  const out = gameEvent(g, 'ROPE');
+  assert.ok(out.some(i => i.t === 'sfx' && i.name === 'strain'), 'rope-first 含 strain（规格 §7.1）');
+  assert.ok(out.some(i => i.t === 'ropeFirst'), 'rope-first 演出指令：绳尾一摆 + 断口纤维散开');
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'door' && i.slow), '低缓低语 Rope.');
+  assert.ok(out.some(i => i.t === 'speak' && i.who === 'child'), '童声 Rope?');
+  assert.ok(out.some(i => i.t === 'drop' && i.word === 'rope'), '首次掉石（decoys h/m 由 planDropStones 展开）');
+  assert.ok(!gameEvent(g, 'ROPE').some(i => i.t === 'drop'), '反复听不再掉');
+});
+
+test('runExtras.ropeFirst：绳尾一摆 + 断口纤维散开（青除外无未登记色）', () => {
+  const w = { geo: { wallX: 900, topY: 120 }, view: { swayKick: 0, fibres: [] } };
+  kit.runExtras.ropeFirst(w, { t: 'ropeFirst' });
+  assert.ok(w.view.swayKick > 0, 'swayKick 摆起');
+  assert.ok(w.view.fibres.length > 0, '断口纤维散开');
+});
+
+test('runExtras.effect mendRope：itemIn → +0.9s 绷直 strain（生长 0.9s）', async () => {
+  const sounds = [];
+  const w = {
+    cv: { style: {} }, view: { ropeMendT: 0, swayKick: 0, tautT: 0 },
+    sfx: { itemIn: () => sounds.push('itemIn'), glowTick: () => sounds.push('glowTick'), strain: () => sounds.push('strain') },
+    ui: { setHint() {} }
+  };
+  kit.runExtras.effect(w, { t: 'effect', name: 'mendRope', full: true });
+  assert.deepEqual(sounds, ['itemIn'], '生长开始 itemIn（规格 §7.1）');
+  assert.equal(w.view.ropeMendT, 1.2, '重编 0.9s 动画计时');
+  await new Promise(r => setTimeout(r, 950));
+  assert.deepEqual(sounds, ['itemIn', 'strain'], '绷直一沉 strain（规格 §3.3 拍 7）');
+  assert.ok(w.view.tautT > 0, '绷直：摆幅骤减');
+});
+
+test('climb：strain 节律每 0.6s 一次（封顶 ≤6）+ 每拍落尘', () => {
+  const { w, sounds } = stageWorld();
+  w.player.climbing = true;
+  w.player.x = content.geometry.wallX + 12;
+  for (let i = 0; i < 100; i++) {                       // 模拟 5s：节律 8 次 → 封顶 6
+    w.player.y = 300;                                   // 悬在半空，不到顶
+    kit.tick(w, 0.05);
+  }
+  assert.equal(sounds.filter(s => s === 'strain').length, 6, 'strain 节律 ≤6（规格 §3.3 拍 8）');
+  assert.ok(w.view.puffs.length > 0, '每拍落尘');
+});
+
+test('onE 绳下起爬：strain 节律清零（第二次攀爬重新计数）', () => {
+  const { w, g } = stageWorld();
+  g.mended = true;
+  w.view.climbStrain = 5; w.view.climbT = 0.5;             // 上一段攀爬残留
+  kit.onE(w, { kind: 'obj', id: 'rope', x: content.geometry.wallX + 12, y: content.geometry.groundY });
+  assert.equal(w.player.climbing, true, '绳下按 E 起爬');
+  assert.equal(w.view.climbStrain, 0, '节律清零');
+  assert.equal(w.view.climbT, 0);
+});
+
+test('CLIMBED：首次给 topReached 演出（chime + wind + 窗醒），重复不再触发', () => {
+  const g = createGame(content, ch2Profile);
+  const out = gameEvent(g, 'CLIMBED');
+  assert.ok(out.some(i => i.t === 'hint' && i.key === 'top'));
+  assert.ok(out.some(i => i.t === 'topReached'));
+  assert.deepEqual(gameEvent(g, 'CLIMBED'), []);
+  const sounds = [];
+  const w = { sfx: { chime: () => sounds.push('chime'), wind: () => sounds.push('wind') } };
+  kit.runExtras.topReached(w, { t: 'topReached' });
+  assert.deepEqual(sounds, ['chime', 'wind'], '登顶 chime + wind（更大了）');
+});
+
+test('runExtras.windowExit：creak + gust + 12 风尘扑入 + 猫先钻出窗（meow）', async () => {
+  const sounds = [];
+  const w = {
+    geo: content.geometry, view: { winOpen: false, winT: 0, motes: [], catGo: false },
+    actors: { cat: { x: 935, y: 120, earT: 0, meowT: 0, gone: false } },
+    sfx: { creak: () => sounds.push('creak'), gust: () => sounds.push('gust'), meow: () => sounds.push('meow') }
+  };
+  kit.runExtras.windowExit(w, { t: 'windowExit' });
+  assert.ok(w.view.winOpen, '窗开');
+  assert.equal(w.view.winT, 0, 'hold 计时从 0 起');
+  assert.equal(w.view.motes.length, 12, '12 风尘扑入（规格 §3.3 拍 10）');
+  assert.equal(w.view.catGo, true, '猫先钻出窗');
+  assert.ok(w.actors.cat.meowT > 0, '钻窗前喵一声');
+  assert.deepEqual(sounds, ['creak', 'meow']);
+  await new Promise(r => setTimeout(r, 350));
+  assert.deepEqual(sounds, ['creak', 'meow', 'gust'], '窗开 → 当面风 gust');
+});
+
+test('window：光柱 1.4s + hold 1.8s 后自动 EXIT（结算），hold 未满不出卡', () => {
+  const { w, g, ran } = stageWorld();
+  g.mended = true;
+  kit.runExtras.windowExit(w, { t: 'windowExit' });
+  for (let i = 0; i < 30; i++) kit.tick(w, 0.05);        // 1.5s：未满 1.8s
+  assert.ok(!ran.some(i => i.t === 'summary'), 'hold 未满不出结算');
+  assert.ok(w.view.winT > 1.4 && w.view.winT < 1.8, '光柱 1.4s 已过、hold 未满');
+  for (let i = 0; i < 10; i++) kit.tick(w, 0.05);        // 累计 2.0s
+  assert.ok(ran.some(i => i.t === 'summary'), 'hold 1.8s 后自动 EXIT → 结算卡（规格 §3.3 拍 11）');
+});
+
+test('窗台猫：坐 (935,120) 先到一步；window 拍走到窗边即出画', () => {
+  assert.deepEqual([CATB.x, CATB.speed], [935, 90]);
+  const { w } = stageWorld();
+  assert.equal(w.actors.cat.x, 935);
+  assert.equal(w.actors.cat.y, content.geometry.topY);
+  w.view.catGo = true;
+  for (let i = 0; i < 40; i++) kit.tick(w, 0.05);        // 2s：从 935 走到窗 (980) 并出画
+  assert.ok(w.actors.cat.gone, 'window 拍猫先钻出窗');
+});
+
+test('CRAFT 首次成功追加 revealCard；未集齐与重复合成不再弹（规格 §7.3）', () => {
+  const g = createGame(content, ch2Profile);
+  assert.ok(!gameEvent(g, 'CRAFT', 'rope').some(i => i.t === 'revealCard'));   // 石未齐 → 无卡
+  seedMemory(g.inv, addStone, ch2Profile.everPicked);                          // əʊ、p 记忆补位
+  gameEvent(g, 'PICKUP', 'r'); gameEvent(g, 'BANK');
+  const out = gameEvent(g, 'CRAFT', 'rope');
+  assert.ok(out.some(i => i.t === 'revealCard' && i.word === 'rope'));
+  assert.ok(!gameEvent(g, 'CRAFT', 'rope').some(i => i.t === 'revealCard'));   // 词具不消耗但只揭示一次
+});
+
+test('runExtras.revealCard：+0.9s 卡开 chime + ui.reveal(rope)', async () => {
+  const sounds = [], cards = [];
+  const w = { sfx: { chime: () => sounds.push('chime') }, ui: { reveal: word => { cards.push(word); return Promise.resolve(); } } };
+  kit.runExtras.revealCard(w, { t: 'revealCard', word: 'rope' });
+  await new Promise(r => setTimeout(r, 50));
+  assert.deepEqual(sounds, []);
+  assert.deepEqual(cards, []);                            // 卡不提前弹
+  await new Promise(r => setTimeout(r, 900));
+  assert.deepEqual(sounds, ['chime']);                    // 揭示卡开 chime（规格 §7.1）
+  assert.deepEqual(cards, ['rope']);
+});
+
+test('2b 演出接线：summaryFirst 仍无缝交接、#reveal 块齐备（源码断言）', async () => {
+  assert.equal(kit.summaryFirst, true, '章末先出结算卡再交接（规格 §7.4）');
+  assert.equal(kit.next?.chapter, 3, 'kit.next 仍在（动态 import 契约）');
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  assert.match(src, /swayKick/, '断绳一摆');
+  assert.match(src, /winT >= 1\.8/, 'hold 1.8s 后自动 EXIT');
+  assert.match(src, /drawCat/, '窗台猫（规格 §9）');
+  assert.match(src, /rgba\(84,224,200/, '断口青（修绿例外，规格 §11）');
+  assert.ok(!src.includes('123,216,143'), '不得回退旧绿 #7bd88f');
+  const read = f => readFile(new URL('../public/' + f, import.meta.url), 'utf8');
+  const [idx, html] = await Promise.all([read('index.html'), read('chapter2b.html')]);
+  const block = s => s.split('<div id="reveal"')[1]?.split('<div id="summary"')[0].replace(/\s+/g, ' ').trim();
+  assert.ok(block(idx), 'index.html 有 #reveal 块');
+  assert.equal(block(html), block(idx), 'chapter2b.html 的 #reveal 块与 index.html 同构（规格 §7.3）');
+});
+
+test('2b 绘制冒烟：推窗光柱/风尘/过曝白与窗台猫不抛（模拟 ctx）', () => {
+  globalThis.document ??= { createElement: () => ({ width: 0, height: 0, getContext: () => mockCtx() }) };
+  const { w, g } = stageWorld();
+  g.mended = true;
+  kit.runExtras.windowExit(w, { t: 'windowExit' });
+  const x = mockCtx();
+  w.view.winT = 0.7;                                     // 光柱下泄中
+  assert.doesNotThrow(() => kit.draw(w, x, null), '光柱 + 风尘态 draw');
+  w.view.winT = 1.5;                                     // 过曝白峰值
+  assert.doesNotThrow(() => kit.draw(w, x, null), '过曝白态 draw');
 });

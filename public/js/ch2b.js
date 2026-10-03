@@ -27,9 +27,11 @@ export function gameEvent(g, ev, arg = null) {
       g.attempted = true;
       const out = [
         { t: 'speak', who: 'door', text: c.flows.rope.listen[0], slow: true },
-        { t: 'speak', who: 'child', text: c.flows.rope.puzzled[0] }
+        { t: 'speak', who: 'child', text: c.flows.rope.puzzled[0] },
+        { t: 'sfx', name: 'strain' },                          // 低语/童声 + strain（规格 §7.1）
+        { t: 'ropeFirst' }                                     // 绳尾一摆 + 断口纤维散开（规格 §3.3 拍 5）
       ];
-      if (first) out.push({ t: 'drop', word: 'rope' }, { t: 'hint', key: 'carrying' });
+      if (first) out.push({ t: 'drop', word: 'rope' }, { t: 'hint', key: 'carrying' });   // 掉 r + 干扰 h/m（decoys）
       return out;
     }
     case 'PICKUP':
@@ -38,8 +40,11 @@ export function gameEvent(g, ev, arg = null) {
       return bankHeld(g);
     case 'HOLD_ITEM':
       return holdItem(g, arg);
-    case 'CRAFT':
-      return craftWord(g, arg, [{ t: 'hint', key: 'give' }]);
+    case 'CRAFT': {
+      const out = craftWord(g, arg, [{ t: 'hint', key: 'give' }]);
+      if (out.length) out.push({ t: 'revealCard', word: arg });   // 首次合成成功 → +0.9s 揭示卡（规格 §7.3；craftWord 已保证只成功一次）
+      return out;
+    }
     case 'USE': {
       const { word, target } = arg;
       const def = c.words[word]?.use;
@@ -51,7 +56,7 @@ export function gameEvent(g, ev, arg = null) {
     case 'CLIMBED': {
       if (g.climbed) return [];
       g.climbed = true;
-      return [{ t: 'hint', key: 'top' }, { t: 'beat', beat: 'top' }];
+      return [{ t: 'hint', key: 'top' }, { t: 'beat', beat: 'top' }, { t: 'topReached' }];   // chime + wind + 窗醒（规格 §3.3 拍 9）
     }
     case 'EXIT': {
       if (g.exited) return [];
@@ -81,15 +86,22 @@ export function gameEvent(g, ev, arg = null) {
 
 export function ropeDebug(g, beat) {
   switch (beat) {
-    case 'drop': return gameEvent(g, 'ROPE');
-    case 'crafted': {
-      let out = ropeDebug(g, 'drop');
+    case 'rope-first': case 'drop': return gameEvent(g, 'ROPE');            // 拍名总表 + 旧调试名别名（规格 §3.6）
+    case 'craft-rope': case 'crafted': {
+      let out = ropeDebug(g, 'rope-first');
       for (const [ipa] of g.content.words.rope.phonemes) {
         out = out.concat(gameEvent(g, 'PICKUP', ipa), gameEvent(g, 'BANK'));
       }
       return out.concat(gameEvent(g, 'CRAFT', 'rope'));
     }
-    case 'mended': return ropeDebug(g, 'crafted').concat(gameEvent(g, 'USE', { word: 'rope', target: 'rope' }));
+    case 'mend-rope': case 'mended':
+      return ropeDebug(g, 'craft-rope').concat(gameEvent(g, 'USE', { word: 'rope', target: 'rope' }));
+    case 'climb': return ropeDebug(g, 'mend-rope').concat([{ t: 'climbUp' }]);   // 位置依赖拍：绳下起爬（规格 §3.5）
+    case 'top': {                                                               // 位置依赖拍：传送到顶台再登顶演出
+      const geo = g.content.geometry;
+      return ropeDebug(g, 'mend-rope').concat([{ t: 'teleport', x: geo.wallX + 35, y: geo.topY }, gameEvent(g, 'CLIMBED')]);
+    }
+    case 'window': return ropeDebug(g, 'top').concat([{ t: 'windowExit' }]);     // 位置依赖拍：窗边推窗
     default: return [];
   }
 }
@@ -101,7 +113,7 @@ import { SIDE, moveSide, sideJump,
          drawArchSide, groundShadow, benchCandle } from './sideview.js';
 import { PAL, drawRune } from './art.js';
 import { blit } from './sprites.js';
-import { createActors, updateActors, drawPlayer } from './actors.js';
+import { createActors, updateActors, drawPlayer, drawCat } from './actors.js';
 import { screenToLogical } from './ch1/physics.js';
 import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
 import { shade, paintMasonry, paintSlabs, pixelGlow } from './masonry.js';
@@ -117,6 +129,9 @@ export function LIGHTS2(geo) {
   };
 }
 
+// —— 窗台橘猫（跨半场活物，规格 §9）：坐 (935,120) 先到一步；window 拍先钻出窗 ——
+export const CATB = { x: 935, speed: 90 };                 // 90px/s：约 0.5s 走到窗 (980) 钻出
+
 export const kit = {
   chapter: 2, contentId: '2b', W: SIDE.W, H: SIDE.H, titleRune: 'ᚱ',
 
@@ -124,6 +139,7 @@ export const kit = {
 
   // 崖壁走到尽头：无缝交接进入第三间房（暗河）——壳读 kit.next
   next: { chapter: 3, page: 'chapter3.html', load: () => import('./ch3.js').then(m => m.kit) },
+  summaryFirst: true,                                      // 章末先出结算卡，[下一间房 →] 再交接（规格 §7.4）
 
   voices: v => ({
     child: { voice: v.child, pitch: 1.25, rate: 1, rateSlow: 0.8 },
@@ -137,12 +153,20 @@ export const kit = {
     const player = actors.player;
     player.x = geo.spawnX; player.y = geo.groundY; player.dir = 'right';
     player.vy = 0; player.airborne = false; player.climbing = false;
+    const cat = actors.cat;                                    // 窗台橘猫：坐 (935,120) 先到一步（规格 §9）
+    cat.x = CATB.x; cat.y = geo.topY; cat.seated = true; cat.gone = false; cat.vx = 0;
     const canJump = profile.abilities.includes('jump');
     const w = {
       actors, player, geo, canJump, cv,
       lights: LIGHTS2(geo),                                    // 光锚唯一事实源（烘焙光池/动态光晕/面纱挖孔共用，规格 §6.1 2b 表）
       stones: [],
-      view: { t: 0, puffs: [], ropeMendT: 0, winOpen: false },
+      view: {
+        t: 0, puffs: [], ropeMendT: 0, winOpen: false,
+        swayKick: 0, tautT: 0,                                 // 断绳一摆 / 绷直一沉（Task 16）
+        climbT: 0, climbStrain: 0,                             // 攀爬 strain 节律（每 0.6s，≤6 次）
+        mendPuffT: 0, fibres: [],                              // 重编纤维 puff 节拍 + 断口/生长纤维粒子
+        winT: 0, motes: [], catGo: false                       // 推窗 hold 计时 / 12 风尘扑入 / 猫先钻出窗
+      },
       cfg: {
         wall: { X: geo.wallX, W: geo.wallW, topY: geo.topY, blockGround: false },  // 出口已是高窗：窗户以下墙面畅通，仅保留墙顶平台
         rope: { ok: () => w.game.mended, x: () => ropeX },
@@ -170,8 +194,16 @@ export const kit = {
     const ropeX = geo.wallX + 12;
     v.t += dt;
     v.ropeMendT = Math.max(0, v.ropeMendT - dt);
+    v.swayKick = Math.max(0, v.swayKick - dt * 1.6);       // 断绳一摆回稳
+    v.tautT = Math.max(0, v.tautT - dt);                   // 绷直一沉回稳
     updateActors(w.actors, dt);
     if (player.climbing) {
+      v.climbT += dt;
+      if (v.climbT >= 0.6) {                               // strain 节律每 0.6s（≤6 次）+ 每拍落尘（规格 §3.3 拍 8）
+        v.climbT -= 0.6;
+        if (v.climbStrain < 6) { w.sfx.strain(); v.climbStrain++; }
+        v.puffs.push({ x: player.x + (Math.random() - 0.5) * 10, y: player.y - 8, r: 2.5, a: 1 });
+      }
       player.x = ropeX;
       player.y -= 170 * dt;
       player.dir = 'up';
@@ -183,8 +215,7 @@ export const kit = {
         player.x = geo.wallX + 35;
         player.climbing = false;
         player.moving = false;
-        w.run(gameEvent(w.game, 'CLIMBED'));
-        w.sfx.chime();
+        w.run(gameEvent(w.game, 'CLIMBED'));               // chime + wind + 窗醒由 topReached 演出段给（规格 §3.3 拍 9）
       }
     } else {
       const rope = w.cfg.rope;
@@ -195,6 +226,28 @@ export const kit = {
         player.x = Math.max(geo.wallX + 20, Math.min(geo.wallX + geo.wallW - 20, player.x));
       }
       if (player.moving && (w.keys.has('l') || w.keys.has('r'))) player.walkT += dt;
+    }
+    // mend-rope：绳身自上而下重编 0.9s，生长前沿纤维 puff（规格 §3.3 拍 7）
+    if (w.game.mended && v.ropeMendT > 0.3 && v.ropeMendT <= 1.2) {
+      v.mendPuffT -= dt;
+      if (v.mendPuffT <= 0) {
+        v.mendPuffT = 0.12;
+        const grow = Math.min(1, Math.max(0, (1.2 - v.ropeMendT) / 0.9));
+        const anchorY = geo.topY - 10, endY = geo.groundY - 14;
+        spawnFibres(v, ropeX, anchorY + (endY - anchorY) * grow, 1);
+      }
+    }
+    stepFibres(v, dt);
+    // window：光柱下泄 1.4s + hold 1.8s → 自动 EXIT（结算卡；规格 §3.3 拍 10）
+    if (v.winOpen && !w.game.exited) {
+      v.winT += dt;
+      for (const m of v.motes) { m.x += m.vx * dt; m.y += m.vy * dt; m.a = Math.max(0, m.a - dt / 1.4); }
+      if (v.winT >= 1.8) w.run(gameEvent(w.game, 'EXIT'));
+    }
+    const cat = w.actors?.cat;                             // 窗台猫：window 拍先钻出窗（规格 §9）
+    if (v.catGo && cat && !cat.gone) {
+      cat.x += CATB.speed * dt;
+      if (cat.x >= geo.exitX - 2) cat.gone = true;
     }
     // 保险：石头绝不落在墙里/墙后
     stepWorldStones(w, dt, () => geo.groundY,
@@ -252,6 +305,7 @@ export const kit = {
       w.player.airborne = false;
       w.player.x = w.geo.wallX + 12;
       w.player.y = w.geo.groundY;
+      w.view.climbT = 0; w.view.climbStrain = 0;              // 起爬：strain 节律清零
     }
     else if (t.id === 'exit') w.run([{ t: 'windowExit' }]);
     else w.sfx.mutter();
@@ -262,16 +316,52 @@ export const kit = {
   runExtras: {
     drop: dropExtra(w => w.geo.wallX, { dropH: 170, spread: 30, up: -110 }),
     dropBack: dropBackExtra(),
+    ropeFirst(w) {                                           // 断绳一拍：绳尾一摆 + 断口纤维散开（规格 §3.3 拍 5）
+      w.view.swayKick = 1;
+      spawnFibres(w.view, w.geo.wallX + 12, w.geo.topY - 10 + 198, 6);
+    },
     effect(w, ins) {
       if (ins.name !== 'mendRope') return;
-      if (ins.full) { w.cv.style.cursor = 'default'; w.sfx.itemIn(); w.view.ropeMendT = 1.2; w.ui.setHint('mended'); }
+      if (ins.full) {
+        w.cv.style.cursor = 'default'; w.sfx.itemIn(); w.view.ropeMendT = 1.2; w.ui.setHint('mended');
+        setTimeout(() => {                                   // 重编 0.9s 完成：绷直一沉 + strain（规格 §3.3 拍 7 / §7.1）
+          w.sfx.strain();
+          w.view.tautT = 0.35;
+          w.view.swayKick = 0;
+        }, 900);
+      }
       else w.sfx.glowTick();
     },
-    windowExit(w) {
-      if (w.view.winOpen) { w.run(gameEvent(w.game, 'EXIT')); return; }
-      w.view.winOpen = true;                                  // 推开窗
+    topReached(w) {                                          // 登顶：chime + wind（更大了）；窗缝呼吸加快由 climbed 驱动（规格 §3.3 拍 9）
+      w.sfx.chime();
+      w.sfx.wind();
+    },
+    revealCard(w, ins) {                                     // 合成成功后 +0.9s：卡开 chime + 揭示卡（规格 §7.1/§7.3）
+      setTimeout(() => { w.sfx.chime(); w.ui.reveal(ins.word); }, 900);
+    },
+    windowExit(w) {                                          // 推窗：creak → gust + 光柱 1.4s + 12 风尘扑入 + hold 1.8s（规格 §3.3 拍 10）
+      const v = w.view;
+      if (v.winOpen) return;
+      v.winOpen = true; v.winT = 0;
       w.sfx.creak();
-      setTimeout(() => w.run(gameEvent(w.game, 'EXIT')), 500); // 稍作停留再结算
+      setTimeout(() => w.sfx.gust(), 300);                   // 窗开 → 当面风 gust（规格 §7.1）
+      v.motes = makeWindMotes(w.geo);                        // 12 风尘扑入
+      const c = w.actors?.cat;
+      if (c) { c.earT = 1; c.meowT = 0.6; v.catGo = true; }  // 猫先钻出窗（规格 §9）
+      w.sfx.meow();
+    },
+    climbUp(w) {                                             // 调试：绳下起爬（位置依赖拍，规格 §3.5）
+      w.player.climbing = true;
+      w.player.airborne = false;
+      w.player.x = w.geo.wallX + 12;
+      w.player.y = w.geo.groundY;
+      w.view.climbT = 0; w.view.climbStrain = 0;
+    },
+    teleport(w, ins) {                                       // 通用调试传送原语（规格 §3.5）：位置依赖拍截图用
+      w.player.x = ins.x;
+      if (ins.y != null) w.player.y = ins.y;
+      w.player.vy = 0; w.player.airborne = false; w.player.moving = false;
+      w.walkTo = null; w.pending = null;
     }
   },
 
@@ -293,10 +383,12 @@ export const kit = {
     if (!w.bg) w.bg = makeBg(w);                                            // 夜空/高墙/地面一次性预渲染
     x.drawImage(w.bg, 0, 0);
     drawRope(x, w, ropeX);
+    drawFibres(x, v);                                                       // 断口/重编纤维粒子
     drawTorchSide(x, L.torch.x, L.torch.y, v.t, { r: L.torch.r, a: L.torch.s });   // 左火把（= warm 听声点实体）：动态光晕读 LIGHTS2（规格 §6.2-②）
     drawTorchSide(x, L.rope.x, L.rope.y, v.t, { r: L.rope.r, a: L.rope.s });       // 绳位火把：同上（照亮绳根与绞盘，§5.2#6）
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
     drawWindow(x, geo.exitX, geo.topY, v.winOpen, game.climbed, v.t);
+    if (w.actors?.cat && !w.actors.cat.gone) drawCat(x, w.actors.cat, v.t); // 窗台橘猫：坐 (935,120) 先到一步（规格 §9）
     x.save();
     if (w.player.climbing) { x.translate(w.player.x, w.player.y); x.rotate(0.12); x.translate(-w.player.x, -w.player.y); }
     drawPlayer(x, w.player, v.t, w.atlases);
@@ -313,9 +405,16 @@ export const kit = {
     x.fillRect(0, 0, SIDE.W, SIDE.H);
     // 夜色面纱：画在级色之后、青声之前（规格 §6.2-③；四孔已按 LIGHTS2 veil 锚挖好，一次性预渲染）
     if (w.veil) x.drawImage(w.veil, 0, 0);
+    drawWindowBeat(w, x);                                  // 推窗：光柱 1.4s + 台面光池 + 12 风尘（画在级色/面纱之上读作光）
     drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
     vignette(x);
+    // 过曝白：窗开 t=1.2s→1.8s 的 0.6s 白（规格 §6.3；盖在暗角之上，读作过曝）
+    if (v.winOpen && v.winT >= 1.2 && v.winT < 1.8) {
+      const k = Math.sin(((v.winT - 1.2) / 0.6) * Math.PI);
+      x.fillStyle = `rgba(255,252,244,${Math.min(0.9, k * 0.95)})`;
+      x.fillRect(0, 0, SIDE.W, SIDE.H);
+    }
   }
 };
 
@@ -590,7 +689,8 @@ function ropeBraid(x, len) {
 
 function drawRope(x, w, ropeX) {
   const geo = w.geo, v = w.view, game = w.game;
-  const sway = Math.sin(v.t * 1.6) * 6;                      // 摆动幅度（常量保持）
+  const damp = 1 - Math.min(1, (v.tautT || 0) * 3) * 0.75;   // 绷直一沉：摆幅骤减后回稳（规格 §3.3 拍 7）
+  const sway = (Math.sin(v.t * 1.6) * 6 + (v.swayKick || 0) * Math.sin(v.t * 7.5) * 12) * damp;   // rope-first 绳尾一摆
   const anchorY = geo.topY - 10;                             // 锚点（常量保持）
   if (!game.mended) {
     // 断绳：垂到半空，断端三股散开 + 一股打卷（矢量重写，规格 §11）
@@ -615,11 +715,12 @@ function drawRope(x, w, ropeX) {
     x.strokeStyle = PAL.ink; x.lineWidth = 2.6; x.stroke();
     x.strokeStyle = '#b98d55'; x.lineWidth = 1.6; x.stroke();
     x.restore();
-    // 绳端交互光：青 PAL.glowRune（修 #7bd88f 绿例外，规格 §11）
+    // 绳端交互光：青 PAL.glowRune（修 #7bd88f 绿例外，规格 §11）；rope-first 断口青光一闪（规格 §3.3 拍 5）
     const endY = anchorY + len;
     const gp = Math.sin(v.t * 3) * 0.5 + 0.5;
-    const g = x.createRadialGradient(ropeX, endY + 2, 4, ropeX, endY + 2, 44 + gp * 16);
-    g.addColorStop(0, `rgba(84,224,200,${0.3 + gp * 0.25})`);
+    const flash = v.swayKick || 0;
+    const g = x.createRadialGradient(ropeX, endY + 2, 4, ropeX, endY + 2, 44 + gp * 16 + flash * 20);
+    g.addColorStop(0, `rgba(84,224,200,${0.3 + gp * 0.25 + flash * 0.4})`);
     g.addColorStop(1, 'rgba(84,224,200,0)');
     x.fillStyle = g; x.beginPath(); x.arc(ropeX, endY + 2, 60, 0, 7); x.fill();
   } else if (v.ropeMendT < 1.2) {
@@ -653,6 +754,81 @@ function drawRope(x, w, ropeX) {
   }
 }
 
+// —— 纤维粒子（rope-first 断口散开 / mend-rope 生长前沿 puff；规格 §3.3 拍 5/7）——
+function spawnFibres(v, x, y, n) {
+  for (let i = 0; i < n; i++) {
+    v.fibres.push({
+      x: x + (Math.random() - 0.5) * 8, y: y + (Math.random() - 0.5) * 6,
+      vx: (Math.random() - 0.5) * 26, vy: 6 + Math.random() * 18,
+      len: 3 + Math.random() * 5, ang: 0.6 + Math.random() * 1.4, a: 1
+    });
+  }
+}
+function stepFibres(v, dt) {
+  for (const f of v.fibres) {
+    f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 30 * dt;
+    f.ang += Math.sin(v.t * 3 + f.x * 0.1) * dt * 0.8;
+    f.a -= dt * 0.55;
+  }
+  v.fibres = v.fibres.filter(f => f.a > 0);
+}
+function drawFibres(x, v) {
+  if (!v.fibres?.length) return;
+  x.save();
+  for (const f of v.fibres) {
+    x.globalAlpha = Math.max(0, f.a) * 0.9;
+    x.strokeStyle = f.a > 0.5 ? '#d9b878' : '#b98d55';       // §11 绳芯/高光同族
+    x.lineWidth = 1.6;
+    x.beginPath();
+    x.moveTo(f.x, f.y);
+    x.lineTo(f.x + Math.cos(f.ang) * f.len, f.y + Math.sin(f.ang) * f.len);
+    x.stroke();
+  }
+  x.restore();
+}
+
+// —— 推窗演出（规格 §3.3 拍 10 / §6.3）：光柱下泄 1.4s + 台面光池 + 12 风尘扑入 ——
+function makeWindMotes(geo) {
+  const out = [];
+  for (let i = 0; i < 12; i++) {
+    out.push({
+      x: geo.exitX + (Math.random() - 0.5) * 24, y: geo.topY - 6 + Math.random() * 12,
+      vx: -26 - Math.random() * 46, vy: 46 + Math.random() * 54,
+      r: 1.4 + Math.random() * 1.6, a: 1
+    });
+  }
+  return out;
+}
+function drawWindowBeat(w, x) {
+  const v = w.view, geo = w.geo;
+  if (!v.winOpen) return;
+  const wx = geo.exitX, wy = geo.topY - 6;
+  if (v.winT < 1.4) {                                        // 光柱下泄 1.4s（渐收）
+    const k = 1 - v.winT / 1.4;
+    const g = x.createLinearGradient(0, wy, 0, wy + 360);
+    g.addColorStop(0, `rgba(214,228,255,${0.34 * k})`);
+    g.addColorStop(0.6, `rgba(214,228,255,${0.16 * k})`);
+    g.addColorStop(1, 'rgba(214,228,255,0)');
+    x.fillStyle = g;
+    x.beginPath();
+    x.moveTo(wx - 24, wy); x.lineTo(wx + 24, wy);
+    x.lineTo(wx + 92, wy + 360); x.lineTo(wx - 92, wy + 360);
+    x.closePath(); x.fill();
+  }
+  const pool = x.createRadialGradient(wx, geo.topY + 6, 4, wx, geo.topY + 6, 130);   // 台面光池
+  pool.addColorStop(0, 'rgba(255,214,140,.22)');
+  pool.addColorStop(1, 'rgba(255,214,140,0)');
+  x.fillStyle = pool;
+  x.beginPath(); x.ellipse(wx, geo.topY + 6, 120, 22, 0, 0, 7); x.fill();
+  for (const m of v.motes) {                                 // 12 风尘扑入
+    if (m.a <= 0) continue;
+    x.globalAlpha = m.a * 0.8;
+    x.fillStyle = '#dfe8ff';
+    x.fillRect(m.x, m.y, m.r, m.r);
+  }
+  x.globalAlpha = 1;
+}
+
 // 塔顶出口：矢量拱龛 + 双页木窗（规格 §11；退役照片贴图）
 // 关 = 两页木窗合拢（顶部随拱收弧）；开 = 木页绕外缘旋出 70°（平行四边形投影），夜空 + 暖光点透出
 function drawWindow(x, ex, ty, open, lit, t) {
@@ -665,10 +841,12 @@ function drawWindow(x, ex, ty, open, lit, t) {
     x.lineTo(ex + hw, base);
     x.closePath();
   };
-  if (!open && lit) {                                        // 可互动时的暖光提示
-    const gp = Math.sin(t * 3) * 0.5 + 0.5;
+  if (!open) {                                               // 窗缝微光慢呼吸；登顶后加快（规格 §3.3 拍 1/9）
+    const sp = lit ? 3.2 : 1.1;
+    const gp = Math.sin(t * sp) * 0.5 + 0.5;
     const g = x.createRadialGradient(ex, ty - 40, 6, ex, ty - 40, 48 + gp * 12);
-    g.addColorStop(0, `rgba(255,214,130,${0.16 + gp * 0.16})`); g.addColorStop(1, 'rgba(255,214,130,0)');
+    const a0 = lit ? 0.16 + gp * 0.16 : 0.05 + gp * 0.06;
+    g.addColorStop(0, `rgba(255,214,130,${a0})`); g.addColorStop(1, 'rgba(255,214,130,0)');
     x.fillStyle = g; x.beginPath(); x.arc(ex, ty - 40, 60, 0, 7); x.fill();
   }
   x.save();
