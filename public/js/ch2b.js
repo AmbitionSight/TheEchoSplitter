@@ -98,13 +98,24 @@ export function ropeDebug(g, beat) {
 import { mount } from './shell.js';
 import { SIDE, moveSide, sideJump,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots,
-         drawArchSide, groundShadow } from './sideview.js';
+         drawArchSide, groundShadow, benchCandle } from './sideview.js';
 import { PAL, drawRune } from './art.js';
 import { blit } from './sprites.js';
 import { createActors, updateActors, drawPlayer } from './actors.js';
 import { screenToLogical } from './ch1/physics.js';
 import { rng, masonryPlan, slabPlan } from './ch1/planners.js';
-import { shade, paintMasonry, paintSlabs } from './masonry.js';
+import { shade, paintMasonry, paintSlabs, pixelGlow } from './masonry.js';
+
+// —— 2b 光法则（唯一事实源，规格 §6.1 2b 表 / §6.2）：一个光源 = 一个坐标 = 烘焙光池（makeBg）
+//    = 动态光晕（draw）= 面纱挖孔（makeVeil）。veil = 夜色面纱挖孔半径与强度（仅 2b，规格 §6.2-③）——
+export function LIGHTS2(geo) {
+  return {
+    torch:  { x: 240, y: 240, r: 180, s: 0.26, veil: { r: 180, s: 0.85 } },                          // 左火把（= warm 听声点实体）
+    rope:   { x: 868, y: 430, r: 170, s: 0.20, veil: { r: 170, s: 0.80 } },                          // 绳位火把（照亮绳根与绞盘）
+    candle: { ...benchCandle(geo.benchX, geo.groundY), r: 110, s: 0.20, veil: { r: 120, s: 0.72 } }, // 合成台蜡烛 (benchX+62, groundY−90)
+    window: { x: geo.exitX, y: geo.topY, r: 200, s: 0.28, veil: { r: 230, s: 0.80 } }                // 高窗（出口 + 攀登灯塔）
+  };
+}
 
 export const kit = {
   chapter: 2, contentId: '2b', W: SIDE.W, H: SIDE.H, titleRune: 'ᚱ',
@@ -129,6 +140,7 @@ export const kit = {
     const canJump = profile.abilities.includes('jump');
     const w = {
       actors, player, geo, canJump, cv,
+      lights: LIGHTS2(geo),                                    // 光锚唯一事实源（烘焙光池/动态光晕/面纱挖孔共用，规格 §6.1 2b 表）
       stones: [],
       view: { t: 0, puffs: [], ropeMendT: 0, winOpen: false },
       cfg: {
@@ -275,14 +287,14 @@ export const kit = {
   },
 
   draw(w, x, eTarget) {
-    const { view: v, geo, game } = w;
+    const { view: v, geo, game, lights: L } = w;
     const ropeX = geo.wallX + 12;
     x.clearRect(0, 0, SIDE.W, SIDE.H);
     if (!w.bg) w.bg = makeBg(w);                                            // 夜空/高墙/地面一次性预渲染
     x.drawImage(w.bg, 0, 0);
     drawRope(x, w, ropeX);
-    drawTorchSide(x, 240, 240, v.t);                                         // 左火把 = warm 听声点实体 (240,240)（规格 §5.2#2）
-    drawTorchSide(x, 868, 430, v.t);                                         // 绳位火把 (868,430)：照亮绳根与绞盘（§5.2#6）
+    drawTorchSide(x, L.torch.x, L.torch.y, v.t, { r: L.torch.r, a: L.torch.s });   // 左火把（= warm 听声点实体）：动态光晕读 LIGHTS2（规格 §6.2-②）
+    drawTorchSide(x, L.rope.x, L.rope.y, v.t, { r: L.rope.r, a: L.rope.s });       // 绳位火把：同上（照亮绳根与绞盘，§5.2#6）
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
     drawWindow(x, geo.exitX, geo.topY, v.winOpen, game.climbed, v.t);
     x.save();
@@ -299,6 +311,8 @@ export const kit = {
     // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
     x.fillStyle = 'rgba(16,18,36,.30)';
     x.fillRect(0, 0, SIDE.W, SIDE.H);
+    // 夜色面纱：画在级色之后、青声之前（规格 §6.2-③；四孔已按 LIGHTS2 veil 锚挖好，一次性预渲染）
+    if (w.veil) x.drawImage(w.veil, 0, 0);
     drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
     vignette(x);
@@ -507,7 +521,49 @@ function makeBg(w) {
   blit(x, w.atlases, 'shelf', 1070, gy, { ax: 0.5, ay: 1 });   // 木架（底 1070）
   groundShadow(x, 1180, gy, 20, 5, 0.26);
   blit(x, w.atlases, 'tree', 1180, gy, { ax: 0.5, ay: 1 });    // 盆栽树（底 1180）
+  // 上部墙转冷（规格 §6.3 climb「从暖池爬进冷光」）：y<300 叠靛蓝冷调、向下渐隐
+  const cold = x.createLinearGradient(0, 0, 0, 300);
+  cold.addColorStop(0, 'rgba(30,44,78,.30)');
+  cold.addColorStop(0.65, 'rgba(30,44,78,.12)');
+  cold.addColorStop(1, 'rgba(30,44,78,0)');
+  x.fillStyle = cold; x.fillRect(0, 0, SIDE.W, 300);
+  // 光池烘焙：唯一事实源 LIGHTS2（暖火族一色）——左火把/绳位火把/蜡烛/高窗同表同坐标，一次预渲染（规格 §6.2-①）
+  for (const t of Object.values(w.lights)) pixelGlow(x, t.x, t.y, t.r, [255, 198, 112], t.s);
+  // 夜色面纱：一次性预渲染（规格 §6.2-③）；draw() 画在级色之后、青声之前
+  w.veil = makeVeil(w.lights);
   // 黄昏级色不再烘焙进背景：改到 draw() 角色之后统一压暗
+  return c;
+}
+
+// 夜色面纱（规格 §6.2-③，仅 2b；2a 是黄昏亮场不启用）：全屏 rgba(8,10,20,.34) → destination-out
+// 按 LIGHTS2 的 veil 锚挖四孔（径向内径 r*0.15，ch1 makeDarkness 同款 2px 拜耳抖动量化）；一次性预渲染
+export function makeVeil(lights) {
+  const c = document.createElement('canvas');
+  c.width = SIDE.W; c.height = SIDE.H;
+  const x = c.getContext('2d');
+  x.fillStyle = 'rgba(8,10,20,.34)';
+  x.fillRect(0, 0, SIDE.W, SIDE.H);
+  x.globalCompositeOperation = 'destination-out';
+  for (const L of Object.values(lights)) {
+    if (!L.veil) continue;
+    const h = x.createRadialGradient(L.x, L.y, L.veil.r * 0.15, L.x, L.y, L.veil.r);
+    h.addColorStop(0, `rgba(0,0,0,${L.veil.s})`); h.addColorStop(1, 'rgba(0,0,0,0)');
+    x.fillStyle = h; x.beginPath(); x.arc(L.x, L.y, L.veil.r, 0, 7); x.fill();
+  }
+  x.globalCompositeOperation = 'source-over';
+  // 像素抖动量化：平滑渐变 → 2px 拜耳有序抖动（与 ch1 makeDarkness / 砌石苔藓同一像素语言）
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const B = [[0, 2], [3, 1]];
+  for (let by = 0; by < c.height; by += 2) {
+    for (let bx = 0; bx < c.width; bx += 2) {
+      const i = (by * c.width + bx) * 4 + 3;
+      const a = img.data[i] / 255;
+      if (a <= 0 || a >= 1) continue;
+      const q = Math.min(1, Math.floor(a * 6 + B[(by / 2) % 2][(bx / 2) % 2] / 4) / 6);
+      img.data[i] = q * 255;
+    }
+  }
+  x.putImageData(img, 0, 0);
   return c;
 }
 

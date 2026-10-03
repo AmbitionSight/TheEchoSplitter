@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL } from '../public/js/ch2b.js';
+import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil } from '../public/js/ch2b.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { moveSide, planDropStones } from '../public/js/sideview.js';
@@ -173,19 +173,90 @@ test('2b 陈设与塔结构：入口拱/货堆/残碑/绞盘/塔柱/窗光柱烘
   assert.match(src, /'crate_big'[\s\S]*?'crate_sm'[\s\S]*?'jars2'/, '货堆 = 大木箱 + 叠小箱 + 陶罐组');
   assert.match(src, /blit\(x, w\.atlases, 'shelf'/, '木架 blit shelf (1070)');
   assert.match(src, /blit\(x, w\.atlases, 'tree'/, '盆栽树 blit tree (1180)');
-  assert.match(src, /drawTorchSide\(x, 240, 240/, '左火把 = warm 听声点 (240,240)');
-  assert.match(src, /drawTorchSide\(x, 868, 430/, '绳位火把 (868,430)');
+  assert.match(src, /drawTorchSide\(x, L\.torch\.x, L\.torch\.y/, '左火把动态光晕读 LIGHTS2 锚点（(240,240) 由 LIGHTS2 表锁）');
+  assert.match(src, /drawTorchSide\(x, L\.rope\.x, L\.rope\.y/, '绳位火把动态光晕读 LIGHTS2 锚点（(868,430) 由 LIGHTS2 表锁）');
   assert.match(src, /drawBenchSide\([^;]*\{ candle: true, t: v\.t \}\)/, 'benchX 520 合成台开蜡烛（ch1 同款）');
   assert.match(src, /blockGround: false/, '塔身壁柱只画不挡走（物理层仍 blockGround:false）');
 });
 
-// 模拟 2D context：任何方法调用皆安全、任何属性可写（只断言"不抛"，不断言像素）
+// ================= Task 15：2b 光法则与夜色面纱（规格 §6.1 2b 表 / §6.2） =================
+
+test('LIGHTS2：四锚由几何推导、含 veil 字段（规格 §6.1 2b 表）', () => {
+  const L = LIGHTS2(content.geometry);
+  assert.deepEqual(Object.keys(L).sort(), ['candle', 'rope', 'torch', 'window']);
+  assert.deepEqual([L.torch.x, L.torch.y, L.torch.r, L.torch.s], [240, 240, 180, 0.26]);
+  assert.deepEqual([L.rope.x, L.rope.y, L.rope.r, L.rope.s], [868, 430, 170, 0.20]);
+  assert.deepEqual([L.candle.x, L.candle.y], [content.geometry.benchX + 62, content.geometry.groundY - 90]);
+  assert.deepEqual([L.candle.r, L.candle.s], [110, 0.20]);
+  assert.deepEqual([L.window.x, L.window.y], [content.geometry.exitX, content.geometry.topY]);
+  assert.deepEqual([L.window.r, L.window.s], [200, 0.28]);
+  const warm = content.listening.find(s => s.id === 'warm');
+  assert.deepEqual([L.torch.x, L.torch.y], [warm.x, warm.y], '左火把 = warm 听声点实体');
+  for (const v of Object.values(L)) {
+    assert.ok(v.r > 0 && v.s > 0 && v.s <= 1);
+    assert.ok(v.veil && v.veil.r > 0 && v.veil.s > 0 && v.veil.s <= 1, 'veil 字段齐备（四孔挖孔）');
+  }
+  assert.deepEqual([L.torch.veil.r, L.torch.veil.s, L.rope.veil.r, L.rope.veil.s], [180, 0.85, 170, 0.80]);
+  assert.deepEqual([L.candle.veil.r, L.candle.veil.s, L.window.veil.r, L.window.veil.s], [120, 0.72, 230, 0.80]);
+});
+
+test('makeVeil：全屏 .34 面纱 + 四孔 destination-out 挖孔（mock 计数）', () => {
+  const ops = [];
+  const grad = { addColorStop() {} };
+  const ctx = new Proxy({}, {
+    get(t, k) {
+      if (k === 'createRadialGradient' || k === 'createLinearGradient') return () => { ops.push('grad'); return grad; };
+      if (k === 'fillRect') return () => ops.push('fillRect');
+      if (k === 'fill') return () => ops.push('fill');
+      if (k === 'createImageData' || k === 'getImageData') return (a, b, w2, h2) => {
+        const w = k === 'createImageData' ? a : w2, h = k === 'createImageData' ? b : h2;
+        return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+      };
+      if (k === 'putImageData') return () => ops.push('putImageData');
+      if (typeof k !== 'string') return undefined;
+      return k in t ? t[k] : () => undefined;
+    },
+    set(t, k, v) { t[k] = v; return true; }
+  });
+  const prevDoc = globalThis.document;
+  globalThis.document = { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) };
+  try {
+    const c = makeVeil(LIGHTS2(content.geometry));
+    assert.ok(c, '返回一次性预渲染画布（draw 直接贴图）');
+    assert.equal(ops.filter(o => o === 'grad').length, 4, '四孔（火把/绳位/蜡烛/高窗）');
+    assert.equal(ops.filter(o => o === 'fillRect').length, 1, '全屏底色只填一次');
+    assert.ok(ops.includes('putImageData'), '拜耳抖动量化后写回');
+  } finally {
+    globalThis.document = prevDoc;                    // 还原：冒烟测试用自己那套 mock
+  }
+});
+
+test('2b 光法则单源：光池烘焙读表、面纱画在级色之后青声之前（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  assert.match(src, /Object\.values\(w\.lights\)/, 'makeBg 光池循环锚点表（烘焙 = 动态光晕同源）');
+  assert.ok(!/pixelGlow\(x, 240, 240/.test(src), '火把光池不得硬编码');
+  assert.match(src, /makeVeil\(w\.lights\)/, '夜色面纱一次性预渲染（LIGHTS2 veil 锚）');
+  assert.match(src, /destination-out/, '四孔 destination-out 挖孔');
+  assert.match(src, /getImageData[\s\S]*?putImageData/, 'ch1 makeDarkness 同款 2px 拜耳抖动量化');
+  const iGrade = src.indexOf('rgba(16,18,36,.30)');
+  const iVeil = src.indexOf('drawImage(w.veil');
+  const iListen = src.indexOf('drawListenSpots(x, w)');
+  assert.ok(iGrade !== -1 && iVeil > iGrade && iListen > iVeil, '面纱画在级色之后、青声之前');
+  assert.match(src, /上部墙转冷/, '上部墙 y<300 转冷（规格 §6.3 climb：从暖池爬进冷光）');
+});
+
+// 模拟 2D context：任何方法调用皆安全、任何属性可写（只断言"不抛"，不断言像素）；
+// createImageData/getImageData 返回真数组——pixelGlow（光池烘焙）与 makeVeil（面纱抖动）要读 data
 function mockCtx() {
   const grad = { addColorStop() {} };
   const bag = {};
   return new Proxy(bag, {
     get(t, k) {
       if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => grad;
+      if (k === 'createImageData' || k === 'getImageData') return (a, b, w2, h2) => {
+        const w = k === 'createImageData' ? a : w2, h = k === 'createImageData' ? b : h2;
+        return { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+      };
       if (typeof k !== 'string') return undefined;
       return k in t ? t[k] : () => undefined;
     },
