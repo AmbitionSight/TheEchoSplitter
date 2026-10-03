@@ -2,7 +2,7 @@
 import { SIDE, drawBenchSide, shade } from '../sideview.js';
 import { drawBenchStones } from '../workbench.js';
 import { PAL, drawCross } from '../art.js';
-import { cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from './cave.js';
+import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from './cave.js';
 
 export function currentGround(w) {
   return w.currentRoom === 'crevice' ? w.geo.crevice.groundY : w.currentRoom === 'deep' ? w.geo.deep.groundY : w.geo.bank.groundY;
@@ -39,10 +39,7 @@ export function drawBankObjects(w, x) {
   x.fillStyle = '#67727d'; x.strokeStyle = PAL.ink; x.lineWidth = 5;
   x.beginPath(); x.roundRect ? x.roundRect(565, geo.groundY - 100, 150, 90, 12) : x.rect(565, geo.groundY - 100, 150, 90); x.fill(); x.stroke();
   x.fillStyle = '#b28a58'; x.fillRect(590, geo.groundY - 70, 100, 12);
-  x.fillStyle = '#6b7078';
-  x.beginPath(); x.moveTo(geo.doorX - 55, geo.groundY); x.lineTo(geo.doorX - 35, geo.groundY - 130); x.lineTo(geo.doorX + 35, geo.groundY - 130); x.lineTo(geo.doorX + 55, geo.groundY); x.closePath(); x.fill(); x.stroke();
-  x.fillStyle = '#10151b';
-  x.beginPath(); x.moveTo(geo.doorX - 24, geo.groundY); x.lineTo(geo.doorX - 18, geo.groundY - 110); x.lineTo(geo.doorX + 18, geo.groundY - 110); x.lineTo(geo.doorX + 24, geo.groundY); x.closePath(); x.fill();
+  drawCrack(x, geo.doorX, geo.groundY, CAVE_SEEDS.bank + 3);   // 裂隙口（原石拱门）
   if (!w.game.raftAssembled) {              // 并排的原木：组筏后三根并入木筏，只画筏
     const ROTS = [-0.08, 0.06, -0.04];
     for (let k = 0; k < w.game.logsPlaced; k++) drawLog(x, geo.waterX - 20 + k * 44, geo.groundY - 16, ROTS[k % ROTS.length]);
@@ -293,6 +290,68 @@ export function drawStalactites(x, plan, topY, base) {
     x.beginPath(); x.moveTo(s.x - s.w, y0); x.lineTo(tipX - 1, tipY); x.stroke();
     x.strokeStyle = shade(base, -0.25);
     x.beginPath(); x.moveTo(s.x + s.w, y0); x.lineTo(tipX + 1, tipY); x.stroke();
+  }
+}
+
+// 裂隙口：墙上的一道天然裂缝（人高），替代原来的石拱门。
+// 与裂隙房那道贯穿全屏的大裂缝同源——同一函数、不同尺寸与种子。
+export function drawCrack(x, cx, gy, seed, opts = {}) {
+  const { h = 170, halfBottom = 35, halfTop = 12 } = opts;
+  const rand = rng(seed);
+  const N = 12;                                          // 折点够密才有锯齿感，否则是个黑锥
+
+  // 两缘折点：底宽顶窄；抖动只向内收，包围盒因此恒为 ±halfBottom
+  const edge = (sign) => {
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const k = i / N;
+      const half = halfBottom + (halfTop - halfBottom) * k;
+      const jag = (i === 0 || i === N) ? 0 : (0.10 + Math.abs(rand() * 2 - 1) * 0.38) * half;
+      pts.push([cx + sign * (half - jag), gy - h * k]);   // 减 = 向内收，包围盒恒为 ±halfBottom
+    }
+    return pts;
+  };
+  const L = edge(-1), R = edge(1);
+
+  x.beginPath();                                          // 洞口本体
+  x.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i < L.length; i++) x.lineTo(L[i][0], L[i][1]);
+  for (let i = R.length - 1; i >= 0; i--) x.lineTo(R[i][0], R[i][1]);
+  x.closePath();
+  x.fillStyle = '#0a0d12';
+  x.fill();
+
+  const dg = x.createLinearGradient(0, gy - h, 0, gy);    // 纵深：上端更暗
+  dg.addColorStop(0, 'rgba(0,0,0,.65)');
+  dg.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = dg;
+  x.fill();
+
+  x.lineWidth = 3; x.lineCap = 'round';                   // 唇口：左缘受光、右缘沉影
+  x.strokeStyle = shade(CAVE_PAL.rockB, 0.28);
+  x.beginPath();
+  x.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i < L.length; i++) x.lineTo(L[i][0], L[i][1]);
+  x.stroke();
+  x.strokeStyle = shade(CAVE_PAL.rockDark, -0.15);
+  x.beginPath();
+  x.moveTo(R[0][0], R[0][1]);
+  for (let i = 1; i < R.length; i++) x.lineTo(R[i][0], R[i][1]);
+  x.stroke();
+
+  const n = 3 + Math.floor(rand() * 3);                   // 崩口碎石（落在缝口内，不撑破包围盒）
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 ? 1 : -1;
+    const bx = cx + side * (halfBottom - 12 + rand() * 5);
+    const by = gy - rand() * 14;
+    const s = 4 + rand() * 5;
+    contactShadow(x, bx, gy + 2, s * 1.4, s * 0.5);
+    x.fillStyle = CAVE_PAL.rockB;
+    x.beginPath();
+    x.moveTo(bx - s, by);
+    x.lineTo(bx + s * 0.6, by - s * 0.8);
+    x.lineTo(bx + s, by);
+    x.closePath(); x.fill();
   }
 }
 

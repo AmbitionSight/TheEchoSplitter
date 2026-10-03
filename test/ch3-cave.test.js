@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from '../public/js/ch3/cave.js';
 import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites,
-         createScene, initScene, drawScene } from '../public/js/ch3/render.js';
+         createScene, initScene, drawScene, drawCrack } from '../public/js/ch3/render.js';
 
 // 宽松 canvas 桩（同 test/scene.bg.test.js）：任何方法可调、任何属性可写，只断言「不抛」
 function mockCtx() {
@@ -196,4 +196,39 @@ test('drawScene：重复绘制复用同一场景对象，不累积状态', () =>
   const snapshot = JSON.stringify(sc);
   drawScene(mockCtx(), sc, w);
   assert.equal(JSON.stringify(sc), snapshot, '场景对象在绘制后不应被改写');
+});
+
+// ---- 裂隙口 ----
+
+test('drawCrack：不抛错，且至少一次填充 + 一次描边（唇口受光边）', () => {
+  const x = recordingCtx();
+  drawCrack(x, 650, 590, 41);
+  assert.ok(x.__calls.fill >= 1);
+  assert.ok(x.__calls.stroke >= 1);
+});
+
+test('drawCrack：同种子几何确定，异种子不同', () => {
+  const a = recordingCtx(), b = recordingCtx(), c = recordingCtx();
+  drawCrack(a, 650, 590, 41);
+  drawCrack(b, 650, 590, 41);
+  drawCrack(c, 650, 590, 42);
+  assert.deepEqual(a.__pts, b.__pts);
+  assert.notDeepEqual(a.__pts, c.__pts);
+});
+
+test('drawCrack：默认高 170、底半宽 35、顶半宽 12（包围盒）', () => {
+  const x = recordingCtx();
+  drawCrack(x, 650, 590, 41);
+  const xs = x.__pts.map(p => p[0]), ys = x.__pts.map(p => p[1]);
+  assert.ok(Math.abs(Math.min(...ys) - (590 - 170)) < 2, `顶部 y=${Math.min(...ys)}`);
+  assert.ok(Math.abs(Math.min(...xs) - (650 - 35)) < 8, `左缘 x=${Math.min(...xs)}`);
+  assert.ok(Math.abs(Math.max(...xs) - (650 + 35)) < 8, `右缘 x=${Math.max(...xs)}`);
+});
+
+test('drawCrack：自定义尺寸生效（h/halfBottom 可覆盖）', () => {
+  const x = recordingCtx();
+  drawCrack(x, 400, 300, 7, { h: 90, halfBottom: 20, halfTop: 6 });
+  const xs = x.__pts.map(p => p[0]), ys = x.__pts.map(p => p[1]);
+  assert.ok(Math.abs(Math.min(...ys) - 210) < 2, `顶部 y=${Math.min(...ys)}`);
+  assert.ok(Math.abs(Math.min(...xs) - 380) < 8, `左缘 x=${Math.min(...xs)}`);
 });
