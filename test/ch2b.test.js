@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
-import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil, CATB, tapTargetAt } from '../public/js/ch2b.js';
+import { createGame, gameEvent, ropeDebug, startGame, kit, RUNE_BAND, ARCH_SPILL, LIGHTS2, makeVeil, CATB, tapTargetAt,
+         needsEntryToast, ANCHOR_RING } from '../public/js/ch2b.js';
 import { createProfile, loadProfile, saveProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
 import { moveSide, planDropStones } from '../public/js/sideview.js';
@@ -627,6 +628,70 @@ test('finish() 路径：summaryFirst 先出结算卡、再由 [下一间房 →]
   const iBtn = src.indexOf('walk.onclick = () => onHandoff?.(kit.next)');
   assert.ok(iSummary !== -1 && iGate !== -1 && iBtn !== -1, '三段齐备');
   assert.ok(iSummary < iGate && iGate < iBtn, '顺序：先出卡 → 跳过静默交接 → 按钮再交接');
+});
+
+// ================= Task 19：2b 评审修正（铁锚环 / 窗台 ᚩ / 进场 toast / 死码清理） =================
+
+test('铁锚环常量与位置：r9 #4b4f5a；环位 = 绳顶入墙点 (912,112)；high 听声点 40px 内有实体（规格 §5.2#10 / §14）', () => {
+  assert.deepEqual([ANCHOR_RING.r, ANCHOR_RING.color], [9, '#4b4f5a']);
+  const geo = content.geometry;
+  const x = geo.wallX + 12, y = geo.topY - 8;              // 912 / 112
+  assert.deepEqual([x, y], [912, 112]);
+  const high = content.listening.find(s => s.id === 'high');
+  assert.ok(Math.hypot(x - high.x, y - high.y) <= 40, 'high (920,120) 的实体锚 = 铁锚环（规格 §14）');
+});
+
+test('铁锚环画法：方垫片 + 四铆钉 + PAL.ink 描边 + 贴墙接触影；静态烘进 makeBg（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  assert.match(src, /function drawAnchorRing/);
+  assert.match(src, /drawAnchorRing\(x, ropeX, geo\.topY - 8\)/);
+  const bgAt = src.indexOf('function makeBg');
+  assert.ok(src.indexOf('drawAnchorRing(x, ropeX', bgAt) > bgAt, '环是静态件：烘进 makeBg');
+  const fnAt = src.indexOf('function drawAnchorRing');
+  const fn = src.slice(fnAt, src.indexOf('\nfunction ', fnAt + 10));
+  assert.match(fn, /wallShadow/, '贴墙接触影');
+  assert.match(fn, /铆钉/, '四枚铆钉');
+  assert.match(fn, /PAL\.ink/, 'ink 描边');
+  assert.match(fn, /arc\(cx, cy, ANCHOR_RING\.r/, '环体 r9 读常量');
+});
+
+test('窗台 ᚩ：锚 (980,126)，呼吸青只在 game.climbed 后；画在面纱之上的青声层（规格 §5.2#10 / §5.3）', async () => {
+  const geo = content.geometry;
+  assert.deepEqual([geo.exitX, geo.topY + 6], [980, 126]);
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  assert.match(src, /function drawSillRune/);
+  assert.match(src, /drawSillRune\(x, geo\.exitX, geo\.topY, game\.climbed, v\.t\)/, '亮灭读 game.climbed');
+  const fnAt = src.indexOf('function drawSillRune');
+  const fn = src.slice(fnAt, src.indexOf('\nfunction ', fnAt + 10));
+  assert.match(fn, /'ᚩ'/);
+  assert.match(fn, /rgba\(84,224,200/, '呼吸青 = 唯一强调色 #54e0c8');
+  const iVeil = src.indexOf('drawImage(w.veil');
+  const iRune = src.indexOf('drawSillRune(x, geo.exitX');
+  const iListen = src.indexOf('drawListenSpots(x, w)');
+  assert.ok(iRune > iVeil && iRune < iListen, '呼吸符文在面纱之后、青声之前（动态层）');
+});
+
+test('进场 toast 判定：同页交接 / autostart 跳过序章屏才补；直接 URL 仍走序章屏（纯函数）', () => {
+  assert.equal(needsEntryToast({ booted: true }), true, '同页交接：ch2a 的 window.G 已在跑');
+  assert.equal(needsEntryToast({ search: '?autostart=1' }), true, 'autostart 调试同样跳过序章');
+  assert.equal(needsEntryToast({ search: '?autostart=1&beat=top' }), true);
+  assert.equal(needsEntryToast({ search: '?beat=top' }), false);
+  assert.equal(needsEntryToast({ search: '' }), false, '直接打开：序章三句由序章屏承担');
+  assert.equal(needsEntryToast(), false);
+});
+
+test('onBegin：交接进场补一次 toast（序章三句并作一句）（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  const obAt = src.indexOf('onBegin(w)');
+  const ob = src.slice(obAt, src.indexOf('onSpace(w)', obAt));
+  assert.match(ob, /w\.ui\.toast\(w\.content\.meta\.intro\.join\(' '\)/, '序章三句并作一句');
+  assert.match(ob, /ENTERED_VIA_HANDOFF/, '仅交接/autostart 时补，不碰直接 URL 序章屏');
+  assert.match(ob, /!w\.entryToast/, '只补一次');
+});
+
+test('死码清理：ch2b 的 kit.onFinal 删除（summaryFirst 路径永不调用，源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2b.js', import.meta.url), 'utf8');
+  assert.ok(!src.includes('onFinal'), '不可达的 onFinal 已移除');
 });
 
 test('#btn-jump：页面有钮、有 jump 能力即显示（mock document）', async () => {

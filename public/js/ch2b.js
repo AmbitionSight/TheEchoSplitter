@@ -172,6 +172,18 @@ function wireJumpBtn(w, signal) {
   if (w.canJump) showJumpBtn(w);                           // 书档已有 jump：进场即显示
 }
 
+// —— 进场 toast 判定（规格 §3.3 拍 1：序章三句的承担）——
+// 同页交接进入 2b 时序章屏被跳过（ch2a 动态 import 本模块，此刻 window.G 已是 ch2a 的）；
+// 直接打开 chapter2b.html 时本模块先于壳求值（window.G 未建立）→ 仍走序章屏；
+// ?autostart=1 调试路径同样跳过序章，一并补上进场 toast。
+export function needsEntryToast({ booted = false, search = '' } = {}) {
+  return booted || new URLSearchParams(search).get('autostart') === '1';
+}
+const ENTERED_VIA_HANDOFF = typeof document !== 'undefined' && needsEntryToast({
+  booted: typeof window !== 'undefined' && !!window.G,
+  search: typeof location !== 'undefined' ? location.search : ''
+});
+
 export const kit = {
   chapter: 2, contentId: '2b', W: SIDE.W, H: SIDE.H, titleRune: 'ᚱ',
 
@@ -227,7 +239,13 @@ export const kit = {
     return w;
   },
 
-  onBegin(w) { seedBegin(w); },                   // 开局记忆石：只带本章需要的旧音素（əʊ、p）
+  onBegin(w) {
+    seedBegin(w);                                          // 开局记忆石：只带本章需要的旧音素（əʊ、p）
+    if (ENTERED_VIA_HANDOFF && w.ui && !w.entryToast) {    // 交接进场：序章三句改由进场 toast 承担（规格 §3.3 拍 1）
+      w.entryToast = true;
+      w.ui.toast(w.content.meta.intro.join(' '), 4200);
+    }
+  },
 
   onSpace(w) { if (w.canJump) { sideJump(w); w.sfx.click(); } },
 
@@ -440,13 +458,6 @@ export const kit = {
              picks: game.stonesPicked };                  // 本章声音石拾取数 → 书档累加（规格 §12）
   },
 
-  onFinal(w) {
-    w.ui.setHint('end');
-    const walk = document.getElementById('btn-walk');
-    walk.textContent = '下一间房 →';
-    walk.onclick = () => { location.href = '/chapter3.html'; };
-  },
-
   draw(w, x, eTarget) {
     const { view: v, geo, game, lights: L } = w;
     const ropeX = geo.wallX + 12;
@@ -477,6 +488,7 @@ export const kit = {
     // 夜色面纱：画在级色之后、青声之前（规格 §6.2-③；四孔已按 LIGHTS2 veil 锚挖好，一次性预渲染）
     if (w.veil) x.drawImage(w.veil, 0, 0);
     drawWindowBeat(w, x);                                  // 推窗：光柱 1.4s + 台面光池 + 12 风尘（画在级色/面纱之上读作光）
+    drawSillRune(x, geo.exitX, geo.topY, game.climbed, v.t);   // 窗台 ᚩ：登顶后呼吸青（规格 §5.3 符文链 ᚵ→ᚱ→ᚩ 收口）
     drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
     vignette(x);
@@ -531,6 +543,31 @@ function drawTorchBracket(x, tx, ty) {
   x.fillStyle = '#4b4f5a';
   x.beginPath(); x.moveTo(tx - 10, ty); x.lineTo(tx + 10, ty); x.lineTo(tx + 5, ty + 10); x.lineTo(tx - 5, ty + 10); x.closePath(); x.fill();
   x.strokeStyle = PAL.ink; x.lineWidth = 1.5; x.stroke();
+}
+
+// 铁锚环（规格 §5.2#10）：绳顶入墙的受力点 (912,112) r9——贴墙接触影 + 方垫片 + 四铆钉 + 环体
+export const ANCHOR_RING = { r: 9, color: '#4b4f5a' };
+function drawAnchorRing(x, cx, cy) {
+  wallShadow(x, cx, cy, 24);                               // 贴墙接触影
+  x.save();
+  x.fillStyle = shade(ANCHOR_RING.color, -0.16);           // 方垫片（铆在墙上的铁座）
+  x.beginPath();
+  if (x.roundRect) x.roundRect(cx - 13, cy - 13, 26, 26, 4); else x.rect(cx - 13, cy - 13, 26, 26);
+  x.fill();
+  x.strokeStyle = PAL.ink; x.lineWidth = 2; x.stroke();
+  x.fillStyle = 'rgba(255,240,214,.10)';                   // 垫片上缘受光
+  x.fillRect(cx - 13, cy - 13, 26, 2);
+  x.fillStyle = '#5f646f';                                 // 四枚铆钉（垫片四角）
+  for (const [dx, dy] of [[-9.5, -9.5], [9.5, -9.5], [-9.5, 9.5], [9.5, 9.5]]) {
+    x.beginPath(); x.arc(cx + dx, cy + dy, 1.8, 0, 7); x.fill();
+    x.strokeStyle = PAL.ink; x.lineWidth = 1; x.stroke();
+  }
+  x.strokeStyle = ANCHOR_RING.color; x.lineWidth = 4.5;    // 环体 r9（绳自此穿下）
+  x.beginPath(); x.arc(cx, cy, ANCHOR_RING.r, 0, 7); x.stroke();
+  x.strokeStyle = PAL.ink; x.lineWidth = 1.4;              // ink 内外描边
+  x.beginPath(); x.arc(cx, cy, ANCHOR_RING.r + 2.4, 0, 7); x.stroke();
+  x.beginPath(); x.arc(cx, cy, ANCHOR_RING.r - 2.4, 0, 7); x.stroke();
+  x.restore();
 }
 
 // 墙面石刻带：凹槽 + 八枚 26px 暗青阴刻（ch1 墙上刻痕同族）
@@ -654,6 +691,7 @@ function drawWindowShaft(x, geo) {
 function makeBg(w) {
   const { geo } = w;
   const gy = geo.groundY;
+  const ropeX = geo.wallX + 12;                              // 绳位（铁锚环与绳同 x）
   const c = document.createElement('canvas');
   c.width = SIDE.W; c.height = SIDE.H;
   const x = c.getContext('2d');
@@ -685,6 +723,7 @@ function makeBg(w) {
   drawRuinTablet(x, 780, 300);                                 // 嵌壁残碑 + 石托（stone 听声点实体）
   drawPilasters(x, geo);                                       // 塔身壁柱 900–1010 y122–620（平面浮雕，不阻走）
   drawWindowShaft(x, geo);                                     // 窗光柱：高窗 (980,120) 静态冷锥
+  drawAnchorRing(x, ropeX, geo.topY - 8);                      // 铁锚环 (912,112)：绳顶入墙受力点（规格 §5.2#10）
   drawCrates(x, w.atlases, gy);                                // 货堆：木箱×2 + 陶罐组（底 300/368）
   drawWinch(x, 908, gy);                                       // 绞盘与绳尾（签名地标，鼓心 908,620；盖在壁柱前）
   groundShadow(x, 1070, gy, 32, 6, 0.26);
@@ -988,6 +1027,19 @@ function drawWindow(x, ex, ty, open, lit, t) {
   x.strokeStyle = PAL.ink; x.lineWidth = 2; x.strokeRect(ex - hw - 14, base, hw * 2 + 28, 8);
   x.fillStyle = 'rgba(255,240,214,.12)';
   x.fillRect(ex - hw - 14, base, hw * 2 + 28, 2);
+}
+
+// 窗台符文 ᚩ（规格 §5.2#10 / §5.3）：窗台石沿下缘 (980,126)——未登顶 = 暗青阴刻；
+// 登顶（game.climbed）后呼吸青，闭合符文链 ᚵ→ᚱ→ᚩ，给 high 听声点一个可见实体
+function drawSillRune(x, ex, ty, lit, t) {
+  const cy = ty + 6;                                         // (980,126)
+  if (!lit) { drawRune(x, 'ᚩ', ex, cy, 12, 'rgba(40,66,60,.55)', 2); return; }   // 阴刻不发光（同石刻带）
+  const gp = Math.sin(t * 3.2) * 0.5 + 0.5;                  // 呼吸（同窗缝登顶后加快的节律）
+  const g = x.createRadialGradient(ex, cy, 1, ex, cy, 16 + gp * 8);
+  g.addColorStop(0, `rgba(84,224,200,${0.24 + gp * 0.22})`);
+  g.addColorStop(1, 'rgba(84,224,200,0)');
+  x.fillStyle = g; x.beginPath(); x.arc(ex, cy, 26, 0, 7); x.fill();
+  drawRune(x, 'ᚩ', ex, cy, 12, `rgba(84,224,200,${0.5 + gp * 0.45})`, 2.2);
 }
 
 function drawClimbArms(x, p) {
