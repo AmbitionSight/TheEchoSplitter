@@ -1,6 +1,7 @@
 // —— 析声者 · 第三关浏览器 kit（侧视河程）：自 ch3.js kit 段原样迁入 ——
 import { createGame, startGame, gameEvent, ch3Debug, interact } from './event.js';
-import { drawRoom, drawBankObjects, drawCreviceObjects, drawDeepObjects, drawBubble, currentGround } from './render.js';
+import { drawScene, createScene, initScene, drawBankObjects, drawCreviceObjects, drawDeepObjects, drawBubble, currentGround,
+         RAFT_DECK } from './render.js';
 import { chapterOnE, syncHeld, dropBackExtra, stepWorldStones } from '../chapter.js';
 import { mount } from '../shell.js';
 import {
@@ -19,7 +20,8 @@ import { screenToLogical } from '../ch1/physics.js';
 const TARGETS = {
   bank: [
     { id: 'bench', x: w => w.geo.bank.benchX, y: w => w.geo.bank.groundY, r: 82 },
-    { id: 'creviceDoor', x: w => w.geo.bank.doorX, y: w => w.geo.bank.groundY, r: 110 },
+    // r 收到 90：与 water（760±92 = 668..852）拉开，否则站在水边偏左按 E 会误开裂缝
+    { id: 'creviceDoor', x: w => w.geo.bank.doorX, y: w => w.geo.bank.groundY, r: 90 },
     { id: 'water', x: w => w.geo.bank.waterX, y: w => w.geo.bank.groundY, r: 92 },
     { id: 'raft', x: w => w.raft.x, y: w => w.raft.y, r: 130, when: g => g.raftAssembled }
   ],
@@ -75,16 +77,18 @@ export const kit = {
     door: { voice: v.door, pitch: 0.7, rate: 0.8, rateSlow: 0.6 }
   }),
 
-  makeWorld({ content, game, cv }) {
+  makeWorld({ content, game, cv, atlases }) {
     const actors = createActors();
     const geo = content.geometry;
+    const sc = createScene();
+    initScene(sc, atlases, geo);              // boot 时烘焙岸边静态层（Node 环境自动跳过）
     const player = actors.player;
     player.x = geo.bank.spawnX;
     player.y = geo.bank.groundY;
     player.dir = 'right';
     player.airborne = false;
     const w = {
-      actors, player, geo, cv, currentRoom: 'bank',
+      actors, player, geo, cv, sc, currentRoom: 'bank',
       stones: [],
       raft: { x: geo.bank.raftX, y: geo.bank.groundY - 6, bob: 0 },
       transition: null,
@@ -130,7 +134,7 @@ export const kit = {
     const raftParked = game.raftAssembled &&
       (w.currentRoom === 'bank' || (w.currentRoom === 'deep' && game.stalled && !game.poled));
     w.cfg.wall = raftParked
-      ? { X: w.raft.x - 90, W: 180, topY: w.raft.y - 14, blockGround: false, jumpable: true }
+      ? { X: w.raft.x - 90, W: 180, topY: w.raft.y - RAFT_DECK, blockGround: false, jumpable: true }
       : null;
 
     if (w.transition) {
@@ -163,7 +167,7 @@ export const kit = {
       w.view.puffs.push({ x: player.x, y: w.geo.deep.groundY - 10, r: 10, a: 1 });
       w.sfx.water();
       player.x = w.raft.x;
-      player.y = w.raft.y - 14;
+      player.y = w.raft.y - RAFT_DECK;
     }
 
     if (game.embarked && w.currentRoom === 'deep') {
@@ -177,7 +181,7 @@ export const kit = {
       }
       if (!game.stalled || game.poled) {
         player.x = w.raft.x;
-        player.y = w.raft.y - 14;
+        player.y = w.raft.y - RAFT_DECK;
         player.moving = false;                    // 随筏漂行是站立，不播走路动画（筏面上自己走动时才走）
         player.dir = 'right';
       }
@@ -262,9 +266,9 @@ export const kit = {
   },
 
   draw(w, x, eTarget) {
-    const { game, view } = w;
+    const { game, view, sc } = w;
     x.clearRect(0, 0, SIDE.W, SIDE.H);
-    drawRoom(w, x);
+    drawScene(x, sc, w);
     if (w.currentRoom === 'bank') drawBankObjects(w, x);
     if (w.currentRoom === 'crevice') drawCreviceObjects(w, x);
     if (w.currentRoom === 'deep') drawDeepObjects(w, x);

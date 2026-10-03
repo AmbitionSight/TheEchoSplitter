@@ -287,9 +287,9 @@ test('E 目标审计：无锚点目标全部移除，self 仅在手持词具时�
   w.currentRoom = 'crevice';
   Object.assign(w.player, { x: content.geometry.crevice.spawnX, y: 590 });
   assert.equal(kit.findE(w).id, 'bankDoor', '左壁回程门在出生点可及');
-  // 岸边目标间隙（500）：空手无目标
+  // 岸边目标间隙（460）：合成台 278..442 与裂隙口 480..660 之间，空手无目标
   w.currentRoom = 'bank';
-  Object.assign(w.player, { x: 500, y: 590 });
+  Object.assign(w.player, { x: 460, y: 590 });
   assert.equal(kit.findE(w), null, '空手按 E 不再凭空出目标');
   // 木筏未组装时筏锚不是目标；组装后是
   Object.assign(w.player, { x: content.geometry.bank.raftX, y: 590 });
