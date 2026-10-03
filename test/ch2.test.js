@@ -2,10 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { createGame, gameEvent, jumpDebug, startGame, kit, LIGHTS2, tapTargetAt, crossMargin,
-         CAT, catClickable, stepCat, windDelay, windNow } from '../public/js/ch2.js';
+         CAT, catClickable, stepCat, windDelay, windNow, lightScales, stepFellSlide,
+         makeRubble, stepRubble, HINT_UNLOCKED } from '../public/js/ch2.js';
 import { createProfile, mergeProfile, seedMemory, neededSeeds } from '../public/js/profile.js';
 import { createInventory, addStone, stoneCount } from '../public/js/hotbar.js';
-import { planDropStones, drawTorchSide, drawBenchSide, makeDust, stepDust } from '../public/js/sideview.js';
+import { planDropStones, drawTorchSide, drawBenchSide, makeDust, stepDust, SIDE } from '../public/js/sideview.js';
 
 const content = JSON.parse(await readFile(new URL('../content/chapter2.json', import.meta.url), 'utf8'));
 const ch1Profile = mergeProfile(createProfile(), {
@@ -220,12 +221,14 @@ test('浮尘 helper：rng(99) 确定布局、y<160 回 700（规格 §6.4）', (
   assert.equal(d.y, 700);                                        // 上浮出顶 → 回到底部
 });
 
-test('makeWorld：浮尘 26 / 出口金尘 12 / 双火把余烬计时就绪', () => {
+test('makeWorld：浮尘 26 / 出口金尘 12 / 双火把余烬计时就绪 / 谷底碎石流 3 粒', () => {
   const g = createGame(content, ch1Profile);
   const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
   assert.equal(w.view.dust.length, 26);
   assert.equal(w.view.gold.length, 12);
   assert.equal(w.view.emberT.length, 2);
+  assert.equal(w.view.rubble.length, 3);                        // 谷底碎石流（规格 §8）
+  assert.equal(w.view.torchBeatT, 0);                           // 光响应拍计时就绪（规格 §6.3）
 });
 
 test('余烬：双火把各按 0.7–1.4s 节奏上飘，进星星池并带 ember 标', () => {
@@ -325,18 +328,29 @@ test('runExtras.teleport：调试传送清干净运动态', () => {
   assert.deepEqual([w.player.vy, w.player.airborne, w.player.moving, w.walkTo], [0, false, false, null]);
 });
 
-test('runExtras.fell：wind + thud（不再 mutter）+ 尘', () => {
+test('runExtras.fell：wind + thud（不再 mutter）+ 尘 + 暗角收拢 + 崖缘滑回（非瞬移）', () => {
   const sounds = [];
   const w = {
     geo: { groundY: 600, chasmL: 700 },
-    view: { puffs: [] },
-    player: { x: 800, y: 900, vy: 500, airborne: true },
+    view: { puffs: [], fellSlide: null, squeezeT: 0 },
+    player: { x: 800, y: 900, vy: 500, airborne: true, walkT: 0 },
+    walkTo: { x: 900 }, pending: { kind: 'chasm' },
     sfx: { wind: () => sounds.push('wind'), thud: () => sounds.push('thud'), mutter: () => sounds.push('mutter') }
   };
   kit.runExtras.fell(w);
   assert.deepEqual(sounds, ['wind', 'thud']);
   assert.ok(w.view.puffs.length > 0);
-  assert.equal(w.player.x, w.geo.chasmL - 90);
+  assert.ok(w.view.squeezeT > 0, '暗角收拢（规格 §3.2）');
+  assert.ok(w.view.chasmDipT > 0, '缝口暖光眨眼式压暗（规格 §6.3）');
+  assert.ok(w.view.fellSlide, '滑回 tween 就位（非瞬移）');
+  assert.ok(w.player.x >= w.geo.chasmL - 40, '先放在崖缘');
+  assert.notEqual(w.player.x, w.geo.chasmL - 90);
+  assert.equal(w.player.airborne, false);
+  assert.equal(w.walkTo, null); assert.equal(w.pending, null);       // 落谷清走位
+  for (let i = 0; i < 30; i++) stepFellSlide(w, 1 / 60);             // 0.4s 后
+  assert.equal(w.view.fellSlide, null);
+  assert.equal(w.player.x, w.geo.chasmL - 90, '滑回安全点');
+  assert.equal(w.player.y, w.geo.groundY);
   assert.equal(w.player.airborne, false);
 });
 
@@ -628,4 +642,101 @@ test('summaryMerge 含 picks：2a 声音石拾取数进书档（两半合计，�
   assert.equal(payload.picks, 1, '捡起 1 块 → picks=1（2b 结算再累加）');
   assert.equal(payload.chapter, 2);
   assert.deepEqual(payload.abilities, ['jump'], '2a 结算给下一半 jump 能力');
+});
+
+// ================= 2a 补漏（审计：光响应/坠谷滑回/谷底碎石/unlocked 落地/重复用词） =================
+
+test('光响应节拍：lightScales 缩放 LIGHTS2 的 s（chasm-try/unlocked/crossed/fell，规格 §6.3）', () => {
+  const base = { torchBeatT: 0, torchBeatM: 1, chasmBreathT: 0, chasmBoostT: 0, chasmBoostM: 1, chasmDipT: 0 };
+  assert.deepEqual(lightScales(base, false), { torchL: 1, torchR: 1, chasm: 1, exit: 1 });
+  const tryB = lightScales({ ...base, torchBeatT: 0.3, torchBeatM: 1.25 }, false);
+  assert.equal(tryB.torchL, 1.25); assert.equal(tryB.torchR, 1.25);            // chasm-try：双火焰 ×1.25
+  const mid = lightScales({ ...base, chasmBreathT: 0.8 }, false);              // 呼吸半程 = 峰值
+  assert.ok(Math.abs(mid.chasm - 1.5) < 1e-9, '缝口呼吸峰值 .16→.24（×1.5）');
+  const start = lightScales({ ...base, chasmBreathT: 1.6 }, false);            // 起止回基线
+  assert.ok(Math.abs(start.chasm - 1) < 1e-9);
+  const unlock = lightScales({ ...base, torchBeatT: 0.3, torchBeatM: 1.3, chasmBoostT: 0.3, chasmBoostM: 1.2 }, false);
+  assert.equal(unlock.torchL, 1.3); assert.ok(Math.abs(unlock.chasm - 1.2) < 1e-9);   // unlocked：火把 ×1.3、缝口 +20%
+  const dip = lightScales({ ...base, chasmDipT: 0.3 }, false);
+  assert.equal(dip.chasm, 0.5);                                                // fell：×0.5
+  const cross = lightScales(base, true);
+  assert.ok(Math.abs(cross.exit - 0.20 / 0.12) < 1e-9, 'crossed：出口 .12→.20');
+  assert.ok(Math.abs(cross.chasm - 1.25) < 1e-9, 'crossed：缝口 +.04（×1.25）');
+});
+
+test('chasm-try 光响应：shrug 触发双火焰 ×1.25/0.5s 与缝口 1.6s 呼吸（规格 §6.3）', () => {
+  const w = { player: {}, view: {} };
+  kit.runExtras.shrug(w);
+  assert.equal(w.player.squash, 0.9);
+  assert.equal(w.view.torchBeatM, 1.25);
+  assert.equal(w.view.torchBeatT, 0.5);
+  assert.equal(w.view.chasmBreathT, 1.6);
+});
+
+test('坠谷滑回保险：超大 dt 也一次到位（软重生绝不卡死）', () => {
+  const w = {
+    geo: { groundY: 600, chasmL: 700 },
+    view: { puffs: [], fellSlide: null, squeezeT: 0 },
+    player: { x: 800, y: 900, vy: 500, airborne: true, walkT: 0 },
+    sfx: { wind() {}, thud() {} }
+  };
+  kit.runExtras.fell(w);
+  stepFellSlide(w, 10);                                                      // 一帧跨完 0.4s
+  assert.equal(w.view.fellSlide, null);
+  assert.equal(w.player.x, w.geo.chasmL - 90);
+  assert.equal(w.player.y, w.geo.groundY);
+  assert.equal(w.player.airborne, false);
+});
+
+test('谷底碎石流：2–3 粒、只在谷底 120px、落出重生（规格 §8）', () => {
+  const geo = content.geometry;
+  const list = makeRubble(geo);
+  assert.equal(list.length, 3);
+  const bandTop = SIDE.H - 120;
+  for (const m of list) {
+    assert.ok(m.x > geo.chasmL && m.x < geo.chasmR, '碎石只在裂谷内');
+    assert.ok(m.y >= bandTop && m.y <= SIDE.H, '初始在谷底 120px 内');
+  }
+  const m = list[0]; m.y = SIDE.H + 10;
+  stepRubble(list, 0.1, geo);
+  assert.equal(m.y, bandTop, '落出谷底 → 回上沿重生');
+  assert.ok(m.x > geo.chasmL && m.x < geo.chasmR);
+});
+
+test('unlocked 拍：14 金星 + 脚下青色声环 + 光响应，hint 延到落地（规格 §3.2 拍 10）', () => {
+  const g = createGame(content, ch1Profile);
+  const w = kit.makeWorld({ content, profile: ch1Profile, game: g });
+  w.game = g; w.content = content; w.keys = new Set(); w.run = () => {};
+  const hints = [];
+  w.sfx = { hop() {}, thud() {}, chime() {}, wind() {}, glowTick() {}, hatPuff() {}, click() {}, mutter() {} };
+  w.ui = { setHint: k => hints.push(k) };
+  kit.runExtras.effect(w, { t: 'effect', name: 'jumpUnlock', full: true });
+  assert.equal(w.view.stars.length, 14, '14 金星（原 10）');
+  assert.deepEqual(hints, [], 'hint 不立即出：延到落地');
+  assert.ok(w.view.ringT > 0, '玩家脚下青色声环就位');
+  assert.equal(w.view.torchBeatM, 1.3); assert.equal(w.view.chasmBoostM, 1.2);
+  const puffs0 = w.view.puffs.length;
+  w.cfg.onLand(w.player.x);                                          // 示范跳落地
+  assert.deepEqual(hints, [HINT_UNLOCKED], '落地才给 unlocked 提示');
+  assert.ok(w.view.puffs.length > puffs0, '落地尘');
+  assert.equal(w.view.demoLand, false);
+});
+
+test('重复 USE jump：glowTick 之外再念一次词（child 童声，规格 §4）', () => {
+  const g = createGame(content, ch1Profile);
+  const first = gameEvent(g, 'USE', { word: 'jump', target: 'player' });
+  assert.ok(first.some(i => i.t === 'effect' && i.full === true));
+  assert.ok(!first.some(i => i.t === 'speak'), '首次是示范跳，不重复念');
+  const again = gameEvent(g, 'USE', { word: 'jump', target: 'player' });
+  assert.ok(again.some(i => i.t === 'effect' && i.full === false), 'glowTick 轻反应仍在');
+  assert.ok(again.some(i => i.t === 'speak' && i.who === 'child' && i.text === 'Jump.'), '再念一次');
+});
+
+test('2a 补漏接线：draw 读 lightScales、tick 推滑回与碎石（源码断言）', async () => {
+  const src = await readFile(new URL('../public/js/ch2.js', import.meta.url), 'utf8');
+  for (const k of ['lightScales(', 'drawLightDelta(', 'drawSoundRing(', 'drawRubble(',
+                   'drawFellSqueeze(', 'stepFellSlide(w, dt)', 'stepRubble(']) {
+    assert.ok(src.includes(k), `缺 ${k}`);
+  }
+  assert.match(src, /sc\.torchL/, '火把动态光晕 s 按拍缩放（不复制坐标）');
 });

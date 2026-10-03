@@ -1,6 +1,6 @@
 // —— 析声者 · 第二间房：jump（dʒ·ʌ·m·p；p 为第一间房旧识）——
 import { createInventory } from './hotbar.js';
-import { pickupStone, bankHeld, holdItem, craftWord,
+import { pickupStone, bankHeld, holdItem, craftWord, cap,
          chapterOnE, syncHeld, seedBegin, dropExtra, dropBackExtra, stepWorldStones } from './chapter.js';
 
 // ================= 纯事件机（Node 可测，行为与重构前一致；公共段见 chapter.js） =================
@@ -52,7 +52,10 @@ export function gameEvent(g, ev, arg = null) {
       const { word, target } = arg;
       const def = c.words[word]?.use;
       if (!def || target !== def.target) return [{ t: 'mutter' }];
-      if (g.jumpUnlocked) return [{ t: 'effect', name: 'jumpUnlock', full: false }];
+      if (g.jumpUnlocked) return [                          // 重复使用：glowTick 之外再念一次（规格 §4）
+        { t: 'effect', name: 'jumpUnlock', full: false },
+        { t: 'speak', who: 'child', text: cap(word) }
+      ];
       g.jumpUnlocked = true;
       return [{ t: 'effect', name: 'jumpUnlock', full: true }];
     }
@@ -131,6 +134,77 @@ export function LIGHTS2(geo) {
     chasm:  { x: (geo.chasmL + geo.chasmR) / 2, y: geo.groundY - 70, r: 300, s: 0.16 },  // 缝口暖核（对面有光）
     exit:   { x: geo.exitX, y: geo.groundY - 180, r: 260, s: 0.12 }      // 出口石拱
   };
+}
+
+// —— 光响应节拍（规格 §6.3）：拍 → 光锚 s 的瞬时倍率；draw 读 lightScales 缩放 LIGHTS2 的 s，不复制坐标 ——
+export const LIGHT_BEATS = { chasmBreath: 1.6, chasmTry: 0.5, unlock: 0.6, chasmDip: 0.6 };
+export function lightScales(v, crossed = false) {
+  const s = { torchL: 1, torchR: 1, chasm: 1, exit: 1 };
+  if (v.torchBeatT > 0) { const m = v.torchBeatM ?? 1; s.torchL *= m; s.torchR *= m; }   // chasm-try ×1.25 / unlocked ×1.3
+  if (v.chasmBreathT > 0) {                                     // chasm-try：缝口一次呼吸 .16→.24→.16（1.6s 正弦包络）
+    const p = Math.min(1, Math.max(0, 1 - v.chasmBreathT / LIGHT_BEATS.chasmBreath));
+    s.chasm *= 1 + 0.5 * Math.sin(Math.PI * p);
+  }
+  if (v.chasmBoostT > 0) s.chasm *= v.chasmBoostM ?? 1;         // unlocked：缝口 +20%（0.6s）
+  if (v.chasmDipT > 0) s.chasm *= 0.5;                          // fell：×0.5 持续 0.6s 再回升
+  if (crossed) { s.chasm *= 1.25; s.exit *= 0.20 / 0.12; }      // crossed：缝口 +.04；出口升档 .12→.20
+  return s;
+}
+export const RING = { dur: 0.6, r0: 16, r1: 64 };               // unlocked 脚下青色声环（规格 §6.3）
+
+// —— 坠谷滑回（规格 §3.2 fell）：放在崖缘 → 0.4s ease-out 滑回安全点（非瞬移）；tween 在 tick 推进 ——
+export const FELL = { dur: 0.4, back: 90, lip: 6 };
+export function startFellSlide(w) {
+  const geo = w.geo, p = w.player, v = w.view;
+  const from = { x: geo.chasmL - FELL.lip, y: geo.groundY };
+  const to = { x: geo.chasmL - FELL.back, y: geo.groundY };
+  v.fellSlide = { t: 0, from, to };
+  p.x = from.x; p.y = from.y; p.vy = 0; p.airborne = false;
+  p.moving = true; p.facing = -1; p.dir = 'left';
+  w.walkTo = null; w.pending = null;                            // 落谷清走位（软重生绝不卡死）
+}
+export function stepFellSlide(w, dt) {
+  const fs = w.view?.fellSlide, p = w.player;
+  if (!fs) return false;
+  fs.t += dt;
+  const k = Math.min(1, fs.t / FELL.dur);
+  const e = 1 - Math.pow(1 - k, 3);                             // ease-out：先快后稳
+  p.x = fs.from.x + (fs.to.x - fs.from.x) * e;
+  p.y = fs.from.y + (fs.to.y - fs.from.y) * e;
+  p.vy = 0; p.airborne = false;
+  p.moving = k < 1; p.facing = -1; p.dir = 'left';
+  p.walkT = (p.walkT ?? 0) + dt;                                // 挣扎步帧
+  if (k >= 1) {                                                 // 落点 = 安全点：任何 dt 都一次到位
+    p.x = fs.to.x; p.y = fs.to.y; p.moving = false; p.squash = 0.6;
+    w.view.fellSlide = null;
+    return false;
+  }
+  return true;
+}
+
+// —— 谷底碎石/尘埃流（规格 §8）：2–3 粒坠落、稀疏、动态重生，只在谷底 120px 内 ——
+export const RUBBLE = { n: 3, band: 120 };
+export function makeRubble(geo, n = RUBBLE.n, seed = 137) {
+  const r = rng(seed), out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      x: geo.chasmL + 20 + r() * (geo.chasmR - geo.chasmL - 40),
+      y: SIDE.H - RUBBLE.band + r() * RUBBLE.band,
+      v: 26 + r() * 30,
+      ph: r() * 6.28,
+      sz: 1.4 + r() * 1.6
+    });
+  }
+  return out;
+}
+export function stepRubble(list, dt, geo) {
+  for (const m of list) {
+    m.y += m.v * dt;
+    if (m.y > SIDE.H + 4) {                                     // 落出谷底 → 回上沿重生
+      m.y = SIDE.H - RUBBLE.band;
+      m.x = geo.chasmL + 20 + Math.random() * (geo.chasmR - geo.chasmL - 40);
+    }
+  }
 }
 
 // —— 过坑自动化（规格 §10）：助跑止点与余量算术（sideJump vy=−740、moveSide 重力 1500）——
@@ -224,7 +298,7 @@ function wireJumpBtn(w, signal) {
 }
 
 // hint 'unlocked' 不再绑定空格：键盘/触屏跳键/点对岸自动跳同一条路（规格 §10）
-const HINT_UNLOCKED = '能跳了。跑起来，跳。';
+export const HINT_UNLOCKED = '能跳了。跑起来，跳。';
 
 export const kit = {
   chapter: 2, W: SIDE.W, H: SIDE.H, titleRune: 'ᛚ',
@@ -259,7 +333,12 @@ export const kit = {
         gold: makeGoldMotes(geo),                              // 出口 12 金尘（拱洞内循环上浮）
         glowT: 0, mistPulse: 0, torchSurge: 0,                 // crossed 演出计时（暖晕 1.2s / 雾脉冲 / 火把池 0.8s 涌亮）
         catLeaveT: 0,                                          // 猫离场倒计时（crossed 落地开 1s；窗口内可点，规格 §9）
-        windT: windDelay(geo.spawnX, geo)                      // 环境风：8–14s 一阵，近裂口更密（规格 §9）
+        windT: windDelay(geo.spawnX, geo),                     // 环境风：8–14s 一阵，近裂口更密（规格 §9）
+        // 光响应节拍（规格 §6.3）：拍计时与倍率（draw 读 lightScales 缩放 LIGHTS2 的 s）
+        torchBeatT: 0, torchBeatM: 1, chasmBreathT: 0, chasmBoostT: 0, chasmBoostM: 1, chasmDipT: 0,
+        ringT: 0, ringX: geo.spawnX, ringY: geo.groundY,       // unlocked 脚下青色声环 r16→64
+        squeezeT: 0, fellSlide: null, demoLand: false,         // fell 暗角收拢 + 滑回；unlocked hint 延到落地
+        rubble: makeRubble(geo)                                // 谷底碎石流 3 粒（规格 §8）
       },
       cfg: {
         gap: { L: geo.chasmL, R: geo.chasmR },
@@ -268,6 +347,12 @@ export const kit = {
         onLand: x => {                                         // 落地 thud（规格 §7.1）
           w.sfx.thud();
           if (w.autoCross) { w.autoCross = false; w.keys?.delete('r'); }   // 自动跳落地：收回空中右推
+          w.view.puffs.push({ x: w.player.x - 10, y: geo.groundY, r: 6, a: 0.9 });   // 落地尘（规格 §3.2 拍 10）
+          w.view.puffs.push({ x: w.player.x + 10, y: geo.groundY, r: 6, a: 0.9 });
+          if (w.view.demoLand) {                               // unlocked hint 延到落地（规格 §3.2 拍 10）
+            w.view.demoLand = false;
+            w.ui?.setHint(HINT_UNLOCKED);
+          }
           if (x > geo.chasmR) w.run(gameEvent(game, 'CROSS'));
         },
         onFell: () => w.run(gameEvent(game, 'FELL'))
@@ -319,6 +404,12 @@ export const kit = {
     v.glowT = Math.max(0, v.glowT - dt);                       // crossed 暖晕：1.2s 光涌后熄
     v.mistPulse = Math.max(0, v.mistPulse - dt * 0.8);         // 谷雾脉冲（被风吹散后回稳）
     v.torchSurge = Math.max(0, v.torchSurge - dt / 0.8);       // 对岸火把池 0.8s 涌亮
+    v.torchBeatT = Math.max(0, v.torchBeatT - dt);             // 光响应节拍衰减（规格 §6.3）
+    v.chasmBreathT = Math.max(0, v.chasmBreathT - dt);
+    v.chasmBoostT = Math.max(0, v.chasmBoostT - dt);
+    v.chasmDipT = Math.max(0, v.chasmDipT - dt);
+    v.ringT = Math.max(0, v.ringT - dt);
+    v.squeezeT = Math.max(0, v.squeezeT - dt / 1.2);           // fell 暗角收拢后放开
     v.windT -= dt;                                             // 环境风：8–14s 一阵，近裂口更密（规格 §9）
     if (v.windT <= 0) { w.sfx.wind(); v.windT = windDelay(w.player.x, geo); }
     w.player.squash = Math.max(0, w.player.squash - dt * 2);
@@ -327,6 +418,7 @@ export const kit = {
     w.run(stepCat(w, dt));                                     // 对岸猫：crossed 1s 后 meow 起身向右走出画面（规格 §9）
     moveSide(w, dt);
     stepWalkTo(w, dt);                                         // 点哪走哪（规格 §10；调在 moveSide 之后）
+    stepFellSlide(w, dt);                                      // 坠谷滑回：tween 覆盖本帧位置（规格 §3.2）
     if (w.player.moving && (w.keys.has('l') || w.keys.has('r'))) w.player.walkT += dt;  // 行走帧推进（仅水平移动）
     // 走位到位（≤30px）→ 触发 pending：与按 E 同一条路径；出口无 E 动作，交给下面的 EXIT 判定
     if (w.pending && (!w.walkTo || Math.abs(w.player.x - w.walkTo.x) <= 30)) {
@@ -345,6 +437,7 @@ export const kit = {
     v.stars = v.stars.filter(st => (st.a -= dt * 1.2) > 0);
     stepEmbers(w, dt);                                          // 余烬：每火把 0.7–1.4s 一颗（复用星星池）
     stepDust(v.dust, dt);                                       // 浮尘：y<160 回 700（rng(99) 布局）
+    stepRubble(v.rubble, dt, geo);                              // 谷底碎石流（规格 §8）
     for (const m of v.gold) {                                   // 出口金尘上浮循环
       m.y -= m.v * dt;
       if (m.y < geo.groundY - 176) m.y = geo.groundY - 6;       // 升到拱顶下 → 回拱底
@@ -394,14 +487,20 @@ export const kit = {
       dropExtra(w => w.geo.chasmL)(w, ins);
     },
     dropBack: dropBackExtra(),
-    shrug(w) { w.player.squash = 0.9; },
+    shrug(w) {
+      w.player.squash = 0.9;
+      const v = w.view;                                  // chasm-try 光响应（规格 §6.3）
+      v.torchBeatT = LIGHT_BEATS.chasmTry; v.torchBeatM = 1.25;    // 双火焰 ×1.25 / 0.5s
+      v.chasmBreathT = LIGHT_BEATS.chasmBreath;          // 缝口呼吸 .16→.24→.16 / 1.6s
+    },
     bubble(w) { w.view.bubbleT = 2.6; },
     fell(w) {                                          // 坠谷：wind（下坠）+ thud（落地）——不再 mutter（规格 §7.1）
       windNow(w); w.sfx.thud();
       if (w.autoCross) { w.autoCross = false; w.keys?.delete('r'); }   // 自动跳被中断：收回空中右推，防重生后继续冲谷
       w.view.puffs.push({ x: w.player.x, y: w.geo.groundY, r: 8, a: 1 });
-      w.player.x = w.geo.chasmL - 90; w.player.y = w.geo.groundY - 160;
-      w.player.vy = 0; w.player.airborne = false;
+      w.view.squeezeT = 1;                               // 暗角收拢（规格 §3.2 fell）
+      w.view.chasmDipT = LIGHT_BEATS.chasmDip;           // 缝口暖光 ×0.5 持续 0.6s 再回升（一次「眨眼」，规格 §6.3）
+      startFellSlide(w);                                 // 从崖缘滑回（非瞬移；软重生绝不卡死，规格 §3.2）
     },
     revealCard(w, ins) {                               // 合成成功后 +0.9s：卡开 chime + 揭示卡（规格 §7.1/§7.3）
       setTimeout(() => { w.sfx.chime(); w.ui.reveal(ins.word); }, 900);
@@ -428,18 +527,23 @@ export const kit = {
       w.player.vy = 0; w.player.airborne = false; w.player.moving = false;
       w.walkTo = null; w.pending = null;
       if (w.autoCross) { w.autoCross = false; w.keys?.delete('r'); }
+      if (w.view) w.view.fellSlide = null;             // 清坠谷滑回 tween
     },
     effect(w, ins) {
       if (ins.name !== 'jumpUnlock') return;
+      const v = w.view;
       if (ins.full) {
         w.sfx.hop();                                                       // 起跳 hop（规格 §7.1）
         w.player.vy = -740; w.player.airborne = true;                     // 示范跳
-        for (let i = 0; i < 10; i++) {
-          w.view.stars.push({ x: w.player.x + (Math.random() - 0.5) * 60, y: w.player.y - 60 - Math.random() * 60, a: 1, r: 3 + Math.random() * 3 });
+        for (let i = 0; i < 14; i++) {                                     // 14 金星（规格 §3.2 拍 10）
+          v.stars.push({ x: w.player.x + (Math.random() - 0.5) * 60, y: w.player.y - 60 - Math.random() * 60, a: 1, r: 3 + Math.random() * 3 });
         }
         showJumpBtn(w);                                                    // #btn-jump 与 unlocked 同拍显示（规格 §10）
-        w.ui.setHint(HINT_UNLOCKED);
-      } else w.sfx.glowTick();
+        v.demoLand = true;                                                 // hint 延到落地（onLand 给，规格 §3.2 拍 10）
+        v.torchBeatT = LIGHT_BEATS.unlock; v.torchBeatM = 1.3;             // 双火把 ×1.3 / 0.6s（规格 §6.3）
+        v.chasmBoostT = LIGHT_BEATS.unlock; v.chasmBoostM = 1.2;           // 缝口 +20%
+        v.ringT = RING.dur; v.ringX = w.player.x; v.ringY = w.geo.groundY; // 脚下青色声环 r16→64 / 0.6s
+      } else w.sfx.glowTick();                                             // 重复使用再念由事件机给 speak（规格 §4）
     }
   },
 
@@ -450,6 +554,7 @@ export const kit = {
 
   draw(w, x, eTarget) {
     const { view: v, geo, game, lights: L } = w;
+    const sc = lightScales(v, !!game.crossed);                              // 光响应拍倍率（规格 §6.3；s 在 draw 时缩放）
     x.clearRect(0, 0, SIDE.W, SIDE.H);
     if (!w.bg) w.bg = makeBg(w);                                            // 墙/地/陈设一次性预渲染
     x.drawImage(w.bg, 0, 0);
@@ -465,9 +570,9 @@ export const kit = {
       x.fill();
     }
     drawWindBanner(x, 1030, geo.groundY, Math.sin(v.t * 1.6 + 0.7) * 0.06);   // 风幡绕顶摆 ±0.06rad（动态层）
-    drawTorchSide(x, L.torchL.x, L.torchL.y, v.t, { r: L.torchL.r, a: L.torchL.s });   // 火把（动态光晕读 LIGHTS2 锚点）
+    drawTorchSide(x, L.torchL.x, L.torchL.y, v.t, { r: L.torchL.r, a: L.torchL.s * sc.torchL });   // 火把（动态光晕读 LIGHTS2 锚点 × 拍倍率）
     drawTorchSide(x, L.torchR.x, L.torchR.y, v.t,                                  // 对岸火把：crossed 后 0.8s 涌亮
-      { r: L.torchR.r * (1 + v.torchSurge * 0.2), a: L.torchR.s * (1 + v.torchSurge * 1.4) });
+      { r: L.torchR.r * (1 + v.torchSurge * 0.2), a: L.torchR.s * sc.torchR * (1 + v.torchSurge * 1.4) });
     drawBenchSide(x, w.atlases, geo.benchX, geo.groundY, game.hand?.kind === 'stone', v.craftSlots, { candle: true, t: v.t });
     drawCatActor(w, x, v.t);                                                // 对岸橘猫（规格 §9）
     x.save();
@@ -480,15 +585,20 @@ export const kit = {
     // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气；值读 sideview.AMBIENT，规格 §6.4）
     x.fillStyle = `rgba(16,18,36,${AMBIENT.grade})`;
     x.fillRect(0, 0, SIDE.W, SIDE.H);
-    // —— 级色之上的动态陈设（发光元素不吃压暗）：出口灯塔 / 水光 / 浮尘 ——
+    // —— 级色之上的动态陈设（发光元素不吃压暗）：出口灯塔 / 水光 / 浮尘 / 光响应 ——
     drawExitBeacon(w, x);
+    drawLightDelta(w, x, 'chasm', sc.chasm);           // 缝口暖核光响应（呼吸/加亮/压暗；坐标读 LIGHTS2）
+    drawLightDelta(w, x, 'exit', sc.exit);             // crossed：出口升档 .12→.20
     drawPuddleGlints(x, 968, 602, v.t);
     drawDust(x, v.dust, v.t, L);
+    drawRubble(x, v.rubble);                           // 谷底碎石流（规格 §8）
     drawCrossGlow(w, x);                               // crossed 1.2s 暖晕（预渲染，画在级色之上读作光）
-    // 青声元素（听声点脉动 / E 提示）最后画：永远压在级色与一切暖光之上（规格 §6）
+    // 青声元素（脚下声环 / 听声点脉动 / E 提示）最后画：永远压在级色与一切暖光之上（规格 §6）
+    drawSoundRing(w, x);                               // unlocked 脚下青色声环（规格 §6.3）
     drawListenSpots(x, w);
     drawEHint(x, eTarget, v.t);
     vignette(x);
+    drawFellSqueeze(w, x);                             // 坠谷暗角收拢（规格 §3.2）
   }
 };
 
@@ -898,6 +1008,51 @@ function drawCrossGlow(w, x) {
   x.globalAlpha = 1;
 }
 
+// 光锚的拍增量：m>1 暖增（总读 s×m）；m<1 黑罩压暗（总读 s×m）。坐标/半径读 LIGHTS2，不复制（规格 §6.3）
+function drawLightDelta(w, x, key, m) {
+  if (Math.abs(m - 1) < 0.02) return;
+  const L = w.lights[key];
+  const g = x.createRadialGradient(L.x, L.y, 4, L.x, L.y, L.r);
+  if (m > 1) {
+    g.addColorStop(0, `rgba(255,198,112,${Math.min(1, L.s * (m - 1))})`);
+    g.addColorStop(1, 'rgba(255,198,112,0)');
+  } else {
+    g.addColorStop(0, `rgba(5,7,12,${Math.min(1, 1 - m)})`);
+    g.addColorStop(1, 'rgba(5,7,12,0)');
+  }
+  x.fillStyle = g;
+  x.beginPath(); x.arc(L.x, L.y, L.r, 0, 7); x.fill();
+}
+
+// 脚下青色声环（unlocked 拍）：r16→64、0.6s，压在级色之上（规格 §6.3）
+function drawSoundRing(w, x) {
+  const v = w.view;
+  if (!(v.ringT > 0)) return;
+  const p = 1 - v.ringT / RING.dur;
+  const r = RING.r0 + (RING.r1 - RING.r0) * p;
+  x.strokeStyle = `rgba(84,224,200,${0.55 * (1 - p)})`;
+  x.lineWidth = 3.5;
+  x.beginPath(); x.ellipse(v.ringX, v.ringY + 2, r, r * 0.38, 0, 0, 7); x.stroke();
+}
+
+// 坠谷暗角收拢：fell 后 1.2s 内收紧再放开（规格 §3.2「暗角收拢」）
+function drawFellSqueeze(w, x) {
+  const k = w.view.squeezeT;
+  if (!(k > 0)) return;
+  const g = x.createRadialGradient(640, 360, 380 - 150 * k, 640, 360, 780 - 180 * k);
+  g.addColorStop(0, 'rgba(0,0,0,0)');
+  g.addColorStop(1, `rgba(0,0,0,${0.5 * k})`);
+  x.fillStyle = g; x.fillRect(0, 0, SIDE.W, SIDE.H);
+}
+
+// 谷底碎石/尘埃流（规格 §8）：动态稀疏；绘制时轻摆（模拟中只沿谷底 120px 下落）
+function drawRubble(x, list) {
+  x.fillStyle = 'rgba(198,204,216,.5)';
+  for (const m of list) {
+    x.fillRect(m.x + Math.sin(m.ph + m.y / 24) * 2 - m.sz / 2, m.y, m.sz, m.sz * 1.4);
+  }
+}
+
 // 对岸橘猫（规格 §9）：复用 actors.js drawCat；离场时补一点颠步（不改 actors.js）
 function drawCatActor(w, x, t) {
   const c = w.actors?.cat;
@@ -932,9 +1087,10 @@ function stepEmbers(w, dt) {
 
 // 出口灯塔：ᚱ 呼吸青（α .35→.7）+ 12 金尘上浮——画在级色之上，读作「光」（规格 §5.1#10 / §3.2 拍 13）
 function drawExitBeacon(w, x) {
-  const { view: v, lights: L } = w;
+  const { view: v, lights: L, game } = w;
   const rx = L.exit.x, ry = L.exit.y - 44;                     // 拱顶符文位（drawArchSide：baseY−230+6）
-  const breathe = 0.5 + Math.sin(v.t * 1.1) * 0.5;
+  const amp = game?.crossed ? 0.8 : 0.5;                       // crossed：呼吸振幅 ×1.6（规格 §6.3）
+  const breathe = Math.max(0, 0.5 + Math.sin(v.t * 1.1) * amp);
   const g = x.createRadialGradient(rx, ry, 4, rx, ry, 64);
   g.addColorStop(0, `rgba(84,224,200,${0.30 * breathe})`);
   g.addColorStop(1, 'rgba(84,224,200,0)');
