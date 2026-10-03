@@ -1,6 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from '../public/js/ch3/cave.js';
+import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites } from '../public/js/ch3/render.js';
+
+// 记录型 canvas 桩（同 test/art.test.js 风格）。
+// __calls 计数；__pts 只记 moveTo/lineTo 的折点——椭圆/圆弧不入 __pts，
+// 这样「物件包围盒」类断言不会被落地影干扰。
+function recordingCtx() {
+  const calls = { fill: 0, stroke: 0, ellipse: 0, arc: 0, moveTo: 0, lineTo: 0, fillRect: 0, quadraticCurveTo: 0 };
+  const pts = [];
+  const grad = { addColorStop() {} };
+  return new Proxy({ __calls: calls, __pts: pts }, {
+    get(t, k) {
+      if (k in t) return t[k];
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => grad;
+      if (k === 'moveTo' || k === 'lineTo') return (px, py) => { calls[k]++; pts.push([px, py]); };
+      return () => { if (k in calls) calls[k]++; };
+    },
+    set(t, k, v) { t[k] = v; return true; }
+  });
+}
 
 test('rng：同种子同序列，值域 [0,1)，异种子序列不同', () => {
   const a = rng(41), b = rng(41), c = rng(42);
@@ -81,4 +100,46 @@ test('湿度梯度：wetRange 左低右高时，右半面平均 wet 高于左半
   const right = p.faces.filter(f => f.pts[0][0] >= mid);
   const avg = a => a.reduce((s, f) => s + f.wet, 0) / a.length;
   assert.ok(avg(right) > avg(left), `左 ${avg(left)} 右 ${avg(right)}`);
+});
+
+test('contactShadow：恰好一枚椭圆 + 一次填充，且不画圆弧', () => {
+  const x = recordingCtx();
+  contactShadow(x, 640, 590, 60);
+  assert.equal(x.__calls.ellipse, 1);
+  assert.equal(x.__calls.fill, 1);
+  assert.equal(x.__calls.arc, 0);
+});
+
+test('drawCaveWall：每个岩面至少一次填充（逐块上色）', () => {
+  const plan = cavePlan(41, 1280, 590, { cols: 4, rows: 3 });
+  const x = recordingCtx();
+  drawCaveWall(x, plan, { base: CAVE_PAL.rockA, moss: CAVE_PAL.moss, mossHi: CAVE_PAL.mossHi });
+  assert.ok(x.__calls.fill >= plan.faces.length, `fill=${x.__calls.fill} 面数=${plan.faces.length}`);
+});
+
+test('drawCaveFloor：不抛错且至少一次填充', () => {
+  const plan = cavePlan(41, 1280, 200, { cols: 4, rows: 2 });
+  const x = recordingCtx();
+  assert.doesNotThrow(() => drawCaveFloor(x, plan, { base: CAVE_PAL.floor }));
+  assert.ok(x.__calls.fill >= 1);
+});
+
+test('drawStalactites：每根至少一次填充；空数组不抛错', () => {
+  const x = recordingCtx();
+  const plan = stalactitePlan(41, 1280, 0, 5);
+  drawStalactites(x, plan, 0, CAVE_PAL.rockDark);
+  assert.ok(x.__calls.fill >= plan.length);
+  assert.doesNotThrow(() => drawStalactites(recordingCtx(), [], 0, CAVE_PAL.rockDark));
+});
+
+test('drawCaveWall：苔藓只画在湿面上（湿面苔藓绘制数远多于干面）', () => {
+  // 苔藓与第一关 drawMasonry 同款，用 fillRect 画 2×2 抖动点，故这里数 fillRect 而非 fill。
+  // 干面（wetRange [0,0]）的 wet 仍带 ±0.15 噪声，但密度阈值 0.30 之下不会落点。
+  const dry = cavePlan(41, 1280, 590, { cols: 3, rows: 2, wetRange: [0, 0] });
+  const wet = cavePlan(41, 1280, 590, { cols: 3, rows: 2, wetRange: [0.9, 0.9] });
+  const xd = recordingCtx(), xw = recordingCtx();
+  drawCaveWall(xd, dry, { base: CAVE_PAL.rockA, moss: CAVE_PAL.moss, mossHi: CAVE_PAL.mossHi });
+  drawCaveWall(xw, wet, { base: CAVE_PAL.rockA, moss: CAVE_PAL.moss, mossHi: CAVE_PAL.mossHi });
+  assert.ok(xw.__calls.fillRect > xd.__calls.fillRect * 10,
+    `湿 ${xw.__calls.fillRect} 应远多于干 ${xd.__calls.fillRect}`);
 });

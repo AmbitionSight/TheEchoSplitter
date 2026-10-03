@@ -1,5 +1,5 @@
 // —— 析声者 · 第三关渲染层：自 ch3.js 绘制段原样迁入（房间/岸边/裂隙/深水/木筏/气泡）——
-import { SIDE, drawBenchSide } from '../sideview.js';
+import { SIDE, drawBenchSide, shade } from '../sideview.js';
 import { drawBenchStones } from '../workbench.js';
 import { PAL, drawCross } from '../art.js';
 
@@ -141,4 +141,154 @@ export function drawBubble(x, p, t) {
   x.beginPath(); x.moveTo(bx - 8, by + 26); x.lineTo(bx + 2, by + 40); x.lineTo(bx + 12, by + 26); x.closePath(); x.fill(); x.stroke();
   drawCross(x, bx + 12, by - 2, 26);
   x.restore();
+}
+
+// ================= 洞穴岩面（本轮只服务岸边；裂隙/深水两轮复用） =================
+
+// 与 ch1 暗海/砌石同一套像素语言
+const BAYER = [[0, 2], [3, 1]];
+
+function polyPath(x, pts) {
+  x.beginPath();
+  x.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) x.lineTo(pts[i][0], pts[i][1]);
+  x.closePath();
+}
+
+function planExtent(plan) {
+  let W = 0, H = 0;
+  for (const v of plan.verts ?? []) { if (v[0] > W) W = v[0]; if (v[1] > H) H = v[1]; }
+  return { W, H };
+}
+
+// 环境遮蔽式落地影：无光源就没有方向，所以是一枚居中的柔和椭圆，不做偏移投影
+export function contactShadow(x, cx, cy, rx, ry = rx * 0.28) {
+  x.fillStyle = 'rgba(0,0,0,.25)';
+  x.beginPath(); x.ellipse(cx, cy, rx, ry, 0, 0, 7); x.fill();
+}
+
+// 岩壁：逐面上色 + 上缘受光 / 下缘沉影 + 裂缝 + 拜耳抖动苔藓 + 洞顶沉暗
+export function drawCaveWall(x, plan, opts) {
+  const faces = plan.faces ?? [];
+  if (!faces.length) return;
+  const { base, moss, mossHi } = opts;
+  const { W, H } = planExtent(plan);
+
+  x.fillStyle = shade(base, -0.35);                       // 岩缝底色
+  x.fillRect(0, 0, W, H);
+
+  for (const f of faces) {
+    const p = f.pts;
+    const xs = p.map(q => q[0]), ys = p.map(q => q[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs);
+    const y0 = Math.min(...ys), yb = Math.max(...ys);
+
+    x.fillStyle = shade(base, f.t - 1);                   // 面体（逐块明度差 ±10%）
+    polyPath(x, p); x.fill();
+
+    x.lineWidth = 2;                                      // 上缘受光
+    x.strokeStyle = shade(base, f.t - 1 + 0.16);
+    x.beginPath(); x.moveTo(p[0][0], p[0][1]); x.lineTo(p[1][0], p[1][1]); x.stroke();
+    x.strokeStyle = shade(base, f.t - 1 - 0.22);          // 下缘沉影
+    x.beginPath(); x.moveTo(p[3][0], p[3][1]); x.lineTo(p[2][0], p[2][1]); x.stroke();
+
+    if (f.crack) {                                        // 斜裂一道
+      const cx0 = (p[0][0] + p[3][0]) / 2;
+      x.strokeStyle = 'rgba(30,28,34,.55)'; x.lineWidth = 2; x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(cx0 - 6, y0 + 4);
+      x.lineTo(cx0 + 3, y0 + (yb - y0) * 0.45);
+      x.lineTo(cx0 - 4, yb - 4);
+      x.stroke();
+    }
+
+    if (f.wet > 0) {                                      // 苔藓：下缘向上抖动生长
+      const mh = Math.round(6 + f.wet * 16);
+      for (let k = 0; k < mh; k += 2) {
+        const dens = f.wet * (1 - k / mh) * 0.95;
+        for (let px = x0 + 1; px < x1 - 1; px += 2) {
+          const th = BAYER[((px / 2) | 0) & 1][(((yb - k) / 2) | 0) & 1] / 4;
+          if (dens * (0.3 + th * 0.9) > 0.30) {
+            x.fillStyle = (k < 4 && th > 0.4) ? mossHi : moss;
+            x.fillRect(px, yb - k, 2, 2);
+          }
+        }
+      }
+    }
+
+    for (let i = 0; i < f.speck; i++) {                   // 岩屑亮点（确定性，不用随机）
+      const sx = x0 + ((i * 37 + f.c * 17) % Math.max(1, x1 - x0));
+      const sy = y0 + ((i * 53 + f.r * 29) % Math.max(1, yb - y0));
+      x.fillStyle = shade(base, f.t - 1 + 0.25);
+      x.fillRect(sx, sy, 1, 1);
+    }
+  }
+
+  const g = x.createLinearGradient(0, 0, 0, H);           // 洞顶沉暗
+  g.addColorStop(0, 'rgba(6,8,14,.45)');
+  g.addColorStop(0.55, 'rgba(6,8,14,0)');
+  x.fillStyle = g;
+  x.fillRect(0, 0, W, H);
+}
+
+// 岩床：顶缘受光 / 底缘沉影，并叠墙脚落地阴影
+export function drawCaveFloor(x, plan, opts) {
+  const faces = plan.faces ?? [];
+  if (!faces.length) return;
+  const { base } = opts;
+  const { W, H } = planExtent(plan);
+
+  x.fillStyle = shade(base, -0.35);
+  x.fillRect(0, 0, W, H);
+
+  for (const f of faces) {
+    const p = f.pts;
+    x.fillStyle = shade(base, f.t - 1);
+    polyPath(x, p); x.fill();
+
+    x.lineWidth = 2;
+    x.strokeStyle = shade(base, f.t - 1 + 0.13);          // 顶缘受光
+    x.beginPath(); x.moveTo(p[0][0], p[0][1]); x.lineTo(p[1][0], p[1][1]); x.stroke();
+    x.strokeStyle = shade(base, f.t - 1 - 0.2);           // 底缘沉影
+    x.beginPath(); x.moveTo(p[3][0], p[3][1]); x.lineTo(p[2][0], p[2][1]); x.stroke();
+
+    if (f.crack) {
+      const cx0 = (p[0][0] + p[3][0]) / 2;
+      x.strokeStyle = 'rgba(30,28,34,.5)'; x.lineWidth = 3; x.lineCap = 'round';
+      x.beginPath();
+      x.moveTo(cx0 - 8, p[0][1] + 6);
+      x.lineTo(cx0 + 5, p[0][1] + (p[3][1] - p[0][1]) * 0.5);
+      x.lineTo(cx0 - 3, p[3][1] - 6);
+      x.stroke();
+    }
+  }
+
+  const fsh = x.createLinearGradient(0, 0, 0, Math.min(40, H));   // 墙脚落地阴影
+  fsh.addColorStop(0, 'rgba(0,0,0,.30)');
+  fsh.addColorStop(1, 'rgba(0,0,0,0)');
+  x.fillStyle = fsh;
+  x.fillRect(0, 0, W, Math.min(40, H));
+}
+
+// 洞顶钟乳石：闭合锥形 + 左缘提亮 / 右缘压暗
+export function drawStalactites(x, plan, topY, base) {
+  for (const s of plan) {
+    const y0 = s.y ?? topY;
+    const tipX = s.x + s.lean * s.h * 0.3;
+    const tipY = y0 + s.h;
+
+    x.fillStyle = base;
+    x.beginPath();
+    x.moveTo(s.x - s.w, y0);
+    x.lineTo(tipX - 1, tipY);
+    x.lineTo(tipX + 1, tipY);
+    x.lineTo(s.x + s.w, y0);
+    x.closePath(); x.fill();
+
+    x.lineWidth = 2;
+    x.strokeStyle = shade(base, 0.22);
+    x.beginPath(); x.moveTo(s.x - s.w, y0); x.lineTo(tipX - 1, tipY); x.stroke();
+    x.strokeStyle = shade(base, -0.25);
+    x.beginPath(); x.moveTo(s.x + s.w, y0); x.lineTo(tipX + 1, tipY); x.stroke();
+  }
 }
