@@ -1,6 +1,6 @@
 // —— 析声者 · 第三关浏览器 kit（侧视河程）：自 ch3.js kit 段原样迁入 ——
 import { createGame, startGame, gameEvent, ch3Debug, interact } from './event.js';
-import { drawRoom, drawBankObjects, drawCreviceObjects, drawDeepObjects, drawBubble, currentGround } from './render.js';
+import { drawScene, createScene, initScene, drawBankObjects, drawCreviceObjects, drawDeepObjects, drawBubble, currentGround } from './render.js';
 import { chapterOnE, syncHeld, dropBackExtra, stepWorldStones } from '../chapter.js';
 import { mount } from '../shell.js';
 import {
@@ -75,16 +75,18 @@ export const kit = {
     door: { voice: v.door, pitch: 0.7, rate: 0.8, rateSlow: 0.6 }
   }),
 
-  makeWorld({ content, game, cv }) {
+  makeWorld({ content, game, cv, atlases }) {
     const actors = createActors();
     const geo = content.geometry;
+    const sc = createScene();
+    initScene(sc, atlases, geo);              // boot 时烘焙岸边静态层（Node 环境自动跳过）
     const player = actors.player;
     player.x = geo.bank.spawnX;
     player.y = geo.bank.groundY;
     player.dir = 'right';
     player.airborne = false;
     const w = {
-      actors, player, geo, cv, currentRoom: 'bank',
+      actors, player, geo, cv, sc, currentRoom: 'bank',
       stones: [],
       raft: { x: geo.bank.raftX, y: geo.bank.groundY - 6, bob: 0 },
       transition: null,
@@ -262,9 +264,9 @@ export const kit = {
   },
 
   draw(w, x, eTarget) {
-    const { game, view } = w;
+    const { game, view, sc } = w;
     x.clearRect(0, 0, SIDE.W, SIDE.H);
-    drawRoom(w, x);
+    drawScene(x, sc, w);
     if (w.currentRoom === 'bank') drawBankObjects(w, x);
     if (w.currentRoom === 'crevice') drawCreviceObjects(w, x);
     if (w.currentRoom === 'deep') drawDeepObjects(w, x);

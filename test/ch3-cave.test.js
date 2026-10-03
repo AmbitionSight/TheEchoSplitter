@@ -1,7 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from '../public/js/ch3/cave.js';
-import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites } from '../public/js/ch3/render.js';
+import { contactShadow, drawCaveWall, drawCaveFloor, drawStalactites,
+         createScene, initScene, drawScene } from '../public/js/ch3/render.js';
+
+// 宽松 canvas 桩（同 test/scene.bg.test.js）：任何方法可调、任何属性可写，只断言「不抛」
+function mockCtx() {
+  const grad = { addColorStop() {} };
+  return new Proxy({}, {
+    get(t, k) {
+      if (k === 'createLinearGradient' || k === 'createRadialGradient') return () => grad;
+      if (typeof k !== 'string') return undefined;
+      return k in t ? t[k] : () => undefined;
+    },
+    set(t, k, v) { t[k] = v; return true; }
+  });
+}
 
 // 记录型 canvas 桩（同 test/art.test.js 风格）。
 // __calls 计数；__pts 只记 moveTo/lineTo 的折点——椭圆/圆弧不入 __pts，
@@ -142,4 +156,44 @@ test('drawCaveWall：苔藓只画在湿面上（湿面苔藓绘制数远多于�
   drawCaveWall(xw, wet, { base: CAVE_PAL.rockA, moss: CAVE_PAL.moss, mossHi: CAVE_PAL.mossHi });
   assert.ok(xw.__calls.fillRect > xd.__calls.fillRect * 10,
     `湿 ${xw.__calls.fillRect} 应远多于干 ${xd.__calls.fillRect}`);
+});
+
+// ---- 场景生命周期与预烘焙 ----
+
+function roomWorld(room) {
+  return {
+    currentRoom: room,
+    view: { t: 0 },
+    geo: { bank: { groundY: 590, waterX: 760 }, crevice: { groundY: 590 }, deep: { groundY: 590 } }
+  };
+}
+
+test('createScene：初始 baked 为空对象', () => {
+  assert.deepEqual(createScene().baked, {});
+});
+
+test('initScene 在无 document 环境下不抛错，且不产生烘焙层', () => {
+  const sc = createScene();
+  assert.doesNotThrow(() => initScene(sc, null, { bank: { groundY: 590 } }));
+  assert.equal(sc.baked.bank, undefined);
+});
+
+test('drawScene：无烘焙层时回退到旧路径且不抛错', () => {
+  assert.doesNotThrow(() => drawScene(mockCtx(), createScene(), roomWorld('crevice')));
+});
+
+test('drawScene：三间房轮流绘制都不抛错（回退路径覆盖全房间）', () => {
+  const sc = createScene();
+  for (const room of ['bank', 'crevice', 'deep']) {
+    assert.doesNotThrow(() => drawScene(mockCtx(), sc, roomWorld(room)), `${room} 抛错`);
+  }
+});
+
+test('drawScene：重复绘制复用同一场景对象，不累积状态', () => {
+  const sc = createScene();
+  const w = roomWorld('crevice');
+  drawScene(mockCtx(), sc, w);
+  const snapshot = JSON.stringify(sc);
+  drawScene(mockCtx(), sc, w);
+  assert.equal(JSON.stringify(sc), snapshot, '场景对象在绘制后不应被改写');
 });

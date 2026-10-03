@@ -2,6 +2,7 @@
 import { SIDE, drawBenchSide, shade } from '../sideview.js';
 import { drawBenchStones } from '../workbench.js';
 import { PAL, drawCross } from '../art.js';
+import { cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from './cave.js';
 
 export function currentGround(w) {
   return w.currentRoom === 'crevice' ? w.geo.crevice.groundY : w.currentRoom === 'deep' ? w.geo.deep.groundY : w.geo.bank.groundY;
@@ -203,9 +204,11 @@ export function drawCaveWall(x, plan, opts) {
     }
 
     if (f.wet > 0) {                                      // 苔藓：下缘向上抖动生长
-      const mh = Math.round(6 + f.wet * 16);
+      // 高度随岩面高度缩放——第一关砖块只有 42px 高，这里的岩面近 120px，
+      // 照搬 ch1 的固定 8..22px 只会得到一条贴边绿线，读不出苔藓
+      const mh = Math.round((yb - y0) * (0.10 + f.wet * 0.45));
       for (let k = 0; k < mh; k += 2) {
-        const dens = f.wet * (1 - k / mh) * 0.95;
+        const dens = f.wet * (1 - 0.7 * k / mh) * 0.95;
         for (let px = x0 + 1; px < x1 - 1; px += 2) {
           const th = BAYER[((px / 2) | 0) & 1][(((yb - k) / 2) | 0) & 1] / 4;
           if (dens * (0.3 + th * 0.9) > 0.30) {
@@ -291,4 +294,53 @@ export function drawStalactites(x, plan, topY, base) {
     x.strokeStyle = shade(base, -0.25);
     x.beginPath(); x.moveTo(s.x + s.w, y0); x.lineTo(tipX + 1, tipY); x.stroke();
   }
+}
+
+// ================= 场景生命周期与岸边预烘焙 =================
+
+export function createScene() {
+  return { baked: {} };
+}
+
+// 岸边静态层（岩壁 + 钟乳石 + 岩床）烘成一张离屏图，运行期每帧只 drawImage 一次。
+// 岩壁是纯矢量，图集缺失也照常出图。
+function prerenderBank(geo) {
+  const groundY = geo.bank.groundY;
+  const c = document.createElement('canvas');
+  c.width = SIDE.W; c.height = SIDE.H;
+  const x = c.getContext('2d');
+  x.imageSmoothingEnabled = false;
+
+  // 岸边靠水：湿度自左向右升（水在 x 760 之后），右半苔藓更盛——设计稿 §1
+  drawCaveWall(x, cavePlan(CAVE_SEEDS.bank, SIDE.W, groundY, { wetRange: [0.12, 0.88] }), {
+    base: CAVE_PAL.rockA, moss: CAVE_PAL.moss, mossHi: CAVE_PAL.mossHi
+  });
+  drawStalactites(x, stalactitePlan(CAVE_SEEDS.bank + 1, SIDE.W, 0, 9), 0, CAVE_PAL.rockDark);
+
+  x.save();
+  x.translate(0, groundY);
+  // 岩床行数少而块大，才读得出「石板」而不是细条
+  drawCaveFloor(x, cavePlan(CAVE_SEEDS.bank + 2, SIDE.W, SIDE.H - groundY, { cols: 6, rows: 2, wetRange: [0.05, 0.05] }),
+    { base: CAVE_PAL.floor });
+  x.restore();
+
+  return c;
+}
+
+// boot 时调用（需要 document）。Node 测试环境下直接返回，不产生烘焙层。
+export function initScene(sc, atlases, geo) {
+  if (typeof document === 'undefined') return;
+  try {
+    sc.baked.bank = prerenderBank(geo);
+  } catch (e) {
+    // 烘焙失败退回逐帧绘制：房间仍然可见，但记一笔供调试
+    if (typeof window !== 'undefined' && window.__errors) window.__errors.push('ch3 bake: ' + e.message);
+  }
+}
+
+// 有烘焙层就 blit，没有就回退旧路径——裂隙房与深水房本轮尚未迁移，走 drawRoom。
+export function drawScene(x, sc, w) {
+  const baked = sc.baked?.[w.currentRoom];
+  if (baked) x.drawImage(baked, 0, 0);
+  else drawRoom(w, x);
 }
