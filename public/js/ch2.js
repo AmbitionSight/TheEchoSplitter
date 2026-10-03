@@ -112,7 +112,7 @@ export function jumpDebug(g, beat) {
 
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
-import { SIDE, moveSide, sideJump, stepWalkTo,
+import { SIDE, moveSide, sideJump, stepWalkTo, AMBIENT,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawListenSpots,
          drawArchSide, groundShadow, benchCandle, makeDust, stepDust, drawDust } from './sideview.js';
 import { blit } from './sprites.js';
@@ -444,7 +444,8 @@ export const kit = {
   },
 
   summaryMerge(game) {
-    return { everPicked: [...game.inv.everPicked], heard: [...game.heard], words: [...game.book], abilities: ['jump'], chapter: 2 };
+    return { everPicked: [...game.inv.everPicked], heard: [...game.heard], words: [...game.book], abilities: ['jump'], chapter: 2,
+             picks: game.stonesPicked };                  // 2a 声音石拾取数进书档：与 2b 两半合计（规格 §12）
   },
 
   draw(w, x, eTarget) {
@@ -476,8 +477,8 @@ export const kit = {
     x.restore();
     for (const s of w.stones) drawSideStone(x, s, v.t);
     drawFX(w, x);
-    // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
-    x.fillStyle = 'rgba(16,18,36,.30)';
+    // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气；值读 sideview.AMBIENT，规格 §6.4）
+    x.fillStyle = `rgba(16,18,36,${AMBIENT.grade})`;
     x.fillRect(0, 0, SIDE.W, SIDE.H);
     // —— 级色之上的动态陈设（发光元素不吃压暗）：出口灯塔 / 水光 / 浮尘 ——
     drawExitBeacon(w, x);

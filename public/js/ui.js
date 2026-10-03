@@ -61,9 +61,14 @@ export function createUI({ content, atlases, signal }) {
     });
   }
   function summary(g, info = {}) {
-    el('summary-line').textContent = `你捡起了 ${g.book.size} 个词 · ${g.stonesPicked} 块声音石`;
-    el('summary-icons').innerHTML = (info.words ?? [...g.book])
-      .map(w => `<img src="${iconURL(content.words[w].icon)}" alt="">`).join('');
+    const words = info.words ?? [...g.book];                 // 章可传本章词（2b：jump+rope，跨两半）
+    const stones = info.stones ?? g.stonesPicked;            // 章可传石数（壳按结算载荷给）
+    el('summary-line').textContent = `你捡起了 ${words.length} 个词 · ${stones} 块声音石`;
+    el('summary-icons').innerHTML = words
+      .map(w => {
+        const def = content.words[w] ?? content.lexicon?.[w];   // 前几章词（如 2b 的 jump）经 lexicon 解析图标
+        return def ? `<img src="${iconURL(def.icon)}" alt="">` : '';
+      }).join('');
     el('summary').classList.remove('hidden');
   }
   el('btn-again').addEventListener('click', () => location.reload(), { signal });

@@ -239,7 +239,7 @@ test('2b 光法则单源：光池烘焙读表、面纱画在级色之后青声�
   assert.match(src, /makeVeil\(w\.lights\)/, '夜色面纱一次性预渲染（LIGHTS2 veil 锚）');
   assert.match(src, /destination-out/, '四孔 destination-out 挖孔');
   assert.match(src, /getImageData[\s\S]*?putImageData/, 'ch1 makeDarkness 同款 2px 拜耳抖动量化');
-  const iGrade = src.indexOf('rgba(16,18,36,.30)');
+  const iGrade = src.indexOf('rgba(16,18,36,${AMBIENT.grade})');     // 级色值读 AMBIENT（规格 §6.4）
   const iVeil = src.indexOf('drawImage(w.veil');
   const iListen = src.indexOf('drawListenSpots(x, w)');
   assert.ok(iGrade !== -1 && iVeil > iGrade && iListen > iVeil, '面纱画在级色之后、青声之前');
@@ -715,4 +715,20 @@ test('#btn-jump：页面有钮、有 jump 能力即显示（mock document）', a
   } finally {
     globalThis.document = prev;
   }
+});
+
+test('2b 回填 2a 已拼的词：结算卡按本章两词计数（规格 §3.3 拍 11）', () => {
+  const g = createGame(content, ch2Profile);
+  assert.ok(g.book.has('jump'), '2a 的 jump 随书档带回（本章第一词）');
+  assert.ok(!createGame(content, createProfile()).book.has('jump'), '没拼过不虚报');
+  const replay = createGame(content, mergeProfile(ch2Profile, { words: ['rope'], abilities: ['climb'], chapter: 2 }));
+  assert.ok(!replay.book.has('rope'), '本半要拼的词不回填：重玩提示链仍按本局进度');
+  seedMemory(g.inv, addStone, ch2Profile.everPicked);
+  gameEvent(g, 'ROPE');
+  gameEvent(g, 'PICKUP', 'r'); gameEvent(g, 'BANK');
+  gameEvent(g, 'CRAFT', 'rope');
+  const payload = kit.summaryMerge(g);
+  assert.deepEqual(payload.words, ['jump', 'rope'], '本章两词：先带 jump、后拼 rope（结算卡图标序）');
+  assert.equal(payload.words.length, 2, '结算卡显示「2 个词」');
+  assert.equal(payload.picks, 1, '石数仍按本半拾取计（书档两半各累加一次）');
 });

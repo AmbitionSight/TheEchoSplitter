@@ -218,13 +218,15 @@ export function drawEHint(x, t, time) {
   x.restore();
 }
 
+// 环境光唯一事实源（规格 §6.4）：黄昏级色与暗角强度全章对齐 ch1（原两半 .30/.50）
+export const AMBIENT = { grade: 0.24, vignette: 0.42 };
+
+// 暗角：ch1 几何（中心 (640,360)、380→780）与 α；横版三章共用同一值
 export function vignette(x, W = SIDE.W, H = SIDE.H) {
-  const v = x.createRadialGradient(W / 2, H / 2 - 40, 340, W / 2, H / 2 - 40, 760);
-  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,.5)');
+  const v = x.createRadialGradient(640, 360, 380, 640, 360, 780);
+  v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, `rgba(0,0,0,${AMBIENT.vignette})`);
   x.fillStyle = v; x.fillRect(0, 0, W, H);
 }
-
-export const AMBIENT = { grade: 0.24, vignette: 0.42 };   // 与 ch1 对齐（原两章 .30/.50）
 export function benchCandle(bx, gy) { return { x: bx + 62, y: gy - 90 }; }
 // 点哪走哪（第一关 walkTarget 的横版移植；调在 moveSide 之后）
 export function stepWalkTo(w, dt) {

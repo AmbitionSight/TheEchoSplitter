@@ -618,3 +618,14 @@ test('CAT：事件机返回 meow 指令（竖耳由壳的 meow 分支给）', ()
   const g = createGame(content, ch1Profile);
   assert.deepEqual(gameEvent(g, 'CAT'), [{ t: 'meow' }]);
 });
+
+test('summaryMerge 含 picks：2a 声音石拾取数进书档（两半合计，规格 §12）', () => {
+  const g = createGame(content, ch1Profile);
+  assert.equal(kit.summaryMerge(g).picks, 0, '未拾取：0');
+  gameEvent(g, 'CHASM');                                              // 首次尝试：掉 dʒ/ʌ/m + 干扰 h/l
+  gameEvent(g, 'PICKUP', 'dʒ');
+  const payload = kit.summaryMerge(g);
+  assert.equal(payload.picks, 1, '捡起 1 块 → picks=1（2b 结算再累加）');
+  assert.equal(payload.chapter, 2);
+  assert.deepEqual(payload.abilities, ['jump'], '2a 结算给下一半 jump 能力');
+});

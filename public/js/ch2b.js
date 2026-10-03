@@ -3,12 +3,17 @@ import { createInventory } from './hotbar.js';
 import { pickupStone, bankHeld, holdItem, craftWord,
          chapterOnE, syncHeld, seedBegin, dropExtra, dropBackExtra, stepWorldStones } from './chapter.js';
 
+// 本章两词（跨两半）：jump 在 2a 拼出、rope 在 2b 拼出——章末结算卡按「本章词」计数（规格 §3.3 拍 11）
+export const CHAPTER_WORDS = ['jump', 'rope'];
+
 // ================= 纯事件机（Node 可测，行为与重构前一致；公共段见 chapter.js） =================
 export function createGame(content, profile) {
   return {
     content, beat: 'start',
     inv: createInventory(),
-    book: new Set(), stonesPicked: 0,
+    // 2a 已拼的本章词随书档回填；本半要拼的 rope 不回填（重玩时提示链仍按本局进度）；新档没拼过就不虚报
+    book: new Set(CHAPTER_WORDS.filter(w => !content.words[w] && profile.words?.includes(w))),
+    stonesPicked: 0,
     hand: null, attempted: false,
     mended: profile.abilities.includes('climb') ? true : false,
     climbed: false, exited: false, heard: new Set(), teaseClock: 0
@@ -108,7 +113,7 @@ export function ropeDebug(g, beat) {
 
 // ================= 浏览器 kit（壳 + 横版共用件） =================
 import { mount } from './shell.js';
-import { SIDE, moveSide, sideJump, stepWalkTo,
+import { SIDE, moveSide, sideJump, stepWalkTo, AMBIENT,
          drawSideStone, drawTorchSide, drawBenchSide, drawEHint, vignette, drawFloorSide, drawListenSpots,
          drawArchSide, groundShadow, benchCandle } from './sideview.js';
 import { PAL, drawRune, iconURL } from './art.js';
@@ -482,8 +487,8 @@ export const kit = {
       x.beginPath(); x.arc(pf.x, pf.y - 6, pf.r, 0, 7); x.fill();
     }
     x.globalAlpha = 1;
-    // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气）
-    x.fillStyle = 'rgba(16,18,36,.30)';
+    // 黄昏级色：角色之后统一压暗（与第一关同法，全场同吃一级大气；值读 sideview.AMBIENT，规格 §6.4）
+    x.fillStyle = `rgba(16,18,36,${AMBIENT.grade})`;
     x.fillRect(0, 0, SIDE.W, SIDE.H);
     // 夜色面纱：画在级色之后、青声之前（规格 §6.2-③；四孔已按 LIGHTS2 veil 锚挖好，一次性预渲染）
     if (w.veil) x.drawImage(w.veil, 0, 0);

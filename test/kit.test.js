@@ -99,3 +99,23 @@ test('ui.js：揭示卡参数化与缺省回落（源码断言）', async () => 
   assert.match(src, /if \(!screen\) return/);                                // 章节无 #reveal 时静默
   assert.match(src, /info\.words/);                                          // summary(game, info) 用 info.words 画图标
 });
+
+test('环境光对齐 ch1：AMBIENT 被 ch2/ch2b 消费、暗角几何 = ch1（规格 §6.4）', async () => {
+  assert.deepEqual(AMBIENT, { grade: 0.24, vignette: 0.42 });
+  const side = await readFile(new URL('../public/js/sideview.js', import.meta.url), 'utf8');
+  assert.match(side, /createRadialGradient\(640, 360, 380, 640, 360, 780\)/, '暗角中心 (640,360)、380→780');
+  assert.match(side, /\$\{AMBIENT\.vignette\}/, '暗角 α 读 AMBIENT.vignette（不再写死 .5）');
+  for (const f of ['ch2.js', 'ch2b.js']) {
+    const src = await readFile(new URL(`../public/js/${f}`, import.meta.url), 'utf8');
+    assert.match(src, /AMBIENT\.grade/, `${f} 黄昏级色读 AMBIENT.grade`);
+    assert.doesNotMatch(src, /rgba\(16,18,36,\.30\)/, `${f} 不再写死 .30`);
+  }
+});
+
+test('ui.js：结算卡读 info.words/info.stones，跨半场词经 lexicon 解析图标（规格 §3.3 拍 11）', async () => {
+  const src = await readFile(new URL('../public/js/ui.js', import.meta.url), 'utf8');
+  assert.match(src, /info\.words \?\? \[\.\.\.g\.book\]/, '词表：info.words 优先');
+  assert.match(src, /info\.stones \?\? g\.stonesPicked/, '石数：info.stones 优先');
+  assert.match(src, /words\.length/, '词数按传入词表计（2b = 本章两词）');
+  assert.match(src, /content\.lexicon/, 'jump 不在 2b 本章 words → 前几章词库补图标');
+});
