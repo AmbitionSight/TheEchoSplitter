@@ -1,5 +1,6 @@
 // —— 析声者 · 第三关渲染层：自 ch3.js 绘制段原样迁入（房间/岸边/裂隙/深水/木筏/气泡）——
-import { SIDE, drawBenchSide, shade } from '../sideview.js';
+import { SIDE, drawBenchSide } from '../sideview.js';
+import { shade, BAYER } from '../masonry.js';
 import { drawBenchStones } from '../workbench.js';
 import { PAL, drawCross } from '../art.js';
 import { rng, cavePlan, stalactitePlan, CAVE_SEEDS, CAVE_PAL } from './cave.js';
@@ -327,10 +328,7 @@ export function drawBubble(x, p, t) {
   x.restore();
 }
 
-// ================= 洞穴岩面（本轮只服务岸边；裂隙/深水两轮复用） =================
-
-// 与 ch1 暗海/砌石同一套像素语言
-const BAYER = [[0, 2], [3, 1]];
+// ================= 洞穴岩面（三间房共用） =================
 
 function polyPath(x, pts) {
   x.beginPath();
