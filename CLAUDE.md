@@ -59,7 +59,7 @@ Each HTML page selects one chapter module:
 - `public/chapter3.html` loads `public/js/ch3.js` (chapter 3, side-view wall and rope).
 - `public/chapter4.html` loads `public/js/ch4.js` (chapter 4, side-view river journey with three rooms).
 
-Chapters 1 and 4 are split into layered modules under `public/js/ch1/` and `public/js/ch4/`. Their HTML-facing entries — `main.js`, `scene.js`, and `ch4.js` — are pure re-export compatibility layers that hold no logic; existing import paths keep working. The dependency direction is one-way (`planners ← physics ← render ← kit`; the event machine depends only on `chapter.js`), and a new module must never import an entry file.
+Chapters 1 and 4 are split into layered modules under `public/js/ch1/` and `public/js/ch4/`. The HTML-facing entries (`main.js`, `ch4.js`) are pure re-export compatibility layers, as is the internal `scene.js` import path; none hold logic, and existing import paths keep working. The layers are strictly one-way — `planners` is the base, `physics` and `render` build on it, and `kit` sits on top — and the event machines are pure, importing only shared modules (`chapter.js`, `hotbar.js`, and for chapter 1 also `door.js`). A new module must never import an entry file.
 
 - `public/js/ch1/planners.js`: chapter 1 layout, deterministic `rng`, wall/light constants, and the pure masonry/slab planners.
 - `public/js/ch1/physics.js`: chapter 1 collision, screen-to-logical conversion, walk stepping, and phoneme-stone physics.
@@ -98,7 +98,7 @@ Chapter 2 and chapter 3 seed relevant phoneme stones from the profile collected 
 
 ### Testing boundary and module convention
 
-Tests live in `test/` and use `node:test` with `node:assert`. The test suite primarily exercises pure event machines, inventory/crafting, door transitions, physics/collision, content invariants, profile persistence, audio fallbacks, sprite metadata, and server responses.
+Tests live in `test/` and use `node:test` with `node:assert`. The test suite primarily exercises pure event machines, inventory/crafting, door transitions, physics/collision, content invariants, profile persistence, audio fallbacks, sprite metadata, and server responses. For the split chapters, tests import the `ch1/`/`ch4/` modules directly to lock the layer boundaries (e.g. `test/ch1-physics.test.js` imports `public/js/ch1/physics.js`), while other tests still import through the `main.js`/`scene.js`/`ch4.js` compatibility entries.
 
 Keep browser-only global access (`document`, `window`, `localStorage`, Canvas setup, and browser APIs) inside functions or browser entry paths so modules can be imported by Node tests. Inject storage or browser-like dependencies where an existing module already supports it. When changing a chapter event instruction, update both the event-machine tests and the corresponding kit/shell handling if the instruction is not already standard.
 
