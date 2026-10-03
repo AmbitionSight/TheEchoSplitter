@@ -141,3 +141,8 @@ test('内容：听声点带 sfx、warm 在火把 (90,240)、reveal 齐备', () =
   for (const s of content.listening) assert.ok(s.sfx, `${s.id} 缺 sfx`);
   assert.ok(content.words.jump.reveal?.ok, 'jump 缺 reveal');
 });
+
+test('2a 陈设与纵深：源码含入口拱/出口拱/石桥残墩/对壁三层', async () => {
+  const src = await readFile(new URL('../public/js/ch2.js', import.meta.url), 'utf8');
+  for (const k of ['drawArchSide', 'drawBridgePier', 'drawFarWallLayers', 'crate_big', 'jars2', '风幡']) assert.ok(src.includes(k), `缺 ${k}`);
+});
