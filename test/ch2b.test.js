@@ -773,3 +773,94 @@ test('2b 回填 2a 已拼的词：结算卡按本章两词计数（规格 §3.3 
   assert.equal(payload.words.length, 2, '结算卡显示「2 个词」');
   assert.equal(payload.picks, 1, '石数仍按本半拾取计（书档两半各累加一次）');
 });
+
+// ================= Task 20：铁律静态扫描与顺序无关合成（规格 §1 / §14） =================
+
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;    // 与 test/content.test.js:50 同正则
+const latinWords = s => s.match(/[A-Za-z]+/g) ?? [];
+const allStrings = o => typeof o === 'string' ? [o]
+  : Array.isArray(o) ? o.flatMap(allStrings)
+  : (o && typeof o === 'object') ? Object.values(o).flatMap(allStrings) : [];
+
+test('铁律静态扫描：无 emoji、无红叉/评分/错误/弹窗、无英语字幕（全大写只余揭示卡词）', async () => {
+  const raw = await readFile(new URL('../content/chapter2b.json', import.meta.url), 'utf8');
+  const c = JSON.parse(raw);
+  const htmlRaw = await readFile(new URL('../public/chapter2b.html', import.meta.url), 'utf8');
+  const htmlText = htmlRaw.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+                           .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+                           .replace(/<!--[\s\S]*?-->/g, ' ')
+                           .replace(/<[^>]+>/g, ' ');                     // 只看 HTML 文本（标签/属性不进扫描）
+  // 1) 无 emoji（铁律 5）
+  assert.ok(!EMOJI_RE.test(raw), 'content 出现 emoji');
+  assert.ok(!EMOJI_RE.test(htmlRaw), 'chapter2b.html 出现 emoji');
+  // 2) 无红叉/评分/错误/弹窗字样（铁律 3；红叉例外只在 ch2.js 画法里，不得进文案）
+  assert.doesNotMatch(raw, /红叉|评分|错误|弹窗/);
+  assert.doesNotMatch(htmlRaw, /红叉|评分|错误|弹窗/);
+  // 3) 无英语字幕：拉丁词只允许 IPA 载词/词名/titleEn/揭示卡词（单字母大写 = 键盘键名）
+  const allowed = new Set(latinWords(c.meta.titleEn));
+  const wordNames = [...Object.keys(c.words), ...Object.keys(c.lexicon ?? {})];
+  for (const w of wordNames) allowed.add(w);
+  for (const s of Object.values(c.carriers ?? {})) latinWords(s).forEach(w => allowed.add(w));
+  for (const s of Object.values(c.phonemeBook.carriers)) latinWords(s).forEach(w => allowed.add(w));
+  for (const f of Object.values(c.flows)) for (const k of ['listen', 'puzzled']) latinWords((f[k] ?? []).join(' ')).forEach(w => allowed.add(w));
+  for (const s of c.listening) {
+    latinWords(s.say ?? '').forEach(w => allowed.add(w));
+    if (s.after) latinWords(s.after.say).forEach(w => allowed.add(w));
+  }
+  for (const w of Object.values(c.words)) {
+    for (const ipa of [...w.phonemes.map(p => p[0]), ...(w.decoys ?? [])]) latinWords(ipa).forEach(x => allowed.add(x));
+  }
+  for (const ipa of [...c.phonemeBook.groups.flatMap(g => g.items), ...Object.keys(c.phonemeBook.runes)]) latinWords(ipa).forEach(x => allowed.add(x));
+  const card = htmlRaw.match(/id="reveal-word"[^>]*>([^<]*)</)?.[1]?.trim();   // 揭示卡词（运行时 = word.toUpperCase()）
+  const revealWords = new Set([card, ...wordNames.map(w => w.toUpperCase())]);
+  for (const w of revealWords) allowed.add(w);
+  assert.ok(card && revealWords.has(card), 'chapter2b.html 的 #reveal-word 必须是揭示卡词');
+  const noTitle = s => s.split(c.meta.titleEn).join(' ');              // titleEn 单独放行（§14）
+  // 句子级：内容全值 + HTML 文本里不得出现多词拉丁串（英语字幕的最小特征）
+  const sentences = [...allStrings(c), htmlText].flatMap(s => noTitle(s).match(/[A-Za-z]+(?:[\s·]+[A-Za-z]+)+/g) ?? []);
+  assert.deepEqual(sentences, [], `出现英语句子: ${sentences.join(' | ')}`);
+  // 词级：玩家可见文本里的拉丁词必须登记在册
+  const text = [c.meta.titleEn, ...c.meta.intro, ...Object.values(c.hints ?? {}),
+    ...Object.values(c.words).flatMap(w => Object.values(w.reveal ?? {})),
+    ...c.listening.flatMap(s => [s.say, s.after?.say].filter(Boolean)),
+    ...Object.values(c.carriers ?? {}), ...Object.values(c.phonemeBook.carriers),
+    ...Object.values(c.flows).flatMap(f => [...(f.listen ?? []), ...(f.puzzled ?? [])]),
+    htmlText].join('\n');
+  for (const w of latinWords(noTitle(text))) {
+    assert.ok(allowed.has(w) || /^[A-Z]$/.test(w), `未登记拉丁词（疑似英语字幕）: ${w}`);
+  }
+  // 4) 全大写拉丁词（≥2 字母）只能是揭示卡词
+  const caps = [...new Set([...allStrings(c), htmlText].flatMap(s => noTitle(s).match(/(?<![A-Za-z])[A-Z]{2,}(?![A-Za-z])/g) ?? []))];
+  for (const w of caps) assert.ok(revealWords.has(w), `全大写拉丁词只允许揭示卡词，发现: ${w}`);
+  assert.ok(caps.includes(card), '扫描应至少命中揭示卡词本身');
+});
+
+test('听声点数量：2b 三个（warm/stone/high，规格 §12）', () => {
+  assert.equal(content.listening.length, 3);
+  assert.deepEqual(content.listening.map(s => s.id), ['warm', 'stone', 'high']);
+});
+
+test('任意合成顺序无死局：rope 三音素多种捡取顺序均能合成、库存不为负（规格 §1 第 6 条）', () => {
+  const orders = [
+    ['r', 'əʊ', 'p'],                                               // 掉落原序
+    ['əʊ', 'p', 'r'],                                               // 轮转
+    ['p', 'r', 'əʊ'],                                               // 非相邻：p 跨过 r/əʊ 先捡（记忆石先捡）
+  ];
+  for (const order of orders) {
+    const g = createGame(content, ch2Profile);
+    seedMemory(g.inv, addStone, ch2Profile.everPicked);             // əʊ/p 记忆石（同真实开局）
+    gameEvent(g, 'ROPE');                                           // 首次掉 r + 干扰 h/m
+    for (const ipa of order) {
+      gameEvent(g, 'PICKUP', ipa);
+      assert.equal(g.hand?.ipa, ipa, `${order.join('→')}：手上应是 ${ipa}`);
+      gameEvent(g, 'BANK');
+      assert.equal(g.hand, null, '存石后手上清空');
+      for (const n of g.inv.stones.values()) assert.ok(n >= 0, `${order.join('→')}：库存出现负数`);
+    }
+    for (const ipa of ['r', 'əʊ', 'p']) assert.ok(stoneCount(g.inv, ipa) >= 1, `${order.join('→')}：合成前缺 ${ipa}`);
+    const out = gameEvent(g, 'CRAFT', 'rope');
+    assert.ok(g.book.has('rope') && g.inv.items.has('rope'), `${order.join('→')} 应能合成 rope`);
+    assert.ok(out.some(i => i.t === 'resonate' && i.word === 'rope'));
+    for (const n of g.inv.stones.values()) assert.ok(n >= 0, '合成后库存不得为负');
+  }
+});

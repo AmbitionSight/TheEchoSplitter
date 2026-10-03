@@ -119,3 +119,10 @@ test('ui.js：结算卡读 info.words/info.stones，跨半场词经 lexicon 解�
   assert.match(src, /words\.length/, '词数按传入词表计（2b = 本章两词）');
   assert.match(src, /content\.lexicon/, 'jump 不在 2b 本章 words → 前几章词库补图标');
 });
+
+test('铁律：ch1 kit 的 OPEN 揭示卡只调一次 ui.reveal（规格 §14「ch1 OPEN 各一次」）', async () => {
+  const src = await readFile(new URL('../public/js/ch1/kit.js', import.meta.url), 'utf8');
+  const calls = src.match(/ui\.reveal\(/g) ?? [];
+  assert.equal(calls.length, 1, '拼写时刻（OPEN 揭示卡）必须且只弹一次');
+  assert.match(src, /await w\.ui\.reveal\('open'\)/, '揭示的是 ch1 的 open');
+});
