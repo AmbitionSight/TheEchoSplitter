@@ -7,9 +7,6 @@ export function addStone(inv, ipa) {
   if (!inv.order.includes(ipa)) inv.order.push(ipa);
 }
 export function stoneCount(inv, ipa) { return inv.stones.get(ipa) || 0; }
-export function totalStones(inv) {
-  let n = 0; for (const c of inv.stones.values()) n += c; return n;
-}
 export function canConsume(inv, seq) {
   const need = new Map();
   for (const p of seq) need.set(p, (need.get(p) || 0) + 1);

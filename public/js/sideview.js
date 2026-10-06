@@ -186,13 +186,6 @@ export function drawBenchSide(x, imgs, bx, gy, hot, slots = null, opts = {}) {
   }
 }
 
-// 横版背墙：MI 墙面平铺 + 压暗
-export function drawWallBack(x, imgs, W, H, dim = 0.30) {
-  tile(x, imgs, 'wall_face', 0, 0, W, H);
-  x.fillStyle = `rgba(10,12,22,${dim})`;
-  x.fillRect(0, 0, W, H);
-}
-
 // 横版地面：MI 地板平铺（从 groundY 往下）
 export function drawFloorSide(x, imgs, x0, y0, w, h) {
   tile(x, imgs, 'floor', x0, y0, w, h);

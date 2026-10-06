@@ -60,8 +60,6 @@ h2{font-size:30px;font-weight:600;letter-spacing:.14em}
 #summary-icons img:nth-child(4){animation-delay:.24s}#summary-icons img:nth-child(5){animation-delay:.32s}#summary-icons img:nth-child(6){animation-delay:.4s}
 @keyframes popIn{from{transform:scale(.3);opacity:0}to{transform:scale(1);opacity:1}}
 .next{color:var(--dim);font-size:14px;letter-spacing:.1em}
-.notes-body{max-width:620px;text-align:left;line-height:2.1;font-size:17px;letter-spacing:.04em}
-.notes-body p{margin-bottom:12px}
 
 /* 文本提示：不装盒子，悬浮文字 + 深投影 */
 #hintbar{position:absolute;left:50%;bottom:104px;transform:translateX(-50%);z-index:30;

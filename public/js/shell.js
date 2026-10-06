@@ -309,7 +309,7 @@ function startShell({ kit, content, el, cv, ctx, atlases, onHandoff }) {
     cv.style.cursor = 'default';
     try { w.speech?.cancel?.(); } catch { /* ignore */ }       // 掐断本章台词，免与下一间房重叠
     try { const p = w.sfx?.ctx?.close?.(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ }   // 释放本章 AudioContext（浏览器数量有限）
-    for (const id of ['journal', 'notes', 'summary']) el(id)?.classList.add('hidden');
+    for (const id of ['journal', 'summary']) el(id)?.classList.add('hidden');
   }
   return { dispose, signal };
 }
