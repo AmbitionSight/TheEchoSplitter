@@ -1,4 +1,4 @@
-/* ================= 《同一块石头》（DESIGN.md）=================
+/* ================= 《同一块石头》 =================
    UI 与世界同材质：深石板 + 衬线碑文 + 青光唯一强调（声音在场才发光）。
    承放声音的东西一律是圆凹槽：合成槽 = 物品栏石格 = 回声条 = 世界里的合成台。 */
 
@@ -84,7 +84,7 @@ h2{font-size:30px;font-weight:600;letter-spacing:.14em}
 .cell:hover{transform:translateY(-2px)}
 .cell .glyph{font-size:21px;font-weight:700}
 .cell.stone-v .glyph{color:var(--vowel)}.cell.stone-c .glyph{color:var(--cons)}
-/* 圆凹槽的"放上石头发光"（DESIGN.md）：洞本身亮起来——元音金、辅音蓝，只给承放声音的洞 */
+/* 圆凹槽的"放上石头发光"：洞本身亮起来——元音金、辅音蓝，只给承放声音的洞 */
 .cell.stone-v{border-color:rgba(255,209,102,.32);box-shadow:inset 0 3px 6px rgba(0,0,0,.55),inset 0 0 16px rgba(255,209,102,.20)}
 .cell.stone-c{border-color:rgba(143,195,255,.32);box-shadow:inset 0 3px 6px rgba(0,0,0,.55),inset 0 0 16px rgba(143,195,255,.20)}
 .cell img{width:38px;height:38px;pointer-events:none}
