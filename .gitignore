@@ -8,6 +8,10 @@ node_modules/
 .claude/
 Modern_Interiors_Free_v2.2.zip
 
+# 本地演示 / 路演素材（不入库）
+demo.mp4
+ppt.html
+
 # 系统与编辑器噪声
 .DS_Store
 Thumbs.db

@@ -105,6 +105,6 @@ Keep browser-only global access (`document`, `window`, `localStorage`, Canvas se
 
 ## Design and Content Constraints
 
-The design specification at `docs/superpowers/specs/2026-10-01-echo-splitter-design.md` is the authoritative description of the game's interaction and teaching model. In particular, preserve the collision of sound, context, and world response: the core loop is touch/interact -> collect phoneme stones -> craft a word item -> use it in the scene. English is presented through sound and context rather than translation; system hints are Chinese; the game does not use microphone input. The specification also defines the 48-phoneme rune system, chapter progression, and the no-emoji visual language.
+The game's interaction and teaching model must preserve the collision of sound, context, and world response: the core loop is touch/interact -> collect phoneme stones -> craft a word item -> use it in the scene. English is presented through sound and context rather than translation; system hints are Chinese; the game does not use microphone input. The model also defines the 48-phoneme rune system, chapter progression, and the no-emoji visual language.
 
-The implementation plan at `docs/superpowers/plans/2026-10-01-echo-splitter.md` records the original build sequence and historical decisions. Consult current source and tests first when the plan and implementation differ.
+`DESIGN.md` (visual world), `PRODUCT.md` (positioning and teaching model), and `docs/CONTRIBUTING.md` (branch model and commit conventions) are the supporting documents. Treat current source and tests as authoritative whenever a document and the implementation differ.
