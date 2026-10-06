@@ -7,10 +7,11 @@
 
 <sub>回响 · 48H 青年创造营 2026（杭州）｜赛道一 Echo｜未来 · 回响｜落地形式：游戏 Demo</sub>
 
+[![Test](https://github.com/AmbitionSight/TheEchoSplitter/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/AmbitionSight/TheEchoSplitter/actions/workflows/test.yml)
 [![Node](https://img.shields.io/badge/node-%E2%89%A518-339933?logo=node.js&logoColor=white&style=flat-square)](https://nodejs.org/)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-2ea44f?style=flat-square)](#技术实现)
-[![Tests](https://img.shields.io/badge/tests-330%20passing-success?style=flat-square)](#测试)
 [![Chapters](https://img.shields.io/badge/chapters-3-8fc3ff?style=flat-square)](#三章)
+[![Demo](https://img.shields.io/badge/demo-4%20min%20video-ffd166?style=flat-square)](https://github.com/AmbitionSight/TheEchoSplitter/releases/download/v2.0/demo.mp4)
 [![License](https://img.shields.io/badge/license-MIT-2ea44f?style=flat-square)](LICENSE)
 
 <img src="docs/screenshots/title.png" alt="标题页：暗色石室中一枚发光的青色符文" width="760">
@@ -18,6 +19,12 @@
 </div>
 
 ---
+
+## 演示
+
+▶ **[观看演示视频（4 分 16 秒 · 1080p60）](https://github.com/AmbitionSight/TheEchoSplitter/releases/download/v2.0/demo.mp4)** —— 三章连播：石室听音开门 → 裂谷跨崖 → 暗河拼筏。
+
+视频约 50 MB，托管在 [Releases](https://github.com/AmbitionSight/TheEchoSplitter/releases) 而不是仓库内，所以 `git clone` 不会连带下载这 50 MB。GitHub 的 Markdown 不内嵌播放仓库外的 mp4，点击即下载观看。
 
 ## 这是什么
 
@@ -111,7 +118,8 @@ public/
 │  └─ ch3/           第三章按层拆分：event · render · kit · cave
 └─ assets/           像素素材与图集
 test/                330 项自动化测试（node:test）
-docs/                设计规格、实施计划与贡献约定
+docs/                CONTRIBUTING.md（分支模型与提交约定）与 README 截图
+.github/             CI 工作流、Issue / PR 模板与社区健康文件
 ```
 
 ## 技术实现

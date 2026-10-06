@@ -1,0 +1,27 @@
+name: 功能建议
+description: 玩法、教学或工程上的改进想法
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决什么
+      description: 请描述当前的痛点，而不是直接给方案。
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你的想法
+    validations:
+      required: true
+
+  - type: textarea
+    id: constraints
+    attributes:
+      label: 与设计铁律的关系
+      description: |
+        英语只以声音 + 情境出现；禁翻译；英文拼写全章只在 OPEN 揭示卡出现一次；
+        无红叉无评分；中文只做系统级操作提示；不用麦克风；图标禁 emoji，全部手绘 / Canvas。
+        请说明你的建议与这些是否冲突。
