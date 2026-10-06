@@ -133,19 +133,3 @@ node --test test/ch2.test.js test/ch3.test.js   # 多文件
 覆盖：事件机状态推进、物品栏与合成、门与仪式、横版物理与碰撞、内容不变式（无 emoji / 无红字）、书档持久化、语音兜底、精灵元数据、服务器路由与静态分发。
 
 > 画布渲染与真机手感由浏览器冒烟覆盖；Node 测试覆盖可导入的逻辑。
-
-## 设计文档
-
-- [DESIGN.md](DESIGN.md) —— 视觉世界《同一块石头》：材质、光法则、形状语法
-- [PRODUCT.md](PRODUCT.md) —— 产品定位与教学模型
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) —— 分支模型与提交约定
-- [docs/superpowers/specs/](docs/superpowers/specs/) —— 逐章设计规格
-- [docs/superpowers/plans/](docs/superpowers/plans/) —— 实施计划
-
-## 参与
-
-日常开发落在 `develop`，`main` 只收稳定节点（`--no-ff` 合并）。提交信息带 type 前缀（`feat` / `fix` / `docs` / `refactor` / `test` / `chore` / `ui`），一事一提交，细节进 body。详见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
-
-## 许可
-
-[MIT](LICENSE) © 2026 Xiaozhi_z —— 可自由使用、修改、分发，保留署名与许可副本即可。
