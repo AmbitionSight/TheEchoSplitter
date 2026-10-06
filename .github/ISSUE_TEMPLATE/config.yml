@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 贡献指南（分支模型与提交约定）
+    url: https://github.com/AmbitionSight/TheEchoSplitter/blob/main/docs/CONTRIBUTING.md
+    about: 想提 PR 之前请先读这里
+  - name: 安全漏洞
+    url: https://github.com/AmbitionSight/TheEchoSplitter/security/policy
+    about: 请勿开公开 issue，走私密报告渠道

@@ -1,6 +1,18 @@
 {
   "name": "the-echo-splitter",
+  "version": "2.0.0",
   "private": true,
+  "description": "析声者 · The Echo Splitter —— 零依赖的浏览器英语音素解谜游戏",
   "type": "module",
-  "scripts": { "start": "node server.js", "test": "node --test" }
+  "license": "MIT",
+  "author": "AmbitionSight",
+  "homepage": "https://echo.luminesight.com",
+  "repository": { "type": "git", "url": "git+https://github.com/AmbitionSight/TheEchoSplitter.git" },
+  "bugs": { "url": "https://github.com/AmbitionSight/TheEchoSplitter/issues" },
+  "keywords": ["game", "english", "phoneme", "phonics", "education", "canvas", "zero-dependency", "es-modules", "web-speech"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
 }

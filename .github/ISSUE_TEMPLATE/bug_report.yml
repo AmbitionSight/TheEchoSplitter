@@ -1,0 +1,57 @@
+name: Bug 报告
+description: 游戏行为与预期不符
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量填全，尤其是复现步骤与运行环境。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 现象
+      description: 发生了什么？你预期是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开 /chapter2.html
+        2. 走到崖壁……
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chapter
+    attributes:
+      label: 章节
+      options:
+        - 第一章 · 石室
+        - 第二章 · 裂谷 / 崖壁
+        - 第三章 · 暗河
+        - 非游戏本体（服务端 / 测试 / 文档）
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node 版本
+      placeholder: "node --version 的输出，例如 v22.16.0"
+
+  - type: input
+    id: browser
+    attributes:
+      label: 浏览器与版本
+      placeholder: 例如 Chrome 141 / Edge 141 / Safari 18
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 控制台输出
+      description: 打开浏览器控制台粘贴报错。运行期错误也会以红底白字显示在页面顶部。
+      render: shell
